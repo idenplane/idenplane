@@ -10,6 +10,8 @@ import {
 import { Browser, csrfFrom, useThemeViews } from './helpers/browser';
 import { SessionsCleanupService } from '../src/sessions/sessions-cleanup.service.js';
 import { VerificationService } from '../src/verification/verification.service.js';
+import { AdminAuthService } from '../src/admin-auth/admin-auth.service.js';
+import { ACR_MFA } from '../src/authn-core/acr.js';
 
 /**
  * Offline tokens live for the realm's offline lifespan, not the normal
@@ -401,6 +403,114 @@ describe('Offline sessions (e2e)', () => {
           .send({ enabled: true })
           .expect(200);
       }
+    });
+
+    /** Signs in to the account console in a fresh browser. */
+    const accountSignIn = async () => {
+      const browser = new Browser(app);
+      const page = await browser.get(`/realms/${REALM}/login`);
+      expect(page.status).toBe(200);
+      const res = await browser.post(`/realms/${REALM}/login`, {
+        username: 'testuser',
+        password: PASSWORD,
+        _csrf: csrfFrom(page.text),
+      });
+      expect(res.status).toBe(302);
+      expect(browser.jar.has('IDENPLANE_SESSION')).toBe(true);
+      return browser;
+    };
+
+    const ssoSessions = () =>
+      ctx.prisma.loginSession.count({ where: { userId: seeded.user.id } });
+
+    it('an admin setting the password ends every session, offline ones included', async () => {
+      const offline = await offlineSignIn();
+      const normal = await normalSignIn();
+      const sso = await accountSignIn();
+
+      await admin('put', `/users/${seeded.user.id}/reset-password`)
+        .send({ password: PASSWORD })
+        .expect(204);
+
+      expect(await sessionExists(offline.sid)).toBe(false);
+      expect(await sessionExists(normal.sid)).toBe(false);
+      await refused(offline.refresh_token);
+      await refused(normal.refresh_token);
+      expect(await ssoSessions()).toBe(0);
+      const account = await sso.get(`/realms/${REALM}/account`);
+      expect(account.status).toBe(302);
+      expect(account.headers['location']).toContain('/login');
+    });
+
+    it("an admin removing the user's second factors ends every session", async () => {
+      // An admin with a recent MFA check: resetting a user's MFA refuses the
+      // API key on purpose.
+      const master = await ctx.prisma.realm.findUniqueOrThrow({
+        where: { name: 'master' },
+        include: { roles: true },
+      });
+      const superAdmin = master.roles.find(
+        (r) => r.name === 'super-admin' && !r.clientId,
+      );
+      const mfaAdmin = await ctx.prisma.user.create({
+        data: {
+          realmId: master.id,
+          username: 'e2e-offline-mfa-admin',
+          enabled: true,
+          userRoles: { create: { roleId: superAdmin!.id } },
+        },
+      });
+      try {
+        const { access_token: adminToken } = await app
+          .get(AdminAuthService)
+          .issueAdminToken(mfaAdmin, ['super-admin'], {
+            amr: ['pwd', 'otp', 'mfa'],
+            acr: ACR_MFA,
+          });
+
+        for (const path of ['/mfa', '/mfa/totp', '/mfa/sms']) {
+          const offline = await offlineSignIn();
+          const normal = await normalSignIn();
+          await http()
+            .delete(`/admin/realms/${REALM}/users/${seeded.user.id}${path}`)
+            .set('authorization', `Bearer ${adminToken}`)
+            .expect(204);
+          expect(await sessionExists(offline.sid)).toBe(false);
+          expect(await sessionExists(normal.sid)).toBe(false);
+          await refused(offline.refresh_token);
+          expect(await ssoSessions()).toBe(0);
+        }
+      } finally {
+        await ctx.prisma.user.delete({ where: { id: mfaAdmin.id } });
+      }
+    });
+
+    it('changing the password in the account console ends the other sessions and keeps this one', async () => {
+      const offline = await offlineSignIn();
+      const normal = await normalSignIn();
+      const elsewhere = await accountSignIn();
+      const here = await accountSignIn();
+
+      const page = await here.get(`/realms/${REALM}/account`);
+      expect(page.status).toBe(200);
+      const res = await here.post(`/realms/${REALM}/account/password`, {
+        currentPassword: PASSWORD,
+        newPassword: PASSWORD,
+        confirmPassword: PASSWORD,
+        _csrf: csrfFrom(page.text),
+      });
+      expect(res.status).toBe(302);
+      expect(res.headers['location']).toContain('success=');
+
+      // Every other session ended, offline ones included.
+      expect(await sessionExists(offline.sid)).toBe(false);
+      expect(await sessionExists(normal.sid)).toBe(false);
+      await refused(offline.refresh_token);
+      const other = await elsewhere.get(`/realms/${REALM}/account`);
+      expect(other.status).toBe(302);
+      // This browser stays signed in.
+      expect(await ssoSessions()).toBe(1);
+      expect((await here.get(`/realms/${REALM}/account`)).status).toBe(200);
     });
 
     // Last: the user is gone afterwards.

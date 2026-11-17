@@ -3,6 +3,8 @@ import * as OTPAuth from 'otpauth';
 import { createTestApp, TEST_ADMIN_API_KEY, type TestContext } from './setup';
 import { CryptoService } from '../src/crypto/crypto.service';
 import { SoftAuthenticator } from './helpers/soft-authenticator';
+import { AdminAuthService } from '../src/admin-auth/admin-auth.service';
+import { ACR_MFA } from '../src/authn-core/acr';
 
 /**
  * Admin console MFA (docs/docs/security/admin-mfa.md): enrolment, the
@@ -464,6 +466,18 @@ describe('Admin console MFA (e2e)', () => {
 
     it('lets the admin API key reset an admin, always recorded', async () => {
       const master = await masterId();
+      // A console token carol holds from before the reset.
+      const { access_token: before } = await ctx.app
+        .get(AdminAuthService)
+        .issueAdminToken(
+          { id: ids['carol'], username: `${PREFIX}carol` },
+          ['realm-admin'],
+          { amr: ['pwd', 'otp', 'mfa'], acr: ACR_MFA },
+        );
+      await http()
+        .get('/admin/auth/me')
+        .set(...bearer(before))
+        .expect(200);
       // Recorded even with admin events off in master.
       await ctx.prisma.realm.update({
         where: { id: master },
@@ -505,9 +519,20 @@ describe('Admin console MFA (e2e)', () => {
           by: 'api-key',
         }),
       });
+      // The reset signed carol out of the console: her old token is refused.
+      await http()
+        .get('/admin/auth/me')
+        .set(...bearer(before))
+        .expect(401);
+      // A token is refused when issued in the second of the reset, or before.
+      await new Promise((resolve) => setTimeout(resolve, 1100));
       // Carol signs in with the password alone again.
       const res = await login('carol').expect(200);
       expect(res.body.access_token).toEqual(expect.any(String));
+      await http()
+        .get('/admin/auth/me')
+        .set(...bearer(res.body.access_token as string))
+        .expect(200);
     });
 
     it('lists every admin with their factors for a super-admin', async () => {

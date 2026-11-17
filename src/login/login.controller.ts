@@ -63,6 +63,7 @@ import { CsrfService } from '../common/csrf/csrf.service.js';
 import { FlowRuntimeService } from '../auth-flow/flow-runtime.service.js';
 import { resolveClientIp } from '../common/utils/proxy-ip.util.js';
 import { CaptchaService } from '../captcha/captcha.service.js';
+import { SessionsService } from '../sessions/sessions.service.js';
 import {
   CAPTCHA_TOKEN_FIELD,
   captchaCspSources,
@@ -117,6 +118,7 @@ export class LoginController {
     private readonly flowRuntime: FlowRuntimeService,
     private readonly captcha: CaptchaService,
     private readonly passwords: PasswordVerificationService,
+    private readonly sessions: SessionsService,
   ) {}
 
   /**
@@ -904,6 +906,11 @@ export class LoginController {
     // Consume the token
     await this.prisma.verificationToken.delete({ where: { id: record.id } });
 
+    // Every password change ends the sessions opened with the old password.
+    // The user is between the first factor and a session here, so there is
+    // no session of theirs to keep; the resumed sign-in creates a new one.
+    await this.sessions.revokeAllUserSessions(realm, user.id);
+
     const info = encodeURIComponent(
       'Password changed successfully. You can now sign in.',
     );
@@ -1685,7 +1692,7 @@ export class LoginController {
     // A reset means the old password may be known to someone else: end every
     // session that was opened with it (ASVS 5.0 V7.4.3). The person resetting
     // is not signed in, so there is no session of theirs to keep.
-    await this.endAllSessions(realm.id, result.userId);
+    await this.sessions.revokeAllUserSessions(realm, result.userId);
 
     // Record password history
     const user = await this.prisma.user.findUnique({
@@ -1710,22 +1717,5 @@ export class LoginController {
       'Your password has been reset. You can now sign in.',
     );
     res.redirect(`/realms/${realm.name}/login?info=${info}`);
-  }
-
-  /**
-   * Ends all of a user's SSO and OAuth sessions in this realm, revoking the
-   * refresh tokens with them, in one transaction.
-   */
-  private async endAllSessions(realmId: string, userId: string) {
-    await this.prisma.$transaction([
-      this.prisma.refreshToken.updateMany({
-        where: { session: { userId, user: { realmId } } },
-        data: { revoked: true },
-      }),
-      this.prisma.session.deleteMany({
-        where: { userId, user: { realmId } },
-      }),
-      this.prisma.loginSession.deleteMany({ where: { userId, realmId } }),
-    ]);
   }
 }

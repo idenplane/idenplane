@@ -180,7 +180,9 @@ The `ADMIN_API_KEY` path is unchanged. It is not a user, has no factor, and is n
 DELETE /admin/admin-accounts/{userId}/mfa    (x-admin-api-key: …)
 ```
 
-This removes the admin's TOTP, passkeys and recovery codes. The admin then signs in with their password and enrols again; if MFA is required, the enrolment path applies.
+This removes the admin's TOTP, passkeys and recovery codes, and signs the admin out everywhere: every console token they hold stops working at once (since 0.12.0), and their master realm sessions end. The admin then signs in with their password and enrols again; if MFA is required, the enrolment path applies.
+
+**How console tokens are ended.** Console tokens are stateless JWTs, revoked one at a time by their `jti`. A reset also records a per-admin revocation time (a `user:<id>` row in `admin_revoked_tokens`, kept for one token lifetime), and a console token of that admin issued before it is refused. The check is part of the revocation lookup every console request already makes, so it costs no extra query. Because a token's issue time has whole-second precision, a token issued in the same second as the reset is refused too; signing in again a second later works. The same applies when an admin's password is set (`PUT /admin/realms/master/users/{id}/reset-password`), when the account is disabled, or when an admin signs a master realm user out of all sessions.
 
 **Why the API key may reset an admin's MFA but not an end user's.** `src/mfa/mfa.controller.ts` deliberately refuses the API key for end-user MFA resets. Its reason is that a leaked key must not let anyone bypass MFA on every end-user account. The admin case is different:
 
@@ -218,7 +220,6 @@ Admins who have not enrolled by then are not locked out: their next request take
 
 ## What is not covered
 
-- **Revoking an admin's open sessions when their MFA is reset.** Admin tokens are revoked one at a time, by `jti`. A reset does not end tokens already issued; they expire within an hour. A per-user "not before" for admin tokens is a separate change.
 - **Phishing-resistant MFA only (L3).** Passkeys are offered, but TOTP is also accepted. There is no switch to require passkeys yet.
 - **The command-line tool** (`idenplane login`, `idenplane init`) asks for a TOTP or recovery code when the admin has one, but cannot use a passkey; use `--api-key` or a TOTP for scripts.
 - **End-user account console.** The stronger recovery codes apply there too, but adding or removing a factor in the end-user account console still needs only the session (ASVS V7.5.1).

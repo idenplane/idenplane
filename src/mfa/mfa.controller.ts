@@ -33,6 +33,7 @@ import { SESSION_COOKIE } from '../authn-core/cookies.js';
 import { hasRecentAdminMfa } from '../admin-rbac/admin-access-policy.js';
 import { LoginService } from '../login/login.service.js';
 import { CryptoService } from '../crypto/crypto.service.js';
+import { SessionsService } from '../sessions/sessions.service.js';
 
 @ApiTags('MFA')
 @Controller('admin/realms/:realmName/users/:userId/mfa')
@@ -45,7 +46,17 @@ export class MfaController {
     private readonly stepUpService: StepUpService,
     private readonly loginService: LoginService,
     private readonly crypto: CryptoService,
+    private readonly sessions: SessionsService,
   ) {}
+
+  /**
+   * Removing a second factor is a credential reset: whoever signed in with
+   * it (or got past it) is signed out everywhere, offline sessions included,
+   * and signs in again with what the user has now.
+   */
+  private async endSessions(realm: Realm, userId: string): Promise<void> {
+    await this.sessions.revokeAllUserSessions(realm, userId);
+  }
 
   /**
    * Verify that userId belongs to the given realm.
@@ -89,6 +100,7 @@ export class MfaController {
     await this.assertUserInRealm(userId, realm);
     await this.requireAdminMfaStepUp(realm, req);
     await this.mfaService.disableAllFactors(userId);
+    await this.endSessions(realm, userId);
   }
 
   @Delete('totp')
@@ -112,6 +124,7 @@ export class MfaController {
     // rejected because the key cannot prove interactive MFA verification.
     await this.requireAdminMfaStepUp(realm, req);
     await this.mfaService.disableTotp(userId);
+    await this.endSessions(realm, userId);
   }
 
   @Delete('sms')
@@ -132,6 +145,7 @@ export class MfaController {
     // Same bar as a TOTP reset: it removes one of the user's second factors.
     await this.requireAdminMfaStepUp(realm, req);
     await this.mfaService.disableSms(userId);
+    await this.endSessions(realm, userId);
   }
 
   private async requireAdminMfaStepUp(

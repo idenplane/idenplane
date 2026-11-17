@@ -143,7 +143,7 @@ Each table lists the STRIDE category (S spoofing, T tampering, R repudiation, I 
 | T | XSS in themed pages | Handlebars auto-escaping, nonce-based CSP, `frame-ancestors 'none'` (`src/theme/theme-render.service.ts`) | Admin-supplied custom CSS is filtered by blocklist; request values in inline JS are HTML-escaped only |
 | S | Session fixation and theft | New session token at sign-in, token stored hashed, `HttpOnly; Secure; SameSite=Lax` cookie scoped to the realm path (`src/login/session-issuer.service.ts`) | No idle timeout for SSO sessions; no `__Host-` prefix |
 | I | Account enumeration through reset and registration | Generic answers on forgot-password; rate limits | Timing differs between known and unknown usernames (ASVS L3) |
-| S | Old sessions survive a password reset | A reset ends every session and revokes refresh tokens (`src/login/login.controller.ts`) | A self-service password change does not end other sessions |
+| S | Old sessions survive a credential change | A password reset or change, an admin password set and an admin MFA reset end every session, offline ones included, and revoke refresh tokens; the account console keeps only the session that made the change (`src/sessions/sessions.service.ts`, 0.12.0) | Access tokens already issued stay valid until they expire (5 minutes by default) |
 | E | Second-factor bypass | Server-side pending-action state, single-use challenges, TOTP replay protection (`src/mfa/`, `test/totp-replay.e2e-spec.ts`); 120-bit recovery codes (0.11.0) | — |
 
 ### 2. Relying-party apps to OAuth, OIDC and SAML endpoints

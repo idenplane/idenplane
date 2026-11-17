@@ -1,6 +1,6 @@
 import type { Request, Response } from 'express';
 import type { ConfigService } from '@nestjs/config';
-import { ADMIN_TOKEN_TTL_SECONDS } from './admin-auth.service.js';
+import { ADMIN_TOKEN_TTL_SECONDS } from './admin-token-ttl.js';
 
 /** The HttpOnly cookie that lets the console survive a page reload. */
 export const ADMIN_RT_COOKIE = 'admin_rt';

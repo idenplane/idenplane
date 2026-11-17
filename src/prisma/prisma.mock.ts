@@ -473,6 +473,12 @@ export function createMockPrismaService(): MockPrismaService {
       createMany: jest.fn(),
       deleteMany: jest.fn(),
     },
+    adminRevokedToken: {
+      findUnique: jest.fn().mockResolvedValue(null),
+      findMany: jest.fn().mockResolvedValue([]),
+      upsert: jest.fn(),
+      deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+    },
     $connect: jest.fn(),
     $disconnect: jest.fn(),
     onBeforeDisconnect: jest.fn(),

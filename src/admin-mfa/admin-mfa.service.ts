@@ -38,6 +38,7 @@ import {
 import { MASTER_REALM } from '../admin-rbac/admin-access-policy.js';
 import { ACR_MFA, ACR_WEBAUTHN } from '../authn-core/acr.js';
 import { adminWebAuthnRp } from './admin-webauthn-rp.js';
+import { SessionsService } from '../sessions/sessions.service.js';
 
 /** A pending console sign-in that has passed the password. */
 export const ADMIN_MFA_CHALLENGE = 'admin_mfa_challenge';
@@ -123,6 +124,7 @@ export class AdminMfaService {
     private readonly events: EventsService,
     private readonly principals: AdminPrincipalService,
     private readonly config: ConfigService,
+    private readonly sessions: SessionsService,
   ) {}
 
   // ── Realm, relying party, policy ─────────────────────────────────────
@@ -687,6 +689,9 @@ export class AdminMfaService {
         data: { path: ['userId'], equals: target.id },
       },
     });
+    // A reset is a credential change: the admin is signed out everywhere,
+    // console tokens included, and signs in again with the password.
+    await this.sessions.revokeAllUserSessions(master, target.id);
     await this.audit(
       actor,
       OperationType.DELETE,

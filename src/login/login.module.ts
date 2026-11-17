@@ -7,6 +7,7 @@ import { ThemeModule } from '../theme/theme.module.js';
 import { CustomAttributesModule } from '../custom-attributes/custom-attributes.module.js';
 import { AuthFlowRuntimeModule } from '../auth-flow/auth-flow-runtime.module.js';
 import { CaptchaModule } from '../captcha/captcha.module.js';
+import { SessionsModule } from '../sessions/sessions.module.js';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { CaptchaModule } from '../captcha/captcha.module.js';
     CustomAttributesModule,
     AuthFlowRuntimeModule,
     CaptchaModule,
+    SessionsModule,
   ],
   controllers: [LoginController],
 })

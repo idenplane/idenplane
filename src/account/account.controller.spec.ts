@@ -55,6 +55,7 @@ describe('AccountController', () => {
   };
   let mockReqWithSession: any;
   let mockReqNoSession: any;
+  let sessions: { revokeAllUserSessions: jest.Mock };
 
   beforeEach(() => {
     loginService = {
@@ -113,6 +114,9 @@ describe('AccountController', () => {
       csrfService as any,
       emailService as any,
       smsOtp as any,
+      (sessions = {
+        revokeAllUserSessions: jest.fn().mockResolvedValue(undefined),
+      }) as any,
     );
 
     mockRes = {
@@ -374,6 +378,60 @@ describe('AccountController', () => {
       );
 
       expect(crypto.hashPassword).toHaveBeenCalledWith('newpass');
+    });
+
+    it('signs the user out everywhere else, keeping this browser session', async () => {
+      passwordPolicyService.validate.mockReturnValue({
+        valid: true,
+        errors: [],
+      });
+      crypto.verifyPassword.mockResolvedValue(true);
+      passwordPolicyService.checkHistory.mockResolvedValue(false);
+      crypto.hashPassword.mockResolvedValue('new-hash');
+      prisma.user.update.mockResolvedValue({});
+
+      await controller.changePassword(
+        realm,
+        {
+          currentPassword: 'old',
+          newPassword: 'newpass',
+          confirmPassword: 'newpass',
+        },
+        mockReqWithSession,
+        mockRes as any,
+      );
+
+      expect(crypto.sha256).toHaveBeenCalledWith('valid-token');
+      expect(sessions.revokeAllUserSessions).toHaveBeenCalledWith(
+        realm,
+        'user-1',
+        { keepLoginSessionTokenHash: 'hashed-session-token' },
+      );
+      // After the new password is stored, never before.
+      expect(
+        sessions.revokeAllUserSessions.mock.invocationCallOrder[0],
+      ).toBeGreaterThan(prisma.user.update.mock.invocationCallOrder[0]);
+    });
+
+    it('ends no session when the current password is wrong', async () => {
+      passwordPolicyService.validate.mockReturnValue({
+        valid: true,
+        errors: [],
+      });
+      crypto.verifyPassword.mockResolvedValue(false);
+
+      await controller.changePassword(
+        realm,
+        {
+          currentPassword: 'wrong',
+          newPassword: 'newpass',
+          confirmPassword: 'newpass',
+        },
+        mockReqWithSession,
+        mockRes as any,
+      );
+
+      expect(sessions.revokeAllUserSessions).not.toHaveBeenCalled();
     });
 
     it('should change password successfully', async () => {
@@ -746,7 +804,11 @@ describe('AccountController', () => {
     });
 
     it('asks a signed-in user for their password', async () => {
-      await controller.showSmsSetup(smsRealm, mockReqWithSession, mockRes as any);
+      await controller.showSmsSetup(
+        smsRealm,
+        mockReqWithSession,
+        mockRes as any,
+      );
 
       expect(themeRender.render).toHaveBeenCalledWith(
         mockRes,
@@ -825,7 +887,10 @@ describe('AccountController', () => {
       smsOtp.verifyCode.mockResolvedValue({ ok: true, phone: '+201012345678' });
       const req = {
         ...mockReqWithSession,
-        cookies: { ...mockReqWithSession.cookies, IDENPLANE_SMS_ENROLL: 'enrol-token' },
+        cookies: {
+          ...mockReqWithSession.cookies,
+          IDENPLANE_SMS_ENROLL: 'enrol-token',
+        },
       };
 
       await controller.verifySmsSetupCode(
@@ -865,7 +930,10 @@ describe('AccountController', () => {
       });
       const req = {
         ...mockReqWithSession,
-        cookies: { ...mockReqWithSession.cookies, IDENPLANE_SMS_ENROLL: 'enrol-token' },
+        cookies: {
+          ...mockReqWithSession.cookies,
+          IDENPLANE_SMS_ENROLL: 'enrol-token',
+        },
       };
 
       await controller.verifySmsSetupCode(
@@ -886,7 +954,10 @@ describe('AccountController', () => {
       });
       const req = {
         ...mockReqWithSession,
-        cookies: { ...mockReqWithSession.cookies, IDENPLANE_SMS_ENROLL: 'enrol-token' },
+        cookies: {
+          ...mockReqWithSession.cookies,
+          IDENPLANE_SMS_ENROLL: 'enrol-token',
+        },
       };
 
       await controller.verifySmsSetupCode(
@@ -953,7 +1024,10 @@ describe('AccountController', () => {
     it('does not enrol a phone after an admin turned SMS MFA off', async () => {
       const req = {
         ...mockReqWithSession,
-        cookies: { ...mockReqWithSession.cookies, IDENPLANE_SMS_ENROLL: 'enrol-token' },
+        cookies: {
+          ...mockReqWithSession.cookies,
+          IDENPLANE_SMS_ENROLL: 'enrol-token',
+        },
       };
 
       await controller.verifySmsSetupCode(

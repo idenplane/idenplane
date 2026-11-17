@@ -124,7 +124,7 @@ Each default below was reviewed against the rule: change it only when it is clea
 | `passwordMaxAgeDays` | `0` (no forced rotation) | Kept (ASVS 5.0 V6.2.10). |
 | `accessTokenLifespan` | 300 s | Kept. |
 | `refreshTokenLifespan` | 1800 s; also the lifetime of an OAuth session, checked at every refresh | Kept. |
-| `offlineTokenLifespan` | 30 days; the lifetime of an offline session, counted from sign-in (since 0.11.0; before, offline sessions got `refreshTokenLifespan`) | Kept. Offline tokens are still ended by sign-out everywhere, a password reset, disabling or deleting the user, SCIM deactivation and the admin "sign out all sessions". |
+| `offlineTokenLifespan` | 30 days; the lifetime of an offline session, counted from sign-in (since 0.11.0; before, offline sessions got `refreshTokenLifespan`) | Kept. Offline tokens are still ended by sign-out everywhere, a password reset or change, an admin setting the password or removing second factors, disabling or deleting the user, SCIM deactivation and the admin "sign out all sessions". |
 | `maxSessionsPerUser` | 10 | Kept. |
 | `rateLimitEnabled` | Off | **Recommended on, not changed.** The default per-IP limit (20 per minute) can block many users behind one NAT or a misconfigured `TRUSTED_PROXIES`. Turn it on after checking `TRUSTED_PROXIES` and the limits. |
 | `requireEmailVerification` | Off | **Recommended on where email is configured, not changed.** It needs working SMTP; on by default it would block every sign-up on a new realm without email. |
