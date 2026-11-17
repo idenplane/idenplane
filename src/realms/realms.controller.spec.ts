@@ -244,6 +244,20 @@ describe('RealmsController', () => {
       ).rejects.toBeInstanceOf(EmailDeliveryException);
     });
 
+    it('accepts an address without a TLD, as dev mail catchers use', async () => {
+      realmsService.findByName.mockResolvedValue({ name: 'my-realm' });
+      emailService.sendTestMessage.mockResolvedValue(undefined);
+
+      await controller.sendTestEmail('my-realm', 'admin@localhost');
+
+      expect(emailService.sendTestMessage).toHaveBeenCalledWith(
+        'my-realm',
+        'admin@localhost',
+        undefined,
+        undefined,
+      );
+    });
+
     it('should send test email and return success message', async () => {
       const realm = { id: 'r1', name: 'my-realm', theme: 'default' };
       realmsService.findByName.mockResolvedValue(realm);

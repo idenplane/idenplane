@@ -294,7 +294,8 @@ export class RealmsController {
     @Param('realmName') realmName: string,
     @Body('to') to: unknown,
   ) {
-    if (typeof to !== 'string' || !isEmail(to)) {
+    // No TLD required: dev mail catchers (Mailpit, MailHog) take admin@localhost.
+    if (typeof to !== 'string' || !isEmail(to, { require_tld: false })) {
       throw new BadRequestException('"to" must be an email address');
     }
     const realm = await this.realmsService.findByName(realmName);
