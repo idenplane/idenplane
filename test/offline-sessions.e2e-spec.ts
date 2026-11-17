@@ -274,6 +274,45 @@ describe('Offline sessions (e2e)', () => {
     await refused(second.refresh_token);
   });
 
+  describe('the per-user session cap (maxSessionsPerUser)', () => {
+    const setCap = (maxSessionsPerUser: number) =>
+      ctx.prisma.realm.update({
+        where: { id: seeded.realm.id },
+        data: { maxSessionsPerUser },
+      });
+
+    afterEach(async () => {
+      await setCap(10);
+    });
+
+    it('neither counts nor evicts offline sessions', async () => {
+      // Start from no sessions, so only this test's count.
+      await admin('delete', `/users/${seeded.user.id}/sessions`).expect(204);
+      await setCap(1);
+
+      const offline = await offlineSignIn();
+      const firstNormal = await normalSignIn();
+      // The offline session did not count: the first normal session is
+      // within the cap of 1, and it evicted nothing.
+      expect(await sessionExists(offline.sid)).toBe(true);
+      expect(await sessionExists(firstNormal.sid)).toBe(true);
+
+      // A second normal session evicts the first, never the offline one.
+      const secondNormal = await normalSignIn();
+      expect(await sessionExists(firstNormal.sid)).toBe(false);
+      expect(await sessionExists(secondNormal.sid)).toBe(true);
+      expect(await sessionExists(offline.sid)).toBe(true);
+      await refused(firstNormal.refresh_token);
+      await refreshed(offline.refresh_token);
+
+      // A new offline session evicts no normal session either.
+      const secondOffline = await offlineSignIn();
+      expect(await sessionExists(secondNormal.sid)).toBe(true);
+      expect(await sessionExists(offline.sid)).toBe(true);
+      expect(await sessionExists(secondOffline.sid)).toBe(true);
+    });
+  });
+
   describe('revocation', () => {
     it('admin "sign out all sessions" ends offline sessions', async () => {
       const { sid, refresh_token } = await offlineSignIn();

@@ -9,6 +9,9 @@ For full per-commit detail, see the [GitHub Releases](https://github.com/idenpla
 
 ## [Unreleased]
 
+### Fixed
+- **Offline sessions counted toward the per-user session limit, and sign-ins evicted them.** `maxSessionsPerUser` counted a user's offline sessions (`offline_access`) with their normal ones, so with a cap of 10 the eleventh sign-in could end an app's 30-day offline grant, and an offline sign-in could end a normal session. Offline sessions are now outside the cap: they don't count, a new sign-in never evicts one, and creating one evicts nothing.
+
 ### Changed
 - **OpenSSF Scorecard sees the Gradle wrapper validation.** The two `gradle-wrapper.jar` files were already checked against Gradle's checksums in CI, but Scorecard only counts that when the validating workflow has already succeeded on the commit it scans, and it scanned on push, before CI finished. A dedicated, seconds-long `Gradle wrapper validation` workflow now runs on every push to dev and weekly, and Scorecard starts when it completes.
 

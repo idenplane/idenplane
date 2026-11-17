@@ -613,6 +613,67 @@ describe('AuthService', () => {
       expect(prisma.refreshToken.updateMany).not.toHaveBeenCalled();
     });
 
+    describe('the session cap and offline sessions', () => {
+      type Limiter = {
+        enforceSessionLimit(
+          realm: Realm,
+          session: {
+            id: string;
+            data: { userId: string; createdAt: Date };
+          },
+          isOffline: boolean,
+        ): Promise<void>;
+      };
+      const newSession = {
+        id: 'new-session',
+        data: { userId: dbUser.id, createdAt: new Date() },
+      };
+      const capped = { ...realm, maxSessionsPerUser: 2 } as Realm;
+
+      it('counts and evicts only normal sessions', async () => {
+        prisma.session.findMany.mockResolvedValue([
+          { id: 'old-1' },
+          { id: 'old-2' },
+        ]);
+        prisma.session.deleteMany.mockResolvedValue({ count: 1 });
+
+        await (service as unknown as Limiter).enforceSessionLimit(
+          capped,
+          newSession,
+          false,
+        );
+
+        // Offline sessions (any offline refresh token, even a revoked one
+        // left by a refresh that narrowed the scope) are not candidates.
+        expect(prisma.session.findMany).toHaveBeenCalledWith(
+          expect.objectContaining({
+            where: expect.objectContaining({
+              refreshTokens: { none: { isOffline: true } },
+            }),
+          }),
+        );
+        expect(prisma.session.deleteMany).toHaveBeenCalledWith({
+          where: { id: { in: ['old-1'] } },
+        });
+      });
+
+      it('evicts nothing when the new session is offline', async () => {
+        prisma.session.findMany.mockResolvedValue([
+          { id: 'old-1' },
+          { id: 'old-2' },
+        ]);
+
+        await (service as unknown as Limiter).enforceSessionLimit(
+          capped,
+          newSession,
+          true,
+        );
+
+        expect(prisma.session.findMany).not.toHaveBeenCalled();
+        expect(prisma.session.deleteMany).not.toHaveBeenCalled();
+      });
+    });
+
     it('should return a valid token response for correct credentials', async () => {
       setupForTokenIssuance();
       prisma.user.findUnique.mockResolvedValue(dbUser);

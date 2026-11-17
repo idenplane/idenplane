@@ -89,7 +89,7 @@ Creates a new realm. Requires `super-admin` role.
 | `accessTokenLifespan` | integer | No | Access token lifetime in seconds (default `300`) |
 | `refreshTokenLifespan` | integer | No | Refresh token lifetime in seconds (default `1800`) |
 | `offlineTokenLifespan` | integer | No | Lifetime of an offline session and its `offline_access` refresh tokens, counted from sign-in (default `2592000`, 30 days). There is no separate offline idle timeout. |
-| `maxSessionsPerUser` | integer | No | Concurrent sessions per user (default `10`) |
+| `maxSessionsPerUser` | integer | No | Concurrent sessions per user (default `10`, `0` = no limit). The oldest is ended when a new one would go over. Offline sessions don't count and are never ended by it. |
 | `bruteForceEnabled` | boolean | No | Temporary lockout after repeated failed sign-ins. Defaults to `true` for a new realm. |
 | `maxLoginFailures` | integer | No | Failures within `failureResetTime` that lock the account (default `10`) |
 | `lockoutDuration` | integer | No | Lockout length in seconds (default `300`) |

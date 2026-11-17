@@ -647,7 +647,9 @@ Realms can enforce maximum concurrent sessions per user:
 | `maxSessionsPerUser: 0` | Unlimited sessions |
 | `maxSessionsPerUser: 10` | Maximum 10 active sessions (the default) |
 
-When a user exceeds the limit, the oldest sessions are automatically evicted (FIFO).
+When a user exceeds the limit, the oldest sessions are automatically evicted (FIFO). The limit applies separately to OAuth sessions (refresh tokens) and to browser SSO sessions.
+
+Offline sessions (created with the `offline_access` scope) are outside the limit: they don't count toward it, a new sign-in never evicts one, and creating one evicts nothing. Since 0.12.0; before, a user's offline sessions counted, and enough sign-ins evicted them.
 
 ### Session Cookies
 

@@ -1756,7 +1756,7 @@ export class AuthService {
           refreshTokens: { create: refreshToken },
         },
       });
-      await this.enforceSessionLimit(realm, session);
+      await this.enforceSessionLimit(realm, session, isOffline);
     }
 
     // Build ID token if openid scope is present
@@ -1960,12 +1960,23 @@ export class AuthService {
    * of 1, would leave the user with none); the newest always survives, and
    * each newer sign-in trims what came before it.
    *
+   * Offline sessions (created with `offline_access`) are outside the cap:
+   * they are long-lived grants an app holds for the user, not concurrent
+   * sign-ins. They neither count toward it nor are evicted by it, and
+   * creating one evicts nothing. A session is offline when any of its
+   * refresh tokens is (the kind is fixed at creation; see
+   * sessions/session-lifetime.ts): a refresh that narrows the scope to a
+   * normal token keeps the original offline token's row, revoked, until the
+   * session ends.
+   *
    * A `maxSessionsPerUser` value of 0 means "unlimited" — no eviction occurs.
    */
   private async enforceSessionLimit(
     realm: Realm,
     session: NewSession,
+    isOffline: boolean,
   ): Promise<void> {
+    if (isOffline) return;
     const maxSessions = (realm as Realm & { maxSessionsPerUser?: number })
       .maxSessionsPerUser;
     if (!maxSessions || maxSessions <= 0) return;
@@ -1976,6 +1987,7 @@ export class AuthService {
         userId: session.data.userId,
         user: { realmId: realm.id },
         expiresAt: { gt: new Date() },
+        refreshTokens: { none: { isOffline: true } },
         OR: [
           { createdAt: { lt: createdAt } },
           { createdAt, id: { lt: session.id } },

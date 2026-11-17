@@ -146,7 +146,7 @@ These are the realm settings that bound a session. All values are seconds.
 | `accessTokenLifespan` | integer | `300` | Access token lifetime |
 | `refreshTokenLifespan` | integer | `1800` | Refresh token lifetime. Also the lifetime of the OAuth session it belongs to: refreshing does not extend the session. |
 | `offlineTokenLifespan` | integer | `2592000` | Lifetime of an offline session: one created with `offline_access`. It is counted from sign-in, and each rotated offline token is valid until then. Refreshing does not extend it, and there is no separate offline idle timeout. |
-| `maxSessionsPerUser` | integer | `10` | Sessions per user; the oldest is ended when a new one would go over |
+| `maxSessionsPerUser` | integer | `10` | Sessions per user; the oldest is ended when a new one would go over. Offline sessions don't count and are never ended by it (since 0.12.0). `0` means no limit. |
 
 A session ends at its expiry: the refresh grant and token introspection refuse a refresh token whose session has expired, and an hourly job deletes expired sessions. Before 0.11.0 an offline session got the `refreshTokenLifespan` expiry, so offline tokens stopped working after about an hour.
 
