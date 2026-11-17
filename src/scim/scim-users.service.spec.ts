@@ -561,3 +561,74 @@ describe('ScimUsersService profile comparison', () => {
     expect(prisma.user.update).not.toHaveBeenCalled();
   });
 });
+
+describe('ScimUsersService federated (LDAP) users', () => {
+  const federated = (overrides: Record<string, unknown> = {}) =>
+    makeUser({
+      federationLink: 'ldap-provider-1',
+      passwordHash: null,
+      ...overrides,
+    });
+
+  it('refuses a PATCH that sets the password with 400 mutability, applying nothing', async () => {
+    const { service, prisma, sessions } = setup(federated());
+    const error = await scimErrorOf(
+      service.patch(
+        realm,
+        'user-1',
+        ops([
+          { op: 'replace', path: 'title', value: 'Engineer' },
+          { op: 'replace', value: { password: 'Ldap-passw0rd' } },
+        ]),
+      ),
+    );
+    expect(error).toMatchObject({ status: 400, scimType: 'mutability' });
+    expect(error.detail).toContain('user federation');
+    expect(prisma.user.update).not.toHaveBeenCalled();
+    expect(sessions.revokeAllUserSessions).not.toHaveBeenCalled();
+  });
+
+  it('refuses it even when a local hash exists but the password differs', async () => {
+    const { service, prisma } = setup(
+      federated({ passwordHash: hash('Other-passw0rd') }),
+    );
+    const error = await scimErrorOf(
+      service.patch(
+        realm,
+        'user-1',
+        ops([{ op: 'replace', path: 'password', value: 'N3w-password' }]),
+      ),
+    );
+    expect(error.scimType).toBe('mutability');
+    expect(prisma.user.update).not.toHaveBeenCalled();
+  });
+
+  it('treats the stored password as no change', async () => {
+    const { service, prisma } = setup(
+      federated({ passwordHash: hash('Same-passw0rd') }),
+    );
+    await service.patch(
+      realm,
+      'user-1',
+      ops([{ op: 'replace', path: 'password', value: 'Same-passw0rd' }]),
+    );
+    expect(prisma.user.update).not.toHaveBeenCalled();
+  });
+
+  it('drops the password from a PUT (Okta password sync) and applies the rest', async () => {
+    const { service, prisma, sessions } = setup(federated());
+    await service.update(realm, 'user-1', {
+      schemas: [],
+      userName: 'jdoe',
+      name: { givenName: 'Janet', familyName: 'Doe' },
+      emails: [{ value: 'jdoe@example.com', primary: true }],
+      password: 'Okta-synced-passw0rd',
+    });
+    const data = prisma.user.update.mock.calls[0][0].data as Record<
+      string,
+      unknown
+    >;
+    expect(data).toEqual({ firstName: 'Janet' });
+    expect(sessions.revokeAllUserSessions).not.toHaveBeenCalled();
+  });
+});

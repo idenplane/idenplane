@@ -13,7 +13,7 @@ import { PasswordVerificationService } from '../crypto/password-verification.ser
 import { PasswordPolicyService } from '../password-policy/password-policy.service.js';
 import { BruteForceService } from '../brute-force/brute-force.service.js';
 import { ScimFilterParserService } from './filter-parser.service.js';
-import { scimBadRequest, scimConflict } from './scim-errors.js';
+import { ScimException, scimBadRequest, scimConflict } from './scim-errors.js';
 import {
   normalizePagination,
   projectResource,
@@ -267,7 +267,7 @@ export class ScimUsersService {
       enabled: existing.enabled,
     });
 
-    await this.write(realm, existing, next);
+    await this.write(realm, existing, next, 'put');
 
     await this.eventsService.recordAdminEvent({
       realmId: realm.id,
@@ -303,7 +303,7 @@ export class ScimUsersService {
     }
 
     const next = applyUserPatch(stateOf(user), operations);
-    await this.write(realm, user, next);
+    await this.write(realm, user, next, 'patch');
 
     // Log event
     await this.eventsService.recordAdminEvent({
@@ -384,8 +384,12 @@ export class ScimUsersService {
    */
   private async write(
     realm: ScimRealmRef,
-    existing: DbUserWithGroups & { passwordHash?: string | null },
+    existing: DbUserWithGroups & {
+      passwordHash?: string | null;
+      federationLink?: string | null;
+    },
     next: ScimUserState,
+    verb: 'put' | 'patch',
   ): Promise<void> {
     const current = stateOf(existing);
     const data: Prisma.UserUpdateInput = {};
@@ -421,7 +425,7 @@ export class ScimUsersService {
     const password =
       next.password === undefined
         ? undefined
-        : await this.preparePassword(realm, existing, next.password);
+        : await this.preparePassword(realm, existing, next.password, verb);
     if (password) {
       data.passwordHash = password.hash;
       data.passwordChangedAt = new Date();
@@ -455,11 +459,25 @@ export class ScimUsersService {
    * Returns undefined when it is the user's current password: Okta, with
    * password sync on, sends the password again on every update, and that
    * must neither fail the history check nor sign the user out.
+   *
+   * A user federated from LDAP (`federationLink`) signs in against the
+   * directory; storing a local hash would silently move them to local
+   * password sign-in. So a PATCH that sets their password is refused with
+   * 400 `mutability`, before anything is written. In a PUT the password is
+   * dropped instead and the rest applied: a PUT is the client's whole
+   * representation of the user, and a client that syncs passwords (Okta)
+   * includes it in every profile update, which would otherwise fail every
+   * update of every federated user.
    */
   private async preparePassword(
     realmRef: ScimRealmRef,
-    user: { id: string; passwordHash?: string | null } | null,
+    user: {
+      id: string;
+      passwordHash?: string | null;
+      federationLink?: string | null;
+    } | null,
     password: string,
+    verb: 'create' | 'put' | 'patch' = 'create',
   ): Promise<PreparedPassword | undefined> {
     const realm = await this.prisma.realm.findUnique({
       where: { id: realmRef.id },
@@ -472,6 +490,20 @@ export class ScimUsersService {
         password,
       );
       if (valid) return undefined;
+    }
+
+    if (user?.federationLink) {
+      if (verb === 'put') {
+        this.logger.warn(
+          `SCIM: ignored the password in a PUT for federated user ${user.id}; its password is managed by the user federation`,
+        );
+        return undefined;
+      }
+      throw new ScimException(
+        400,
+        'mutability',
+        "The user's password is managed by the user federation (LDAP) and cannot be set through SCIM",
+      );
     }
 
     const validation = this.passwordPolicy.validate(realm, password);

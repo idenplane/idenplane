@@ -556,6 +556,53 @@ describe('SCIM provisioning by Entra ID and Okta (e2e)', () => {
     );
   });
 
+  it('never sets a local password for an LDAP-federated user', async () => {
+    const user = await ctx.prisma.user.create({
+      data: {
+        realmId,
+        username: 'ldap.user@example.com',
+        firstName: 'Lena',
+        federationLink: 'ldap-provider-e2e',
+      },
+    });
+
+    // A PATCH that sets it is refused and applies nothing.
+    const refused = await scim(
+      'patch',
+      `/Users/${user.id}`,
+      patchOp(
+        { op: 'replace', path: 'title', value: 'Directory user' },
+        { op: 'replace', value: { password: 'Ldap-override-1' } },
+      ),
+    ).expect(400);
+    expect(refused.body).toMatchObject({
+      schemas: [ERROR_SCHEMA],
+      status: '400',
+      scimType: 'mutability',
+    });
+    expect(refused.body.detail).toContain('user federation');
+    let stored = await ctx.prisma.user.findUniqueOrThrow({
+      where: { id: user.id },
+    });
+    expect(stored.passwordHash).toBeNull();
+    expect(stored.scimProfile).toBeNull();
+
+    // Okta's PUT with password sync: the password is dropped, the rest applies.
+    const put = await scim('put', `/Users/${user.id}`, {
+      schemas: [USER_SCHEMA],
+      userName: 'ldap.user@example.com',
+      name: { givenName: 'Lena', familyName: 'Lindqvist' },
+      password: 'Ldap-override-2',
+    }).expect(200);
+    expect(put.body.name).toMatchObject({ familyName: 'Lindqvist' });
+    stored = await ctx.prisma.user.findUniqueOrThrow({
+      where: { id: user.id },
+    });
+    expect(stored.passwordHash).toBeNull();
+    expect(stored.federationLink).toBe('ldap-provider-e2e');
+    expect(stored.lastName).toBe('Lindqvist');
+  });
+
   it('refuses a userName that differs only in case with 409 uniqueness', async () => {
     await scim('post', '/Users', {
       schemas: [USER_SCHEMA],
