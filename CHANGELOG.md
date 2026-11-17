@@ -9,6 +9,10 @@ For full per-commit detail, see the [GitHub Releases](https://github.com/idenpla
 
 ## [Unreleased]
 
+### Changed
+- **npm packages are published with trusted publishing.** The publish workflows for `idenplane-sdk`, `idenplane-angular`, `idenplane-nextjs`, `idenplane-vue`, `idenplane-mcp` and the new `idenplane-cli` workflow authenticate to npm with the job's GitHub OIDC token (npm trusted publishing) and attach provenance, so no long-lived npm token is needed once each package names its workflow as a trusted publisher. `NPM_TOKEN` remains a fallback. `idenplane-mcp` now publishes with provenance too.
+- **`idenplane-cli` is published from CI.** A new `publish-cli.yml` publishes `packages/idenplane-cli` on `cli-v*` tags, after a typecheck, tests and a tag/version check. `idenplane-cli` 1.1.0 adds `idenplane plugins hash`.
+
 ## [0.12.0] - 2026-11-17
 
 Session security and making advertised features real. A password or second-factor change now ends the user's other sessions, realms can set an SSO session idle timeout, and response time no longer reveals which usernames exist. Users imported with bcrypt or PBKDF2 hashes can now confirm their password everywhere, not only at sign-in.
