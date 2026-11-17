@@ -9,6 +9,19 @@ For full per-commit detail, see the [GitHub Releases](https://github.com/idenpla
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-11-17
+
+Session security and making advertised features real. A password or second-factor change now ends the user's other sessions, realms can set an SSO session idle timeout, and response time no longer reveals which usernames exist. Users imported with bcrypt or PBKDF2 hashes can now confirm their password everywhere, not only at sign-in.
+
+### Before you upgrade
+- **A database migration runs at startup.** It adds `realms.sso_session_idle_timeout` (default 0, off) and `login_sessions.last_activity_at`. It changes no existing data, and no one is signed out by the upgrade.
+- **Helm:** the `networkPolicy` values changed shape (the old block selected labels that matched nothing, and rendered nothing). A values file that still carries the old `networkPolicy` block fails the chart's schema on `helm upgrade`; remove it, or rewrite it as in the chart README. The chart is now 0.8.0.
+- **Behaviour you may notice:**
+  - an admin setting a user's password or removing their MFA signs that user out everywhere, offline tokens included;
+  - a password change in the account console signs the user's apps out;
+  - the "send test email" endpoints return an error status when nothing was sent;
+  - realm and migration imports skip identity providers the broker can't use (SAML, unknown types) and list them in the report.
+
 ### Security
 - **Credential resets by an admin now end the user's sessions.** When an admin set a user's password (`PUT /admin/realms/{realm}/users/{id}/reset-password`) or removed their second factors (`DELETE .../users/{id}/mfa`, `.../mfa/totp`, `.../mfa/sms`), the user's sessions and refresh tokens stayed valid, so someone signed in with the old credentials stayed signed in, for up to 30 days with an offline token. Each of these now signs the user out everywhere: every OAuth session ends and its refresh tokens are revoked (offline tokens included), and every browser SSO and forward-auth proxy session ends. Access tokens already issued stay valid until they expire (5 minutes by default). SCIM cannot set a password, so it has no such path.
 - **Changing your password in the account console now signs you out everywhere else.** Every other SSO session, every OAuth session (offline tokens included) and every proxy session ends; the browser that made the change stays signed in, and apps can sign the user in again silently through it. A password changed because it expired, during sign-in, ends every existing session the same way. The reset-by-email path already ended every session and is unchanged, apart from also ending proxy sessions.
@@ -779,7 +792,8 @@ The foundation release: core IAM server with OAuth, OIDC, SAML, MFA, and the ini
 - `removeUserRealmRoles` returning 200 instead of 204
 - Login error messages never displayed on failed login
 
-[Unreleased]: https://github.com/idenplane/idenplane/compare/v0.11.1...HEAD
+[Unreleased]: https://github.com/idenplane/idenplane/compare/v0.12.0...HEAD
+[0.12.0]: https://github.com/idenplane/idenplane/releases/tag/v0.12.0
 [0.11.1]: https://github.com/idenplane/idenplane/releases/tag/v0.11.1
 [0.11.0]: https://github.com/idenplane/idenplane/releases/tag/v0.11.0
 [0.10.1]: https://github.com/idenplane/idenplane/releases/tag/v0.10.1
