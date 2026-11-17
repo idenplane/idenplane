@@ -423,7 +423,23 @@ Update applications to use Idenplane endpoints:
 
 The importer creates an identity provider for each entry in `identityProviders` that the broker can use, with the client ID, secret, endpoints (`authorizationUrl`, `tokenUrl`, `userInfoUrl`, `jwksUrl`, `issuer`), default scope, `trustEmail` and `enabled` flag from the export. Every other entry is skipped, counted in `summary.identityProviders.skipped`, and named in `warnings` with the reason:
 
-- Idenplane brokers OpenID Connect and OAuth 2.0 providers only. A Keycloak **SAML** identity provider is not imported. Connect that IdP over OIDC if it supports it.
+- A Keycloak **SAML** identity provider (`providerId: saml`) is imported as a `saml` provider, with:
+
+  | Keycloak (`config`) | Idenplane (`samlConfig`) |
+  |---|---|
+  | `idpEntityId` | `entityId` (Keycloak's `entityId` is its own SP entity ID and is not used) |
+  | `singleSignOnServiceUrl` | `ssoUrl` |
+  | `postBindingAuthnRequest` | `ssoBinding` (`post` when `true`, else `redirect`) |
+  | `signingCertificate` (comma-separated) | `signingCertificates` |
+  | `nameIDPolicyFormat` | `nameIdFormat` |
+  | `wantAuthnRequestsSigned` | `signAuthnRequests` |
+  | `wantAssertionsSigned` | `wantAssertionsSigned` |
+  | `singleLogoutServiceUrl` | `sloUrl` (stored only) |
+  | `allowedClockSkew` | `clockSkewSeconds` (at most 600) |
+  | `principalType: ATTRIBUTE` + `principalAttribute` | `subjectAttribute` |
+  | `identityProviderMappers` of type `saml-user-attribute-idp-mapper` (`attribute.name` → `user.attribute` `email`, `firstName`, `lastName`, `username`) | `attributes` |
+
+  Idenplane always verifies signatures, whatever `validateSignature` says, so a provider without a usable signing certificate (or without `idpEntityId` or an SSO URL) is **skipped**, with every missing or unusable setting named in the warning; add it from the IdP's metadata in the admin console instead. An imported SAML provider gets a warning too: Idenplane has a **new SP entity ID and ACS URL**, so register its SP metadata (`/realms/{realm}/broker/{alias}/saml/metadata`) at the IdP before users sign in. Keycloak providers that expected encrypted assertions get a warning: Idenplane does not decrypt them. See [Sign in with a SAML identity provider](/guides/saml-identity-providers).
 - `oidc` and `keycloak-oidc` providers are imported as `oidc`. `google` and `microsoft` (as `oidc`) and `github` (as `oauth2`) get those services' endpoints filled in, since the export has none. Other social providers (`gitlab`, `facebook`, `linkedin-openid-connect`, …) are skipped; add them by hand as `oauth2` or `oidc` providers.
 - An `oidc` provider without a client ID or an `http(s)` authorization or token URL is skipped.
 - Keycloak exports secrets as `**********` unless told otherwise. A provider without a real secret is imported **disabled**, with a warning; set the secret and enable it.

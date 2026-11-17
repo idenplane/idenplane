@@ -854,11 +854,11 @@ Idenplane can delegate authentication to an external provider, so users sign in 
 
 ### What this covers
 
-These endpoints handle **OpenID Connect** providers — Okta, Auth0, Microsoft Entra, Google, another Keycloak or Idenplane, anything that speaks OIDC. `providerType` is `oidc` (the default) or `oauth2` (a plain OAuth 2.0 provider such as GitHub); the broker treats both the same way. Any other value, `saml` included, is refused with `400`.
+These endpoints handle **OpenID Connect** providers — Okta, Auth0, Microsoft Entra, Google, another Keycloak or Idenplane, anything that speaks OIDC — and **SAML 2.0** identity providers. `providerType` is `oidc` (the default), `oauth2` (a plain OAuth 2.0 provider such as GitHub; the broker treats it like `oidc`) or `saml`. Any other value is refused with `400`. A `saml` provider takes its settings in `samlConfig` instead of the OAuth fields: see [Sign in with a SAML identity provider](/guides/saml-identity-providers).
 
 Two neighbouring features are managed separately:
 
-- **SAML 2.0**: Idenplane cannot sign users in through an upstream SAML identity provider; SAML brokering is not supported. Idenplane is itself a SAML 2.0 identity provider for downstream service providers, which the console lists under **SAML Providers**
+- **Idenplane as a SAML 2.0 identity provider** for downstream service providers (the opposite direction): the console lists those under **SAML Providers**
 - **LDAP** and other external user stores live under **User Federation**, which synchronises users rather than delegating the login
 
 ### Configuring one

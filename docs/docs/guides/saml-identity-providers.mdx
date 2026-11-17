@@ -1,0 +1,162 @@
+---
+id: saml-identity-providers
+title: Sign in with a SAML identity provider
+description: Let users sign in to Idenplane through Microsoft Entra ID (Azure AD), Okta, ADFS, Google Workspace, Keycloak or any SAML 2.0 identity provider, with Idenplane as the SAML service provider.
+---
+
+# Sign in with a SAML identity provider
+
+A realm can add an external **SAML 2.0 identity provider** (IdP), such as Microsoft Entra ID (Azure AD), Okta, ADFS, Google Workspace or Keycloak, and let users sign in through it. Idenplane acts as the SAML **service provider** (SP). After the IdP vouches for the user, the sign-in continues exactly like an [OpenID Connect identity provider](/guides/authentication#identity-providers): the external account is linked to a local one (or a local one is created), the realm's MFA policy applies, and the application gets its code.
+
+This page is about Idenplane **signing users in through** a SAML IdP. Idenplane can also **be** the SAML IdP for your applications: see **SAML Providers** in the admin console.
+
+## How it works
+
+```
+Browser ──▶ /realms/{realm}/broker/{alias}/login     the "Sign in with …" button
+        ──▶ /realms/{realm}/broker/{alias}/saml/start   binds the sign-in to this browser
+        ──▶ IdP SSO URL (AuthnRequest)                  HTTP-Redirect or HTTP-POST
+IdP     ──▶ /realms/{realm}/broker/{alias}/saml/acs     Assertion Consumer Service (HTTP-POST)
+        ──▶ /realms/{realm}/broker/{alias}/saml/complete   back in the browser that started
+        ──▶ the application (code), or the next step of a custom flow
+```
+
+| Endpoint | What it is |
+|---|---|
+| `GET /realms/{realm}/broker/{alias}/saml/metadata` | The SP metadata to give the IdP. Its URL is also Idenplane's **SP entity ID** (the audience). |
+| `POST /realms/{realm}/broker/{alias}/saml/acs` | The **ACS URL** (also called reply URL or single sign-on URL at some IdPs). |
+
+## Set it up
+
+1. In the admin console, open **Identity Providers → Add Provider**, choose **SAML 2.0** and give it an alias, for example `entra`.
+2. Copy the **SP metadata URL**, or the **SP entity ID** and **ACS URL**, from the form and register Idenplane at the IdP (see the IdP notes below).
+3. Get the IdP's metadata (a URL or the XML file), paste it in **Import IdP metadata** and press **Import metadata**. This fills the IdP entity ID, the SSO URL and binding, the signing certificates and the NameID format. You can also fill them by hand.
+4. Check the user mapping (below), then save. The provider now shows on the realm's login page as "Sign in with …", and a [custom flow](/guides/auth-flows) can use it in a `social` step.
+
+The same settings over the admin API:
+
+```bash
+# Read IdP metadata into settings (stores nothing)
+curl -X POST "$BASE/admin/realms/my-realm/identity-providers/saml-metadata" \
+  -H "x-admin-api-key: $ADMIN_API_KEY" -H "Content-Type: application/json" \
+  -d '{"url": "https://login.microsoftonline.com/<tenant>/federationmetadata/2007-06/federationmetadata.xml?appid=<app-id>"}'
+
+# Create the provider
+curl -X POST "$BASE/admin/realms/my-realm/identity-providers" \
+  -H "x-admin-api-key: $ADMIN_API_KEY" -H "Content-Type: application/json" \
+  -d '{
+    "alias": "entra",
+    "displayName": "Microsoft",
+    "providerType": "saml",
+    "trustEmail": false,
+    "samlConfig": {
+      "entityId": "https://sts.windows.net/<tenant>/",
+      "ssoUrl": "https://login.microsoftonline.com/<tenant>/saml2",
+      "ssoBinding": "redirect",
+      "signingCertificates": ["-----BEGIN CERTIFICATE-----\n…\n-----END CERTIFICATE-----"],
+      "nameIdFormat": "urn:oasis:names:tc:SAML:2.0:nameid-format:persistent"
+    }
+  }'
+```
+
+`GET /admin/realms/{realm}/identity-providers/{alias}` returns the provider with `samlSp` (`entityId`, `acsUrl`, `metadataUrl`).
+
+A metadata **URL** is fetched with the same SSRF protections as webhooks: only public addresses, re-checked on every redirect, at most 1 MiB. For an IdP on your internal network (ADFS often is), paste the metadata XML instead, or allow private targets with `WEBHOOK_ALLOW_PRIVATE_TARGETS=true`.
+
+## Settings (`samlConfig`)
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `entityId` | required | The IdP's entity ID. The only `Issuer` accepted. |
+| `ssoUrl` | required | Where AuthnRequests go. `https` (plain `http` only on `localhost`). |
+| `ssoBinding` | `redirect` | `redirect` (HTTP-Redirect, DEFLATE) or `post` (HTTP-POST, an auto-submitting form). |
+| `signingCertificates` | required | The IdP's signing certificates, PEM or bare base64, RSA of 2048 bits or more, up to 5. A signature by **any** of them is accepted: add the IdP's next certificate before it rolls over, then remove the old one. |
+| `nameIdFormat` | `persistent` | Asked for in the AuthnRequest, and the only NameID `Format` accepted (any with `unspecified`). |
+| `signAuthnRequests` | `false` | Sign AuthnRequests with the realm's signing key (RSA-SHA256). The certificate is in the SP metadata. |
+| `wantAssertionsSigned` | `true` | Require a valid signature on the assertion itself. |
+| `wantResponseSigned` | `false` | Require a valid signature on the Response. |
+| `allowSha1` | `false` | Accept RSA-SHA1 signatures and SHA-1 digests. Leave it off unless an old IdP cannot sign with SHA-256. |
+| `clockSkewSeconds` | `60` | Allowed clock difference with the IdP, 0 to 600. |
+| `sloUrl` | — | Stored only (see [Not supported](#not-supported)). |
+| `subjectAttribute` | — | The attribute that identifies the user (the link key). Empty: the NameID. |
+| `usernameSource` | `email` | Username of a new account: `email`, `nameId`, or `attribute` (`attributes.username`). |
+| `attributes` | — | Attribute names for `email`, `firstName`, `lastName` and `username`. |
+
+Whatever the two "want … signed" settings say, a response is only accepted when a valid signature by a configured certificate covers the assertion (on the assertion, or on the whole Response).
+
+### User mapping and account linking
+
+- **Who the user is**: the NameID, or `subjectAttribute` when set. It must not change: a **transient** NameID is refused as the link key (set a `subjectAttribute` or use a persistent NameID). For Entra ID prefer the persistent NameID, or the `http://schemas.microsoft.com/identity/claims/objectidentifier` attribute.
+- **Email, first and last name**: the attributes in `attributes`; when one is left empty, the usual names are tried: `email`, `mail`, `firstName`, `givenName`, `lastName`, `sn`, `surname`, the WS-Federation claim URIs Entra ID and ADFS send (`http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress`, `…/givenname`, `…/surname`) and the LDAP OIDs. With an `emailAddress` NameID and no email attribute, the NameID is the email.
+- **Email verified**: SAML has no "verified" flag. An email address from the IdP counts as verified only when the provider's **Trust email from provider** (`trustEmail`) is on, and only then can it link the sign-in to an existing account with that address. Turn it on only for an IdP whose email values users cannot set themselves. In Entra ID, the `mail` / `email` claims can come from user-editable or guest data in some tenants: keep `trustEmail` off there, or map a domain-verified value such as the UPN.
+- Linking, creation, **Link only** and **Sync user profile** work as for OIDC providers.
+
+## Identity provider notes
+
+### Microsoft Entra ID (Azure AD)
+
+1. **Enterprise applications → New application → Create your own application** ("Integrate any other application you don't find in the gallery").
+2. **Single sign-on → SAML**. In **Basic SAML Configuration** set **Identifier (Entity ID)** to the SP entity ID and **Reply URL (Assertion Consumer Service URL)** to the ACS URL. You can also **Upload metadata file** with Idenplane's SP metadata.
+3. In **Attributes & Claims**, set the **Unique User Identifier (Name ID)** to a persistent value (for example `user.objectid` with the *Persistent* format), or keep the default and set `subjectAttribute` to `http://schemas.microsoft.com/identity/claims/objectidentifier`.
+4. Copy the **App Federation Metadata Url** into Idenplane's metadata import.
+5. Entra signs the assertion only by default (the Idenplane default). Keep the signing algorithm at SHA-256. Do not turn on **Token encryption**.
+6. Assign users or groups to the application.
+
+### Okta
+
+1. **Applications → Create App Integration → SAML 2.0**.
+2. **Single sign-on URL**: the ACS URL (keep "Use this for Recipient URL and Destination URL" checked). **Audience URI (SP Entity ID)**: the SP entity ID.
+3. **Name ID format**: `Persistent` (or `EmailAddress`, with `nameIdFormat` set to match). Add attribute statements `email` → `user.email`, `firstName` → `user.firstName`, `lastName` → `user.lastName`.
+4. Okta signs the Response and the assertion by default; both pass. Leave **Assertion Encryption** unencrypted.
+5. Copy the **Metadata URL** from the Sign On tab into Idenplane's metadata import.
+
+### ADFS
+
+1. **Relying Party Trusts → Add Relying Party Trust → Claims aware**, and import Idenplane's SP metadata from its URL, or a file if ADFS cannot reach Idenplane.
+2. Add claim issuance rules, for example **Send LDAP Attributes as Claims**: `E-Mail-Addresses` → *E-Mail Address*, `Given-Name` → *Given Name*, `Surname` → *Surname*, and a **Transform an Incoming Claim** rule that issues a persistent **Name ID** (for example from `objectGUID` or the UPN).
+3. On the trust's **Advanced** tab keep **SHA-256**. Do not add an encryption certificate (Idenplane's metadata publishes none).
+4. ADFS's metadata is at `https://<adfs-host>/FederationMetadata/2007-06/FederationMetadata.xml`. ADFS is often internal: paste the XML if the URL is not reachable from the public internet.
+5. ADFS signs only the assertion by default (`SamlResponseSignature` = `AssertionOnly`), which matches the defaults.
+
+### Google Workspace
+
+**Apps → Web and mobile apps → Add custom SAML app**. Download the IdP metadata, set **ACS URL** and **Entity ID**, **Name ID format** `PERSISTENT` or `EMAIL`, and map `Primary email` to `email`.
+
+### Keycloak
+
+**Clients → Create client → SAML**, with **Client ID** = the SP entity ID and **Valid redirect URIs** / **Assertion Consumer Service POST Binding URL** = the ACS URL. Turn off **Encrypt assertions**. The realm's IdP metadata is at `/realms/<realm>/protocol/saml/descriptor`.
+
+## Security
+
+Every response is checked as follows, and refused (with the reason in the server log) when any check fails:
+
+- The XML is parsed strictly: no DTD or entity declarations (no XXE), no comments, processing instructions or CDATA, no ID used twice, and only the elements the SAML schema allows where it allows them.
+- Signatures are verified with the configured certificates only, never a certificate the response carries, with RSA-SHA256 or RSA-SHA512 (SHA-1 only with `allowSha1`; HMAC never). A signature must sit directly on the element it signs and reference that element's ID.
+- Against XML signature wrapping, every value is read from the bytes the signature covers, parsed again, and the signed element must be the one presented.
+- `InResponseTo` must be the AuthnRequest this browser's sign-in sent; `Destination` and the bearer `Recipient` must be the ACS URL; every `Audience` restriction must include the SP entity ID; the `Issuer` must be the IdP's entity ID; `NotBefore` / `NotOnOrAfter` must hold, within the allowed skew.
+- Each assertion ID is accepted once, and each sign-in finishes once, across every Idenplane process.
+- The sign-in is bound to the browser that started it (an HttpOnly cookie): a response obtained by someone else cannot be finished in your browser (login CSRF).
+- The RelayState is a short random value; the sign-in's state stays on the server.
+
+## Not supported
+
+- **Encrypted assertions** (`EncryptedAssertion`, `EncryptedID`, `EncryptedAttribute`): refused with a message asking to turn assertion encryption off at the IdP. The SP metadata publishes no encryption key. TLS protects the assertion in transit.
+- **IdP-initiated sign-in** (a response with no `InResponseTo`, or no RelayState): refused. Users start at the application, or at the realm's login page.
+- **Single logout** (SAML SLO), initiated by the IdP or by Idenplane: not supported. Signing out of Idenplane does not sign the user out at the IdP. `sloUrl` is stored for later use.
+- **Artifact binding** (HTTP-Artifact) for requests or responses, and the SOAP back channel.
+- Signing keys other than RSA, and IdP signing certificates under 2048 bits.
+
+## Importing from other products
+
+The [Keycloak](/migration/keycloak#4-check-identity-providers) importer brings SAML identity providers over with their settings; Auth0 `samlp` connections and Zitadel SAML IdPs are imported when the export carries the IdP's metadata. Realm export and import keep `samlConfig`. In every case, the IdP still has to be given Idenplane's SP metadata: the entity ID and ACS URL are new.
+
+## Troubleshooting
+
+| Message | Cause |
+|---|---|
+| *The identity provider's signature is not valid.* | The IdP signs with a certificate that is not configured (it rolled over: add the new one), or the response was changed. |
+| *The identity provider signed with SHA-1* | Switch the IdP to SHA-256 (or, for an old IdP only, set `allowSha1`). |
+| *… assertion is not signed, and this provider requires a signed assertion.* | The IdP signs only the Response: turn on assertion signing there, or turn off `wantAssertionsSigned` (the Response signature then covers the assertion). |
+| *… has expired* | Clocks differ by more than `clockSkewSeconds`, or the user took too long. Fix the clock with NTP. |
+| *Sign-in must start at Idenplane* | The IdP sent an unsolicited (IdP-initiated) response. |
+| *This sign-in can only be finished in the browser where it started.* | The ACS redirect reached another browser, or cookies are blocked. |
