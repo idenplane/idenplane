@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { BrokerService } from './broker.service.js';
+import { SamlBrokerService } from './saml/saml-broker.service.js';
 import { IdentityProvidersModule } from '../identity-providers/identity-providers.module.js';
 
 /**
@@ -9,7 +10,7 @@ import { IdentityProvidersModule } from '../identity-providers/identity-provider
  */
 @Module({
   imports: [IdentityProvidersModule],
-  providers: [BrokerService],
-  exports: [BrokerService],
+  providers: [BrokerService, SamlBrokerService],
+  exports: [BrokerService, SamlBrokerService],
 })
 export class BrokerCoreModule {}

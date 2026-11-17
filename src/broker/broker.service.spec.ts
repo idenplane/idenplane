@@ -20,6 +20,7 @@ describe('BrokerService', () => {
   let idpService: {
     findByAlias: jest.Mock;
   };
+  let samlBroker: { createStart: jest.Mock };
 
   let originalFetch: typeof global.fetch;
 
@@ -102,6 +103,9 @@ describe('BrokerService', () => {
     idpService = {
       findByAlias: jest.fn(),
     };
+    samlBroker = {
+      createStart: jest.fn(),
+    };
 
     service = new BrokerService(
       lookupsBackedBy(prisma as any) as any,
@@ -109,6 +113,7 @@ describe('BrokerService', () => {
       jwkService as any,
       idpService as any,
       new CryptoService(),
+      samlBroker as any,
     );
 
     global.fetch = jest.fn();

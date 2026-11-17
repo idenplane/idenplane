@@ -12,6 +12,7 @@ import { IdentityProvidersService } from '../identity-providers/identity-provide
 import { CryptoService } from '../crypto/crypto.service.js';
 import { idpSecrets } from '../identity-providers/idp-secrets.js';
 import { matchesRedirectUri } from '../common/redirect-uri.utils.js';
+import { SamlBrokerService } from './saml/saml-broker.service.js';
 
 /**
  * A sign-in at an external provider started by a `social` step of a login
@@ -99,7 +100,13 @@ export class BrokerService {
     private readonly jwkService: JwkService,
     private readonly idpService: IdentityProvidersService,
     private readonly crypto: CryptoService,
+    private readonly saml: SamlBrokerService,
   ) {}
+
+  /** The SAML side of the broker, for a `saml` provider. */
+  private samlBroker(): SamlBrokerService {
+    return this.saml;
+  }
 
   /**
    * Build the external provider's authorization URL and a signed broker state.
@@ -165,6 +172,12 @@ export class BrokerService {
       claims: params.claims,
     };
 
+    // SAML: the state stays on the server, the browser gets a one-time
+    // start link (see SamlBrokerService).
+    if (idp.providerType === 'saml') {
+      return this.samlBroker().createStart(realm, idp, brokerState);
+    }
+
     const stateJwt = await this.jwkService.signJwt(
       { ...brokerState, typ: 'broker_state' },
       signingKey.privateKey,
@@ -210,13 +223,16 @@ export class BrokerService {
     if (!idp.enabled) {
       throw new BadRequestException(`Identity provider '${alias}' is disabled`);
     }
-    const signingKey = await this.getActiveSigningKey(realm.id);
     const brokerState: BrokerState = {
       realmId: realm.id,
       realmName: realm.name,
       alias,
       flow,
     };
+    if (idp.providerType === 'saml') {
+      return this.samlBroker().createStart(realm, idp, brokerState);
+    }
+    const signingKey = await this.getActiveSigningKey(realm.id);
     const stateJwt = await this.jwkService.signJwt(
       { ...brokerState, typ: 'broker_state' },
       signingKey.privateKey,
@@ -262,6 +278,12 @@ export class BrokerService {
     const idp = await this.idpService.findByAlias(realm, alias);
     if (!idp.enabled) {
       throw new BadRequestException(`Identity provider '${alias}' is disabled`);
+    }
+    // A SAML provider answers at its ACS, never with an OAuth code.
+    if (idp.providerType === 'saml') {
+      throw new BadRequestException(
+        `Identity provider '${alias}' is a SAML identity provider`,
+      );
     }
     const baseUrl = process.env['BASE_URL'] ?? 'http://localhost:3000';
     const callbackUrl = `${baseUrl}/realms/${realm.name}/broker/${alias}/callback`;
@@ -360,6 +382,17 @@ export class BrokerService {
     // sign-in (account status, MFA policy, session, consent, code) is the
     // same as after a password and is done by the caller via LoginFlowService.
     // The original OAuth request travels with it.
+    return { user, oauthParams: this.oauthParamsOf(brokerState) };
+  }
+
+  /**
+   * The original OAuth request of a built-in (unbound) federated sign-in,
+   * from its broker state, for LoginFlowService.
+   */
+  oauthParamsOf(brokerState: BrokerState): Record<string, string> {
+    if (!brokerState.clientId || !brokerState.redirectUri) {
+      throw new BadRequestException('Broker state mismatch');
+    }
     const oauthParams: Record<string, string> = {
       response_type: 'code',
       client_id: brokerState.clientId,
@@ -379,8 +412,7 @@ export class BrokerService {
     if (brokerState.acrValues)
       oauthParams['acr_values'] = brokerState.acrValues;
     if (brokerState.claims) oauthParams['claims'] = brokerState.claims;
-
-    return { user, oauthParams };
+    return oauthParams;
   }
 
   private async exchangeCode(

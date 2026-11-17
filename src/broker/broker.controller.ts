@@ -1,12 +1,15 @@
 import {
+  Body,
   Controller,
   ForbiddenException,
   Get,
   HttpException,
   Param,
+  Post,
   Query,
   Req,
   Res,
+  UnauthorizedException,
   UseGuards,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
@@ -15,7 +18,12 @@ import type { Realm } from '@prisma/client';
 import { RealmGuard } from '../common/guards/realm.guard.js';
 import { CurrentRealm } from '../common/decorators/current-realm.decorator.js';
 import { Public } from '../common/decorators/public.decorator.js';
-import { BrokerService } from './broker.service.js';
+import { BrokerService, type ExternalIdentity } from './broker.service.js';
+import type { BrokerState } from './broker.service.js';
+import {
+  SAML_BROKER_COOKIE,
+  SamlBrokerService,
+} from './saml/saml-broker.service.js';
 import { ThemeRenderService } from '../theme/theme-render.service.js';
 import { LoginFlowService } from '../login/login-flow.service.js';
 import { FlowRuntimeService } from '../auth-flow/flow-runtime.service.js';
@@ -37,6 +45,7 @@ export class BrokerController {
     private readonly themeRender: ThemeRenderService,
     private readonly loginFlow: LoginFlowService,
     private readonly flowRuntime: FlowRuntimeService,
+    private readonly samlBroker: SamlBrokerService,
   ) {}
 
   @Get(':alias/login')
@@ -159,21 +168,190 @@ export class BrokerController {
       // A broker callback is reached by the end-user's browser, so failures
       // (link-only, token-exchange, invalid/expired state) must render a themed
       // error page rather than leak a raw JSON exception to the user.
-      const status = err instanceof HttpException ? err.getStatus() : 400;
-      res.status(status);
-      this.themeRender.render(
-        res,
+      this.renderBrokerError(realm, err, req, res);
+    }
+  }
+
+  // ─── SAML 2.0 IDENTITY PROVIDERS ───────────────────────
+
+  @Get(':alias/saml/metadata')
+  @ApiOperation({
+    summary: 'SAML service provider metadata for a SAML identity provider',
+  })
+  @ApiResponse({ status: 200, description: 'SP metadata (XML)' })
+  @ApiResponse({ status: 404, description: 'No SAML provider by that alias' })
+  async samlMetadata(
+    @CurrentRealm() realm: Realm,
+    @Param('alias') alias: string,
+    @Res() res: Response,
+  ) {
+    const xml = await this.samlBroker.metadata(realm, alias);
+    res.type('application/samlmetadata+xml').send(xml);
+  }
+
+  @Get(':alias/saml/start')
+  @ApiOperation({
+    summary:
+      'Start a SAML sign-in: bind it to this browser and send the AuthnRequest',
+  })
+  @ApiResponse({
+    status: 302,
+    description: 'Redirect to the IdP (HTTP-Redirect binding)',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Auto-submitting form to the IdP (HTTP-POST binding)',
+  })
+  async samlStart(
+    @CurrentRealm() realm: Realm,
+    @Param('alias') alias: string,
+    @Query('h') handle: unknown,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    try {
+      await this.samlBroker.start(realm, alias, handle, res);
+    } catch (err) {
+      this.renderBrokerError(realm, err, req, res);
+    }
+  }
+
+  @Post(':alias/saml/acs')
+  @ApiOperation({
+    summary: 'SAML Assertion Consumer Service (HTTP-POST binding)',
+  })
+  @ApiResponse({
+    status: 303,
+    description: 'The response was verified; continue in the browser',
+  })
+  @ApiResponse({ status: 401, description: 'The SAML response was refused' })
+  async samlAcs(
+    @CurrentRealm() realm: Realm,
+    @Param('alias') alias: string,
+    @Body('SAMLResponse') samlResponse: unknown,
+    @Body('RelayState') relayState: unknown,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    try {
+      const next = await this.samlBroker.acs(
         realm,
-        'login',
-        'error',
+        alias,
+        samlResponse,
+        relayState,
+      );
+      // A top-level GET, so the browser's Lax cookies come along.
+      res.redirect(303, next);
+    } catch (err) {
+      this.renderBrokerError(realm, err, req, res);
+    }
+  }
+
+  @Get(':alias/saml/complete')
+  @ApiOperation({
+    summary: 'Finish a SAML sign-in in the browser that started it',
+  })
+  @ApiResponse({
+    status: 302,
+    description: 'Continue the login (code, MFA, consent or the next step)',
+  })
+  async samlComplete(
+    @CurrentRealm() realm: Realm,
+    @Param('alias') alias: string,
+    @Query('id') id: unknown,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    try {
+      const cookie = (req.cookies as Record<string, unknown> | undefined)?.[
+        SAML_BROKER_COOKIE
+      ];
+      const { state, identity } = await this.samlBroker.complete(
+        realm,
+        alias,
+        id,
+        cookie,
+      );
+      res.clearCookie(
+        SAML_BROKER_COOKIE,
+        this.samlBroker.cookieOptions(realm, alias),
+      );
+      await this.finishFederated(realm, alias, state, identity, req, res);
+    } catch (err) {
+      this.renderBrokerError(realm, err, req, res);
+    }
+  }
+
+  /**
+   * After a provider vouched for (or refused) a user: back into the flow
+   * that started the sign-in, or the built-in federated sign-in.
+   */
+  private async finishFederated(
+    realm: Realm,
+    alias: string,
+    state: BrokerState,
+    identity: ExternalIdentity | null,
+    req: Request,
+    res: Response,
+  ): Promise<void> {
+    if (state.flow) {
+      const handled = await this.flowRuntime.dispatch(
+        realm,
         {
-          pageTitle: 'Sign-in failed',
-          errorTitle: 'Sign-in failed',
-          errorMessage: this.describeBrokerError(err),
+          endpoint: 'social',
+          alias,
+          verified: identity ?? undefined,
+          flow: state.flow,
         },
         req,
+        res,
+      );
+      if (handled) return;
+      throw new ForbiddenException(
+        'This sign-in can only be finished in the browser where it started. Please sign in again.',
       );
     }
+    if (!identity) {
+      throw new UnauthorizedException(
+        'The identity provider did not sign you in.',
+      );
+    }
+    const oauthParams = this.brokerService.oauthParamsOf(state);
+    const user = await this.brokerService.resolveFederatedUser(realm, identity);
+    if (!user.enabled) {
+      throw new ForbiddenException('This account is disabled.');
+    }
+    await this.loginFlow.continueAfterPrimaryAuth(
+      realm,
+      user,
+      oauthParams,
+      { primaryAmr: [] },
+      req,
+      res,
+    );
+  }
+
+  /** A broker failure as the themed error page (the user's browser is here). */
+  private renderBrokerError(
+    realm: Realm,
+    err: unknown,
+    req: Request,
+    res: Response,
+  ): void {
+    const status = err instanceof HttpException ? err.getStatus() : 400;
+    res.status(status);
+    this.themeRender.render(
+      res,
+      realm,
+      'login',
+      'error',
+      {
+        pageTitle: 'Sign-in failed',
+        errorTitle: 'Sign-in failed',
+        errorMessage: this.describeBrokerError(err),
+      },
+      req,
+    );
   }
 
   private describeBrokerError(err: unknown): string {
