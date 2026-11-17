@@ -8,8 +8,11 @@ name: Publish idenplane-sdk
 #     release-version-check.yml does for root v* tags)
 #   - manual dispatch      -> on demand
 #
-# Requires one repo secret:
-#   NPM_TOKEN - an npm automation token with publish rights for idenplane-sdk.
+# Authentication: npm trusted publishing (OIDC). The package's settings on
+# npmjs.com name this repository and workflow file as its trusted publisher,
+# so the job's GitHub OIDC token is exchanged for a one-time publish
+# credential; no long-lived token is involved, and provenance is attached.
+# NPM_TOKEN is only a fallback while a package has no trusted publisher yet.
 on:
   push:
     tags: ['sdk-v*']
@@ -26,6 +29,9 @@ jobs:
   publish:
     name: Build & publish
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # npm trusted publishing and provenance
     defaults:
       run:
         working-directory: packages/idenplane-js
@@ -38,6 +44,10 @@ jobs:
           cache: npm
           cache-dependency-path: packages/idenplane-js/package-lock.json
           registry-url: 'https://registry.npmjs.org'
+
+      # Trusted publishing needs npm 11.5.1 or later.
+      - name: Use npm with trusted publishing support
+        run: npm install -g npm@11.6.2
 
       - name: Verify tag matches package.json version
         if: startsWith(github.ref, 'refs/tags/')
@@ -70,6 +80,6 @@ jobs:
         run: npm pack --dry-run
 
       - name: Publish to npm
-        run: npm publish
+        run: npm publish --provenance --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
