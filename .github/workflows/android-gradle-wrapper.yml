@@ -1,0 +1,52 @@
+name: Gradle wrapper validation
+
+# Checks every gradle-wrapper.jar in the repo (packages/idenplane-android and
+# examples/android-quickstart) against Gradle's published checksums, on every
+# commit that lands on dev, in a few seconds.
+#
+# Why a workflow of its own (ci.yml and publish-android.yml validate the
+# wrappers too, before they run ./gradlew):
+#
+#   OpenSSF Scorecard's Binary-Artifacts check (scorecard v5,
+#   checks/raw/binary_artifact.go) only discounts gradle-wrapper.jar when the
+#   FIRST workflow file, in path order, that uses gradle/actions/wrapper-validation
+#   has a *successful* run on the exact commit Scorecard scans (the head of
+#   dev). With the validation living only in ci.yml, Scorecard ran on push
+#   long before CI finished, found no successful run on that commit, and
+#   flagged both jars on every scan (code-scanning alerts 86 and 87).
+#
+#   So: this file's name sorts before ci.yml (keep it that way, it is the file
+#   Scorecard picks), it finishes in seconds, and scorecard.yml starts from
+#   this workflow's completion (workflow_run) instead of from the push, so the
+#   successful run already exists when Scorecard looks.
+on:
+  push:
+    branches: [dev]
+  pull_request:
+    paths:
+      - '**/gradle/wrapper/**'
+      - '**/gradlew'
+      - '**/gradlew.bat'
+      - '.github/workflows/android-gradle-wrapper.yml'
+  # Weekly, so the weekly Scorecard run (chained from this one) keeps running
+  # even in a week with no push to dev.
+  schedule:
+    - cron: '17 5 * * 1' # Mondays 05:17 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate Gradle wrappers
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: gradle/actions/wrapper-validation@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+        with:
+          min-wrapper-count: 2
