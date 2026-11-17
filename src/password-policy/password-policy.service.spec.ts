@@ -4,6 +4,7 @@ import {
   PASSWORD,
   WRONG,
   bcryptHash,
+  legacyKeycloakRow,
   pbkdf2,
   pbkdf2Hash,
   realPasswordVerifier,
@@ -330,7 +331,50 @@ describe('PasswordPolicyService', () => {
         where: { userId: 'user-1', realmId: 'realm-1' },
         orderBy: { createdAt: 'desc' },
         take: 3,
+        select: { passwordHash: true, passwordAlgorithm: true },
       });
+      expect(prisma.user.findFirst).toHaveBeenCalledWith({
+        where: { id: 'user-1', realmId: 'realm-1' },
+        select: { passwordHash: true, passwordAlgorithm: true },
+      });
+    });
+
+    it('checks the current hash once when it is also the newest history row', async () => {
+      prisma.user.findFirst.mockResolvedValue({
+        passwordHash: '$argon2id$current',
+        passwordAlgorithm: 'argon2',
+      });
+      prisma.passwordHistory.findMany.mockResolvedValue([
+        { passwordHash: '$argon2id$current', passwordAlgorithm: null },
+        { passwordHash: '$argon2id$older', passwordAlgorithm: null },
+      ]);
+      crypto.verifyPassword.mockResolvedValue(false);
+
+      await service.checkHistory('user-1', 'realm-1', 'pass', 3);
+
+      expect(crypto.verifyPassword.mock.calls.map((c) => c[0])).toEqual([
+        '$argon2id$current',
+        '$argon2id$older',
+      ]);
+    });
+
+    it('checks the current hash first when the history does not have it', async () => {
+      prisma.user.findFirst.mockResolvedValue({
+        passwordHash: '$argon2id$rehashed-at-sign-in',
+        passwordAlgorithm: 'argon2',
+      });
+      prisma.passwordHistory.findMany.mockResolvedValue([
+        { passwordHash: '$argon2id$older', passwordAlgorithm: null },
+      ]);
+      crypto.verifyPassword.mockResolvedValueOnce(true);
+
+      await expect(
+        service.checkHistory('user-1', 'realm-1', 'pass', 3),
+      ).resolves.toBe(true);
+      expect(crypto.verifyPassword).toHaveBeenCalledWith(
+        '$argon2id$rehashed-at-sign-in',
+        'pass',
+      );
     });
   });
 
@@ -394,13 +438,75 @@ describe('PasswordPolicyService', () => {
       ).resolves.toBe(false);
     });
 
-    it('an unlabelled legacy PBKDF2 row (iterations$salt$hash) never matches: history has no algorithm column', async () => {
+    it('an unlabelled legacy PBKDF2 row (iterations$salt$hash) matches with the algorithm stored next to it', async () => {
+      const { salt, hash, iterations } = pbkdf2('sha256');
+      const row = `${iterations}$${salt.toString('base64')}$${hash.toString('base64')}`;
+      prisma.passwordHistory.findMany.mockResolvedValue([
+        { passwordHash: row, passwordAlgorithm: 'pbkdf2-sha256' },
+      ]);
+      await expect(
+        real.checkHistory('user-1', 'realm-1', PASSWORD, 5),
+      ).resolves.toBe(true);
+      await expect(
+        real.checkHistory('user-1', 'realm-1', WRONG, 5),
+      ).resolves.toBe(false);
+    });
+
+    it('an unlabelled legacy PBKDF2 row without an algorithm never matches', async () => {
       const { salt, hash, iterations } = pbkdf2('sha256');
       history(
         `${iterations}$${salt.toString('base64')}$${hash.toString('base64')}`,
       );
       await expect(
         real.checkHistory('user-1', 'realm-1', PASSWORD, 5),
+      ).resolves.toBe(false);
+    });
+
+    // ─── the current, imported password ────────────────────────
+    //
+    // An imported user has no history at all: their imported hash is the
+    // only record of the password, and it must count.
+
+    it.each([
+      ['bcrypt (Auth0, Zitadel)', () => bcryptHash(), 'bcrypt'],
+      [
+        'PBKDF2-SHA256 (Keycloak since 0.11.0)',
+        () => pbkdf2Hash('sha256'),
+        'pbkdf2-sha256',
+      ],
+      [
+        'an unlabelled legacy Keycloak row (imported before 0.11.0)',
+        () => legacyKeycloakRow(),
+        'pbkdf2-sha256',
+      ],
+    ])(
+      'the current %s hash counts with no history at all',
+      async (_label, make, passwordAlgorithm) => {
+        prisma.user.findFirst.mockResolvedValue({
+          passwordHash: make(),
+          passwordAlgorithm,
+        });
+        history();
+
+        await expect(
+          real.checkHistory('user-1', 'realm-1', PASSWORD, 3),
+        ).resolves.toBe(true);
+        await expect(
+          real.checkHistory('user-1', 'realm-1', WRONG, 3),
+        ).resolves.toBe(false);
+        // Checked, never rewritten.
+        expect(updateMany).not.toHaveBeenCalled();
+      },
+    );
+
+    it('a user with no password has nothing to reuse', async () => {
+      prisma.user.findFirst.mockResolvedValue({
+        passwordHash: null,
+        passwordAlgorithm: null,
+      });
+      history();
+      await expect(
+        real.checkHistory('user-1', 'realm-1', PASSWORD, 3),
       ).resolves.toBe(false);
     });
   });
@@ -411,28 +517,89 @@ describe('PasswordPolicyService', () => {
     it('should return immediately when historyCount <= 0', async () => {
       await service.recordHistory('user-1', 'realm-1', 'hash', 0);
 
-      expect(prisma.passwordHistory.create).not.toHaveBeenCalled();
+      expect(prisma.passwordHistory.createMany).not.toHaveBeenCalled();
     });
 
     it('should return immediately when historyCount is negative', async () => {
       await service.recordHistory('user-1', 'realm-1', 'hash', -1);
 
-      expect(prisma.passwordHistory.create).not.toHaveBeenCalled();
+      expect(prisma.passwordHistory.createMany).not.toHaveBeenCalled();
     });
 
     it('should create a new history entry', async () => {
-      prisma.passwordHistory.create.mockResolvedValue({});
       prisma.passwordHistory.findMany.mockResolvedValue([]);
 
       await service.recordHistory('user-1', 'realm-1', 'newhash', 5);
 
-      expect(prisma.passwordHistory.create).toHaveBeenCalledWith({
-        data: { userId: 'user-1', realmId: 'realm-1', passwordHash: 'newhash' },
+      expect(prisma.passwordHistory.createMany).toHaveBeenCalledWith({
+        data: [
+          {
+            userId: 'user-1',
+            realmId: 'realm-1',
+            passwordHash: 'newhash',
+            passwordAlgorithm: null,
+            createdAt: expect.any(Date),
+          },
+        ],
       });
     });
 
+    it('records the replaced hash first, with its algorithm, when the history does not have it', async () => {
+      prisma.passwordHistory.findFirst.mockResolvedValue(null);
+      prisma.passwordHistory.findMany.mockResolvedValue([]);
+
+      await service.recordHistory('user-1', 'realm-1', 'newhash', 5, {
+        passwordHash: '1000$c2FsdA==$aGFzaA==',
+        passwordAlgorithm: 'pbkdf2-sha256',
+      });
+
+      const { data } = prisma.passwordHistory.createMany.mock.calls[0][0];
+      expect(data).toEqual([
+        expect.objectContaining({
+          passwordHash: '1000$c2FsdA==$aGFzaA==',
+          passwordAlgorithm: 'pbkdf2-sha256',
+        }),
+        expect.objectContaining({
+          passwordHash: 'newhash',
+          passwordAlgorithm: null,
+        }),
+      ]);
+      // Strictly older, so the trim keeps the new one first.
+      expect(data[0].createdAt.getTime()).toBeLessThan(
+        data[1].createdAt.getTime(),
+      );
+    });
+
+    it('does not record the replaced hash again when it is the newest entry', async () => {
+      prisma.passwordHistory.findFirst.mockResolvedValue({
+        passwordHash: '$argon2id$old',
+      });
+      prisma.passwordHistory.findMany.mockResolvedValue([]);
+
+      await service.recordHistory('user-1', 'realm-1', 'newhash', 5, {
+        passwordHash: '$argon2id$old',
+        passwordAlgorithm: 'argon2',
+      });
+
+      const { data } = prisma.passwordHistory.createMany.mock.calls[0][0];
+      expect(data).toHaveLength(1);
+      expect(data[0].passwordHash).toBe('newhash');
+    });
+
+    it('a user who had no password records only the new hash', async () => {
+      prisma.passwordHistory.findMany.mockResolvedValue([]);
+
+      await service.recordHistory('user-1', 'realm-1', 'newhash', 5, {
+        passwordHash: null,
+        passwordAlgorithm: null,
+      });
+
+      expect(prisma.passwordHistory.findFirst).not.toHaveBeenCalled();
+      const { data } = prisma.passwordHistory.createMany.mock.calls[0][0];
+      expect(data).toHaveLength(1);
+    });
+
     it('should trim old entries beyond historyCount', async () => {
-      prisma.passwordHistory.create.mockResolvedValue({});
       prisma.passwordHistory.findMany.mockResolvedValue([
         { id: 'old-1' },
         { id: 'old-2' },
@@ -453,7 +620,6 @@ describe('PasswordPolicyService', () => {
     });
 
     it('should not delete when there are no entries beyond historyCount', async () => {
-      prisma.passwordHistory.create.mockResolvedValue({});
       prisma.passwordHistory.findMany.mockResolvedValue([]);
 
       await service.recordHistory('user-1', 'realm-1', 'newhash', 5);

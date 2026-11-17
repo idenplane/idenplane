@@ -9,8 +9,15 @@ For full per-commit detail, see the [GitHub Releases](https://github.com/idenpla
 
 ## [Unreleased]
 
+### Before you upgrade
+- **A database migration runs at startup.** It adds `password_histories.password_algorithm` (nullable; existing rows stay null). It changes no existing data.
+
 ### Security
+- **A migrated user's imported password is now part of the password history.** Password history only held hashes Idenplane wrote itself, so a user imported from Keycloak, Auth0, Authentik or Zitadel (or whose password was set while `passwordHistoryCount` was `0`) could "change" their password to the same one. The user's current password now always counts as used, checked in its own format (Argon2, bcrypt, PBKDF2, and the unlabelled PBKDF2 rows imported before 0.11.0, with the user's `passwordAlgorithm`). When a password is replaced, the old hash is added to the history if it was not there yet, with its algorithm, so it stays refused for the next changes too. Migration: adds the nullable `password_histories.password_algorithm`.
 - **Wrong current passwords in the account console now count toward the account lock.** The account console asks for the current password before changing the password, adding or removing an SMS phone, turning off the authenticator app, and requesting or cancelling account deletion. Those checks were only rate-limited per IP, so someone holding a user's session (a shared computer, a stolen cookie) could keep guessing the password from several addresses without ever locking the account. A wrong password there is now a login failure, with the same limits as the sign-in page (`maxLoginFailures` within `failureResetTime` locks the account for `lockoutDuration`, and `permanentLockoutAfter` applies); while the account is locked these forms are refused without checking the password; the right password clears the failures, as a sign-in does. An empty password field is not counted.
+
+### Fixed
+- **A password reset by email now applies the password history.** `passwordHistoryCount` was enforced in the account console, on the expired-password page and for admins, but the reset-by-email page accepted any password, the current one included. It now refuses a recent password with "Password was used recently" before the reset link is used up, so the user can choose another password with the same link.
 
 ## [0.12.0] - 2026-11-17
 

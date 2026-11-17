@@ -384,12 +384,14 @@ export class AccountController {
       data: { passwordHash, passwordChangedAt: new Date() },
     });
 
-    // Record password history
+    // Record password history, with the replaced hash if it was not in it
+    // yet (an imported password, say).
     await this.passwordPolicyService.recordHistory(
       user.id,
       realm.id,
       passwordHash,
       realm.passwordHistoryCount,
+      user,
     );
 
     // Sign out everywhere else: whoever knew the old password may hold a

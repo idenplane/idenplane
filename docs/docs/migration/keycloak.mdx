@@ -174,6 +174,8 @@ A user is skipped when a user with the same username already exists in the targe
 
 Users keep their Keycloak password: Idenplane imports the hash and checks it on sign-in, on the hosted login page and with the password grant alike. On the first successful sign-in the hash is replaced with an Argon2id hash, transparently; the user notices nothing.
 
+The imported password counts as used for the realm's password history (`passwordHistoryCount`): a user cannot "change" it to the same password, at the first change or the next ones (since 0.13.0).
+
 ### Supported Algorithms
 
 Both credential formats of Keycloak exports are read: the current one (Keycloak 7 and later: `secretData` and `credentialData`, two JSON strings) and the legacy one (`hashedSaltedValue`, `salt`, `hashIterations`, `algorithm` on the credential). The algorithm and iteration count recorded in the credential are kept with the hash.
