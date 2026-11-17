@@ -128,7 +128,7 @@ describe('IdentityProvidersService', () => {
       await service.create(mockRealm, {
         ...createDto,
         enabled: false,
-        providerType: 'saml',
+        providerType: 'OAuth2',
         defaultScopes: 'openid',
         trustEmail: true,
         linkOnly: true,
@@ -138,7 +138,7 @@ describe('IdentityProvidersService', () => {
       expect(prisma.identityProvider.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
           enabled: false,
-          providerType: 'saml',
+          providerType: 'oauth2',
           defaultScopes: 'openid',
           trustEmail: true,
           linkOnly: true,

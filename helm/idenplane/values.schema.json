@@ -438,40 +438,86 @@
     },
     "networkPolicy": {
       "type": "object",
-      "description": "Kubernetes NetworkPolicy configuration.",
+      "description": "NetworkPolicy for the Idenplane pods (templates/networkpolicy.yaml).",
+      "additionalProperties": false,
       "properties": {
         "enabled": {
           "type": "boolean",
           "default": false,
-          "description": "Enable NetworkPolicy."
+          "description": "Render the NetworkPolicy."
         },
         "ingress": {
           "type": "object",
+          "additionalProperties": false,
           "properties": {
-            "enabled": {
-              "type": "boolean",
-              "default": true
-            },
-            "rules": {
+            "from": {
               "type": "array",
               "items": {
                 "type": "object"
-              }
+              },
+              "description": "NetworkPolicyPeer objects allowed to reach the application port. Empty: any source."
+            },
+            "extraRules": {
+              "type": "array",
+              "items": {
+                "type": "object"
+              },
+              "description": "Additional NetworkPolicyIngressRule objects."
             }
           }
         },
         "egress": {
           "type": "object",
+          "additionalProperties": false,
           "properties": {
             "enabled": {
               "type": "boolean",
-              "default": true
+              "default": true,
+              "description": "Restrict egress. false: only ingress is restricted."
             },
-            "rules": {
+            "dns": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "default": true
+                },
+                "to": {
+                  "type": "array",
+                  "items": {
+                    "type": "object"
+                  },
+                  "description": "Where DNS runs. Empty: port 53 to any destination."
+                }
+              }
+            },
+            "postgresql": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "port": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 65535,
+                  "default": 5432,
+                  "description": "Port of an external database (postgresql.enabled: false)."
+                },
+                "to": {
+                  "type": "array",
+                  "items": {
+                    "type": "object"
+                  },
+                  "description": "NetworkPolicyPeer objects of an external database. Empty: any destination."
+                }
+              }
+            },
+            "extraRules": {
               "type": "array",
               "items": {
                 "type": "object"
-              }
+              },
+              "description": "Additional NetworkPolicyEgressRule objects."
             }
           }
         }

@@ -522,7 +522,22 @@ curl -X POST "http://localhost:3000/admin/realms/partner-portal/email/test" \
 }
 ```
 
-A missing `to` or a realm without e-mail settings also returns HTTP 200, with `{"success": false, "error": "..."}`. `POST /admin/realms/:realmName/smtp/test` sends a test message to the realm's own sender address.
+HTTP 200 means the provider accepted the message. When it was not sent the response is an error with the reason in `message`:
+
+| Status | When |
+|--------|------|
+| `400` | `to` is missing or not an email address, or the realm has no usable email settings |
+| `404` | The realm does not exist |
+| `502` | The email provider refused the message or could not be reached. The message names the likely cause (credentials, connection, a refused address) without the provider's own error text, which goes to the server log. |
+
+```json
+{
+  "statusCode": 502,
+  "message": "The test email could not be sent: could not connect to the mail server. Check the host, port and TLS setting."
+}
+```
+
+`POST /admin/realms/:realmName/smtp/test` sends a test message to the realm's own sender address, answers `{"success": true}`, and fails the same way.
 
 ## Realm Object Schema
 

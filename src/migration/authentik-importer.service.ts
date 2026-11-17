@@ -5,6 +5,8 @@ import type { AuthentikExport } from './authentik-types.js';
 import { createEmptyReport, type MigrationReport } from './migration-report.js';
 import { authentikPassword } from './password-import.js';
 import { idpSecrets } from '../identity-providers/idp-secrets.js';
+import { unsupportedIdpTypeReason } from '../identity-providers/idp-provider-types.js';
+import { idpCreateData, planIdpImport, reportIdpPlan } from './idp-import.js';
 
 export interface AuthentikImportOptions {
   dryRun: boolean;
@@ -226,12 +228,28 @@ export class AuthentikImporterService {
   ): Promise<void> {
     for (const source of data.sources ?? []) {
       if (!OIDC_SOURCE_TYPES.has((source.provider_type ?? '').toLowerCase())) {
+        report.summary.identityProviders.skipped++;
         report.warnings.push({
           entity: 'identity_provider',
-          message: `Source '${source.name}' (type ${source.provider_type ?? 'unknown'}) is not a generic OIDC source — only OIDC sources are supported for import today, recreate this one manually.`,
+          message: `Identity provider '${source.name}' was not imported: ${
+            /saml/i.test(source.provider_type ?? '')
+              ? unsupportedIdpTypeReason(source.provider_type)
+              : `source type ${source.provider_type ?? 'unknown'} is not a generic OIDC source; only OIDC sources can be imported, recreate this one manually.`
+          }`,
         });
         continue;
       }
+      const plan = planIdpImport({
+        alias: source.name,
+        providerType: 'oidc',
+        fields: {
+          clientId: source.consumer_key,
+          clientSecret: source.consumer_secret,
+          authorizationUrl: source.authorization_url,
+          tokenUrl: source.access_token_url,
+        },
+      });
+      if (!reportIdpPlan(report, source.name, plan)) continue;
       try {
         const existing = await this.prisma.identityProvider.findFirst({
           where: { realmId, alias: source.name },
@@ -246,16 +264,10 @@ export class AuthentikImporterService {
               realmId,
               alias: source.name,
               displayName: source.name,
-              providerType: 'OIDC',
-              enabled: true,
               trustEmail: false,
-              clientId: source.consumer_key ?? '',
-              clientSecret: idpSecrets.forCreate(
-                this.crypto,
-                source.consumer_secret ?? '',
+              ...idpCreateData(plan, (secret) =>
+                idpSecrets.forCreate(this.crypto, secret),
               ),
-              authorizationUrl: source.authorization_url ?? '',
-              tokenUrl: source.access_token_url ?? '',
             },
           });
         }

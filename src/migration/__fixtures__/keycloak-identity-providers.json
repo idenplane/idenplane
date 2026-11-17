@@ -1,0 +1,62 @@
+{
+  "realm": "kc-idps",
+  "enabled": true,
+  "identityProviders": [
+    {
+      "alias": "corp-oidc",
+      "displayName": "Corporate SSO",
+      "providerId": "oidc",
+      "enabled": true,
+      "trustEmail": true,
+      "config": {
+        "clientId": "corp-client",
+        "clientSecret": "corp-secret",
+        "authorizationUrl": "https://sso.corp.example/auth",
+        "tokenUrl": "https://sso.corp.example/token",
+        "userInfoUrl": "https://sso.corp.example/userinfo",
+        "jwksUrl": "https://sso.corp.example/certs",
+        "issuer": "https://sso.corp.example",
+        "defaultScope": "openid email"
+      }
+    },
+    {
+      "alias": "google",
+      "providerId": "google",
+      "enabled": true,
+      "config": { "clientId": "goog-123", "clientSecret": "goog-secret" }
+    },
+    {
+      "alias": "github",
+      "providerId": "github",
+      "enabled": true,
+      "config": { "clientId": "gh-123", "clientSecret": "**********" }
+    },
+    {
+      "alias": "corp-saml",
+      "providerId": "saml",
+      "enabled": true,
+      "config": {
+        "entityId": "https://sso.corp.example/saml",
+        "singleSignOnServiceUrl": "https://sso.corp.example/saml/sso",
+        "nameIDPolicyFormat": "urn:oasis:names:tc:SAML:2.0:nameid-format:persistent",
+        "signingCertificate": "MIICmzCCAYMCBgF..."
+      }
+    },
+    {
+      "alias": "gitlab",
+      "providerId": "gitlab",
+      "enabled": true,
+      "config": { "clientId": "gl-123", "clientSecret": "gl-secret" }
+    },
+    {
+      "alias": "half-oidc",
+      "providerId": "oidc",
+      "enabled": true,
+      "config": {
+        "clientId": "half-client",
+        "clientSecret": "half-secret",
+        "authorizationUrl": "https://half.example/auth"
+      }
+    }
+  ]
+}

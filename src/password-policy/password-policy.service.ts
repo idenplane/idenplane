@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
-import { CryptoService } from '../crypto/crypto.service.js';
+import { PasswordVerificationService } from '../crypto/password-verification.service.js';
 import type { Realm, User } from '@prisma/client';
 
 export interface PasswordValidationResult {
@@ -12,7 +12,7 @@ export interface PasswordValidationResult {
 export class PasswordPolicyService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly crypto: CryptoService,
+    private readonly passwords: PasswordVerificationService,
   ) {}
 
   validate(realm: Realm, password: string): PasswordValidationResult {
@@ -57,12 +57,17 @@ export class PasswordPolicyService {
       take: historyCount,
     });
 
+    // Same format dispatch as sign-in, so a bcrypt or PBKDF2 entry still
+    // detects reuse. History rows have no algorithm column, so only the
+    // self-describing formats (Argon2, bcrypt, `$pbkdf2-…`) can match; an
+    // unlabelled legacy row or anything malformed never does. check() and
+    // not verifyUserPassword(): a history row must never be rewritten.
     for (const entry of history) {
-      const match = await this.crypto.verifyPassword(
-        entry.passwordHash,
+      const { valid } = await this.passwords.check(
+        { passwordHash: entry.passwordHash, passwordAlgorithm: null },
         password,
       );
-      if (match) return true;
+      if (valid) return true;
     }
 
     return false;

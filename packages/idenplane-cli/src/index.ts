@@ -12,6 +12,7 @@ import { registerCompletionCommand } from './commands/completion.js';
 import { registerUpgradeCommand } from './commands/upgrade.js';
 import { registerUpgradeStatusCommand } from './commands/upgrade-status.js';
 import { registerMigrateCommand } from './commands/migrate.js';
+import { registerPluginsCommand } from './commands/plugins.js';
 
 const require = createRequire(import.meta.url);
 const { version } = require('../package.json');
@@ -35,6 +36,7 @@ registerCompletionCommand(program);
 registerUpgradeCommand(program);
 registerUpgradeStatusCommand(program);
 registerMigrateCommand(program);
+registerPluginsCommand(program);
 
 program.parseAsync(process.argv).catch((err) => {
   if (err.message) console.error(err.message);

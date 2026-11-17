@@ -438,6 +438,8 @@ export class AuthService {
         }
       }
       if (!user || !user.enabled) {
+        // As long as a wrong password, so timing doesn't reveal usernames.
+        await this.passwords.equalizeTiming(password);
         throw new OAuthTokenError(
           'invalid_grant',
           'Invalid credentials',
@@ -461,10 +463,14 @@ export class AuthService {
     const skipLocalPwdCheck = !user.passwordHash && !!user.federationLink;
     // Argon2, bcrypt or a migrated PBKDF2 hash (the same check as the login
     // page); a migrated one is moved to Argon2id on success.
-    const valid =
-      skipLocalPwdCheck ||
-      (!!user.passwordHash &&
-        (await this.passwords.verifyUserPassword(user, password)));
+    let valid = skipLocalPwdCheck;
+    if (!valid) {
+      if (user.passwordHash) {
+        valid = await this.passwords.verifyUserPassword(user, password);
+      } else {
+        await this.passwords.equalizeTiming(password);
+      }
+    }
     if (!valid) {
       await this.bruteForceService.recordFailure(realm, user.id, ip);
       void this.eventsService.recordLoginEvent({

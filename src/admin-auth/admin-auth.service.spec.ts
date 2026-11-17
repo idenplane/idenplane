@@ -10,6 +10,14 @@ jest.mock('../crypto/jwk.service.js', () => ({
 }));
 
 import { AdminAuthService } from './admin-auth.service.js';
+import {
+  PASSWORD,
+  WRONG,
+  bcryptHash,
+  legacyKeycloakRow,
+  pbkdf2Hash,
+  realPasswordVerifier,
+} from '../crypto/__mocks__/password-hash-fixtures.js';
 import { CertificateBindingError } from '../mtls/certificate-binding.js';
 import {
   createMockPrismaService,
@@ -67,6 +75,9 @@ describe('AdminAuthService', () => {
   let service: AdminAuthService;
   let prisma: MockPrismaService;
   let crypto: { hashPassword: jest.Mock; verifyPassword: jest.Mock };
+  // The shared verifier, delegating to the mocked Argon2 check; the real
+  // one is exercised in 'login with a migrated password hash' below.
+  let passwords: { verifyUserPassword: jest.Mock; equalizeTiming: jest.Mock };
   let jwkService: { signJwt: jest.Mock; verifyJwt: jest.Mock };
   let rateLimitService: {
     checkAdminIpLimit: jest.Mock;
@@ -84,6 +95,13 @@ describe('AdminAuthService', () => {
     crypto = {
       hashPassword: jest.fn(),
       verifyPassword: jest.fn(),
+    };
+    passwords = {
+      verifyUserPassword: jest.fn(
+        (user: { passwordHash: string }, password: string) =>
+          crypto.verifyPassword(user.passwordHash, password),
+      ),
+      equalizeTiming: jest.fn().mockResolvedValue(undefined),
     };
     jwkService = {
       signJwt: jest.fn(),
@@ -120,7 +138,7 @@ describe('AdminAuthService', () => {
     service = new AdminAuthService(
       lookupsBackedBy(prisma as any) as any,
       prisma as any,
-      crypto as any,
+      passwords as any,
       jwkService as any,
       rateLimitService as any,
       bruteForceService as any,
@@ -286,6 +304,16 @@ describe('AdminAuthService', () => {
       ).rejects.toThrow('Invalid credentials');
     });
 
+    it('spends a password check when the admin cannot sign in (timing)', async () => {
+      prisma.realm.findUnique.mockResolvedValue(masterRealm);
+      prisma.user.findUnique.mockResolvedValue(null);
+      await expect(
+        service.login('nobody', 'pw-unknown', '127.0.0.1'),
+      ).rejects.toThrow('Invalid credentials');
+      expect(passwords.equalizeTiming).toHaveBeenCalledWith('pw-unknown');
+      expect(passwords.verifyUserPassword).not.toHaveBeenCalled();
+    });
+
     it('should throw if password is invalid', async () => {
       prisma.realm.findUnique.mockResolvedValue(masterRealm);
       prisma.user.findUnique.mockResolvedValue(adminUser);
@@ -349,6 +377,99 @@ describe('AdminAuthService', () => {
 
       const result: any = await service.login('admin', 'password', '127.0.0.1');
       expect(result.access_token).toBe('jwt-token');
+    });
+  });
+
+  // ─── migrated password hashes ──────────────────────────
+
+  describe('login with a migrated password hash (real verifier)', () => {
+    let real: AdminAuthService;
+    let updateMany: jest.Mock;
+
+    beforeEach(() => {
+      const verifier = realPasswordVerifier();
+      updateMany = verifier.updateMany;
+      real = new AdminAuthService(
+        lookupsBackedBy(prisma as any) as any,
+        prisma as any,
+        verifier.passwords,
+        jwkService as any,
+        rateLimitService as any,
+        bruteForceService as any,
+        adminMfa as any,
+      );
+      prisma.realm.findUnique.mockResolvedValue(masterRealm);
+      prisma.userRole.findMany.mockResolvedValue([
+        { role: { name: 'super-admin' } },
+      ]);
+      prisma.realmSigningKey.findFirst.mockResolvedValue(signingKey);
+      jwkService.signJwt.mockResolvedValue('jwt-token');
+    });
+
+    afterEach(() => {
+      real.onModuleDestroy();
+    });
+
+    it.each([
+      ['bcrypt', () => bcryptHash(), 'bcrypt'],
+      ['PBKDF2-SHA256 (Keycloak)', () => pbkdf2Hash('sha256'), 'pbkdf2-sha256'],
+      ['PBKDF2-SHA512 (Keycloak)', () => pbkdf2Hash('sha512'), 'pbkdf2-sha512'],
+      [
+        'legacy Keycloak row (pre-0.11.0 import)',
+        () => legacyKeycloakRow(),
+        'pbkdf2-sha256',
+      ],
+    ])(
+      '%s: signs in and moves the hash to Argon2id',
+      async (_label, make, passwordAlgorithm) => {
+        const passwordHash = make();
+        prisma.user.findUnique.mockResolvedValue({
+          ...adminUser,
+          passwordHash,
+          passwordAlgorithm,
+        });
+
+        const result: any = await real.login('admin', PASSWORD, '127.0.0.1');
+
+        expect(result.access_token).toBe('jwt-token');
+        expect(updateMany).toHaveBeenCalledTimes(1);
+        const { where, data } = updateMany.mock.calls[0][0];
+        expect(where).toEqual({ id: 'user-1', passwordHash });
+        expect(data.passwordAlgorithm).toBe('argon2');
+        expect(data.passwordHash).toMatch(/^\$argon2id\$/);
+      },
+    );
+
+    it.each([
+      ['bcrypt', () => bcryptHash(), 'bcrypt'],
+      ['PBKDF2-SHA256 (Keycloak)', () => pbkdf2Hash('sha256'), 'pbkdf2-sha256'],
+    ])(
+      '%s: a wrong password is refused, counted, and nothing is rewritten',
+      async (_label, make, passwordAlgorithm) => {
+        prisma.user.findUnique.mockResolvedValue({
+          ...adminUser,
+          passwordHash: make(),
+          passwordAlgorithm,
+        });
+
+        await expect(real.login('admin', WRONG, '5.5.5.5')).rejects.toThrow(
+          UnauthorizedException,
+        );
+        expect(bruteForceService.recordFailure).toHaveBeenCalled();
+        expect(updateMany).not.toHaveBeenCalled();
+      },
+    );
+
+    it('a malformed stored hash is a wrong password, not an error', async () => {
+      prisma.user.findUnique.mockResolvedValue({
+        ...adminUser,
+        passwordHash: '$2b$10$garbage',
+        passwordAlgorithm: 'bcrypt',
+      });
+      await expect(real.login('admin', PASSWORD, '5.5.5.5')).rejects.toThrow(
+        UnauthorizedException,
+      );
+      expect(updateMany).not.toHaveBeenCalled();
     });
   });
 
@@ -568,7 +689,7 @@ describe('AdminAuthService', () => {
       new AdminAuthService(
         lookupsBackedBy(prisma as any) as any,
         prisma as any,
-        crypto as any,
+        passwords as any,
         jwkService as any,
         rateLimitService as any,
         bruteForceService as any,

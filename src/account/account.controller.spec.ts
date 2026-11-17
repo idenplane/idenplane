@@ -1,4 +1,12 @@
 import { AccountController } from './account.controller.js';
+import {
+  PASSWORD,
+  WRONG,
+  bcryptHash,
+  legacyKeycloakRow,
+  pbkdf2Hash,
+  realPasswordVerifier,
+} from '../crypto/__mocks__/password-hash-fixtures.js';
 import type { Realm } from '@prisma/client';
 import {
   createMockPrismaService,
@@ -15,6 +23,9 @@ describe('AccountController', () => {
     hashPassword: jest.Mock;
     sha256: jest.Mock;
   };
+  // The shared verifier, delegating to the mocked Argon2 check; the real
+  // one is exercised in 'current password of a migrated user' below.
+  let passwords: { verifyUserPassword: jest.Mock };
   let passwordPolicyService: {
     validate: jest.Mock;
     checkHistory: jest.Mock;
@@ -67,6 +78,12 @@ describe('AccountController', () => {
       hashPassword: jest.fn(),
       sha256: jest.fn().mockReturnValue('hashed-session-token'),
     };
+    passwords = {
+      verifyUserPassword: jest.fn(
+        (user: { passwordHash: string }, password: string) =>
+          crypto.verifyPassword(user.passwordHash, password),
+      ),
+    };
     passwordPolicyService = {
       validate: jest.fn(),
       checkHistory: jest.fn(),
@@ -105,6 +122,7 @@ describe('AccountController', () => {
       loginService as any,
       prisma as any,
       crypto as any,
+      passwords as any,
       passwordPolicyService as any,
       mfaService as any,
       themeRender as any,
@@ -1142,6 +1160,208 @@ describe('AccountController', () => {
       expect(mockRes.redirect).toHaveBeenCalledWith(
         expect.stringContaining('success='),
       );
+    });
+  });
+  // ─── migrated password hashes ──────────────────────────
+  //
+  // Every account action gated on the current password goes through the
+  // same verifier as sign-in, so a user still on an imported bcrypt or
+  // PBKDF2 hash can use them, and the hash is moved to Argon2id.
+
+  describe('current password of a migrated user (real verifier)', () => {
+    let real: AccountController;
+    let updateMany: jest.Mock;
+    let accountDeletionService: {
+      requestDeletion: jest.Mock;
+      cancelDeletion: jest.Mock;
+    };
+    const smsRealm = {
+      ...realm,
+      smsMfaEnabled: true,
+      smsProvider: 'twilio',
+    } as any as Realm;
+
+    beforeEach(() => {
+      const verifier = realPasswordVerifier();
+      updateMany = verifier.updateMany;
+      accountDeletionService = {
+        requestDeletion: jest.fn().mockResolvedValue(undefined),
+        cancelDeletion: jest.fn().mockResolvedValue(undefined),
+      };
+      (mfaService as any).disableSms = jest.fn();
+      passwordPolicyService.validate.mockReturnValue({
+        valid: true,
+        errors: [],
+      });
+      passwordPolicyService.checkHistory.mockResolvedValue(false);
+      crypto.hashPassword.mockResolvedValue('$argon2id$new-hash');
+      prisma.user.update.mockResolvedValue({});
+      real = new AccountController(
+        loginService as any,
+        prisma as any,
+        crypto as any,
+        verifier.passwords,
+        passwordPolicyService as any,
+        mfaService as any,
+        themeRender as any,
+        webAuthnService as any,
+        undefined as any,
+        accountDeletionService as any,
+        {
+          validate: jest.fn().mockReturnValue(true),
+          generateToken: jest.fn().mockReturnValue('csrf-token-test'),
+          cookieName: jest.fn().mockReturnValue('XSRF-TOKEN-test'),
+        } as any,
+        emailService as any,
+        smsOtp as any,
+        {
+          revokeAllUserSessions: jest.fn().mockResolvedValue(undefined),
+        } as any,
+      );
+    });
+
+    /** Each action, with what it does once the password is accepted. */
+    const actions: Array<
+      [string, (password: string) => Promise<unknown>, () => jest.Mock]
+    > = [
+      [
+        'change password',
+        (currentPassword) =>
+          real.changePassword(
+            realm,
+            {
+              currentPassword,
+              newPassword: 'New-example-pass-3',
+              confirmPassword: 'New-example-pass-3',
+            },
+            mockReqWithSession,
+            mockRes as any,
+          ),
+        () => prisma.user.update,
+      ],
+      [
+        'add a phone (SMS setup)',
+        (currentPassword) =>
+          real.sendSmsSetupCode(
+            smsRealm,
+            { phone: '+201012345678', currentPassword },
+            mockReqWithSession,
+            mockRes as any,
+          ),
+        () => smsOtp.startEnrollment,
+      ],
+      [
+        'turn SMS off',
+        (currentPassword) =>
+          real.handleSmsDisable(
+            smsRealm,
+            { currentPassword },
+            mockReqWithSession,
+            mockRes as any,
+          ),
+        () => (mfaService as any).disableSms,
+      ],
+      [
+        'turn the authenticator app off',
+        (currentPassword) =>
+          real.handleTotpDisable(
+            realm,
+            { currentPassword },
+            mockReqWithSession,
+            mockRes as any,
+          ),
+        () => mfaService.disableTotp,
+      ],
+      [
+        'request account deletion',
+        (currentPassword) =>
+          real.requestDeleteAccount(
+            realm,
+            { currentPassword },
+            mockReqWithSession,
+            mockRes as any,
+          ),
+        () => accountDeletionService.requestDeletion,
+      ],
+      [
+        'cancel account deletion',
+        (currentPassword) =>
+          real.cancelDeleteAccount(
+            realm,
+            { currentPassword },
+            mockReqWithSession,
+            mockRes as any,
+          ),
+        () => accountDeletionService.cancelDeletion,
+      ],
+    ];
+
+    const hashes: Array<[string, () => string, string]> = [
+      ['bcrypt', () => bcryptHash(), 'bcrypt'],
+      ['PBKDF2-SHA256 (Keycloak)', () => pbkdf2Hash('sha256'), 'pbkdf2-sha256'],
+      [
+        'legacy Keycloak row (pre-0.11.0 import)',
+        () => legacyKeycloakRow(),
+        'pbkdf2-sha256',
+      ],
+    ];
+
+    describe.each(hashes)('%s user', (_label, make, passwordAlgorithm) => {
+      let passwordHash: string;
+
+      beforeEach(() => {
+        passwordHash = make();
+        loginService.validateLoginSession.mockResolvedValue({
+          ...sessionUser,
+          passwordHash,
+          passwordAlgorithm,
+        });
+      });
+
+      it.each(actions)(
+        '%s: the right password is accepted and the hash moved to Argon2id',
+        async (_action, run, effect) => {
+          await run(PASSWORD);
+
+          expect(effect()).toHaveBeenCalled();
+          expect(updateMany).toHaveBeenCalledTimes(1);
+          const { where, data } = updateMany.mock.calls[0][0];
+          expect(where).toEqual({ id: 'user-1', passwordHash });
+          expect(data.passwordAlgorithm).toBe('argon2');
+          expect(data.passwordHash).toMatch(/^\$argon2id\$/);
+        },
+      );
+
+      it.each(actions)(
+        '%s: a wrong password is refused and nothing is rewritten',
+        async (_action, run, effect) => {
+          await run(WRONG);
+
+          expect(effect()).not.toHaveBeenCalled();
+          expect(updateMany).not.toHaveBeenCalled();
+          expect(mockRes.redirect).toHaveBeenCalledWith(
+            expect.stringContaining('error='),
+          );
+        },
+      );
+    });
+
+    it('a malformed stored hash is a wrong password, never a match', async () => {
+      loginService.validateLoginSession.mockResolvedValue({
+        ...sessionUser,
+        passwordHash: '$pbkdf2-sha256$i=1000$$',
+        passwordAlgorithm: 'pbkdf2-sha256',
+      });
+
+      await real.handleTotpDisable(
+        realm,
+        { currentPassword: PASSWORD },
+        mockReqWithSession,
+        mockRes as any,
+      );
+
+      expect(mfaService.disableTotp).not.toHaveBeenCalled();
+      expect(updateMany).not.toHaveBeenCalled();
     });
   });
 });

@@ -5,6 +5,7 @@ import type { Auth0Export } from './auth0-types.js';
 import { createEmptyReport, type MigrationReport } from './migration-report.js';
 import { auth0Password } from './password-import.js';
 import { idpSecrets } from '../identity-providers/idp-secrets.js';
+import { idpCreateData, planIdpImport, reportIdpPlan } from './idp-import.js';
 
 export interface Auth0ImportOptions {
   dryRun: boolean;
@@ -228,6 +229,29 @@ export class Auth0ImporterService {
         });
         continue;
       }
+      const opts: Record<string, unknown> = conn.options ?? {};
+      const str = (key: string) =>
+        typeof opts[key] === 'string' ? opts[key] : undefined;
+      const mapped = this.mapAuth0Strategy(conn.strategy);
+      const plan = planIdpImport({
+        alias: conn.name,
+        providerType: mapped?.providerType ?? conn.strategy,
+        wellKnown: mapped?.wellKnown,
+        fields: {
+          clientId: str('client_id'),
+          clientSecret: str('client_secret'),
+          // OIDC connections name them like OIDC discovery; custom OAuth2
+          // connections use authorizationURL / tokenURL.
+          authorizationUrl:
+            str('authorization_endpoint') ?? str('authorizationURL'),
+          tokenUrl: str('token_endpoint') ?? str('tokenURL'),
+          userinfoUrl: str('userinfo_endpoint'),
+          jwksUrl: str('jwks_uri'),
+          issuer: str('issuer'),
+          defaultScopes: str('scope'),
+        },
+      });
+      if (!reportIdpPlan(report, conn.name, plan)) continue;
       try {
         const existing = await this.prisma.identityProvider.findFirst({
           where: { realmId, alias: conn.name },
@@ -237,23 +261,15 @@ export class Auth0ImporterService {
           continue;
         }
         if (!dryRun) {
-          const providerType = this.mapAuth0Strategy(conn.strategy);
-          const opts = conn.options as Record<string, string> | undefined;
           await this.prisma.identityProvider.create({
             data: {
               realmId,
               alias: conn.name,
               displayName: conn.name,
-              providerType,
-              enabled: true,
               trustEmail: false,
-              clientId: opts?.client_id ?? '',
-              clientSecret: idpSecrets.forCreate(
-                this.crypto,
-                opts?.client_secret ?? '',
+              ...idpCreateData(plan, (secret) =>
+                idpSecrets.forCreate(this.crypto, secret),
               ),
-              authorizationUrl: opts?.authorization_endpoint ?? '',
-              tokenUrl: opts?.token_endpoint ?? '',
             },
           });
         }
@@ -281,19 +297,30 @@ export class Auth0ImporterService {
     return grantTypes.map((g) => map[g] ?? g).filter(Boolean);
   }
 
-  private mapAuth0Strategy(strategy: string): string {
-    const oidcStrategies = [
-      'google-oauth2',
-      'github',
-      'facebook',
-      'microsoft',
-      'apple',
-      'linkedin',
-      'twitter',
-    ];
-    if (oidcStrategies.includes(strategy) || strategy.startsWith('oauth2'))
-      return 'OIDC';
-    if (strategy === 'samlp' || strategy === 'adfs') return 'SAML';
-    return 'OIDC';
+  /**
+   * The Idenplane provider type of an Auth0 connection strategy, with the
+   * well-known endpoints of social connections whose options carry no URLs.
+   * Null for a strategy Idenplane cannot broker: SAML and WS-Federation
+   * (`samlp`, `adfs`, `waad`, ...), passwordless and directory connections,
+   * and social connections whose endpoints it does not know.
+   */
+  private mapAuth0Strategy(strategy: string): {
+    providerType: string;
+    wellKnown?: 'google' | 'github' | 'microsoft';
+  } | null {
+    switch (strategy) {
+      case 'oidc':
+        return { providerType: 'oidc' };
+      case 'oauth2':
+        return { providerType: 'oauth2' };
+      case 'google-oauth2':
+        return { providerType: 'oidc', wellKnown: 'google' };
+      case 'windowslive':
+        return { providerType: 'oidc', wellKnown: 'microsoft' };
+      case 'github':
+        return { providerType: 'oauth2', wellKnown: 'github' };
+      default:
+        return null;
+    }
   }
 }

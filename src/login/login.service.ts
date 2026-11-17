@@ -105,6 +105,9 @@ export class LoginService {
       }
     }
 
+    // Unknown, disabled or password-less: take as long as a wrong password,
+    // so the response time doesn't reveal which usernames exist.
+    await this.passwords.equalizeTiming(password);
     throw new UnauthorizedException('Invalid credentials');
   }
 

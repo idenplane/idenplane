@@ -1,4 +1,13 @@
 import { PasswordPolicyService } from './password-policy.service.js';
+import { PasswordVerificationService } from '../crypto/password-verification.service.js';
+import {
+  PASSWORD,
+  WRONG,
+  bcryptHash,
+  pbkdf2,
+  pbkdf2Hash,
+  realPasswordVerifier,
+} from '../crypto/__mocks__/password-hash-fixtures.js';
 import {
   createMockPrismaService,
   type MockPrismaService,
@@ -13,6 +22,7 @@ describe('PasswordPolicyService', () => {
     hashPassword: jest.Mock;
     generateSecret: jest.Mock;
     sha256: jest.Mock;
+    argon2HashNeedsUpgrade: jest.Mock;
   };
 
   const baseRealm: Realm = {
@@ -40,8 +50,13 @@ describe('PasswordPolicyService', () => {
       hashPassword: jest.fn(),
       generateSecret: jest.fn(),
       sha256: jest.fn(),
+      argon2HashNeedsUpgrade: jest.fn().mockReturnValue(false),
     };
-    service = new PasswordPolicyService(prisma as any, crypto as any);
+    // The real format dispatcher over a mocked Argon2 check.
+    service = new PasswordPolicyService(
+      prisma as any,
+      new PasswordVerificationService(crypto as any, prisma as any),
+    );
   });
 
   // ─── validate ───────────────────────────────────────────────
@@ -237,13 +252,13 @@ describe('PasswordPolicyService', () => {
       prisma.passwordHistory.findMany.mockResolvedValue([
         {
           id: 'h1',
-          passwordHash: 'hash1',
+          passwordHash: '$argon2id$hash1',
           userId: 'user-1',
           realmId: 'realm-1',
         },
         {
           id: 'h2',
-          passwordHash: 'hash2',
+          passwordHash: '$argon2id$hash2',
           userId: 'user-1',
           realmId: 'realm-1',
         },
@@ -261,15 +276,21 @@ describe('PasswordPolicyService', () => {
 
       expect(result).toBe(true);
       expect(crypto.verifyPassword).toHaveBeenCalledTimes(2);
-      expect(crypto.verifyPassword).toHaveBeenCalledWith('hash1', 'oldpass');
-      expect(crypto.verifyPassword).toHaveBeenCalledWith('hash2', 'oldpass');
+      expect(crypto.verifyPassword).toHaveBeenCalledWith(
+        '$argon2id$hash1',
+        'oldpass',
+      );
+      expect(crypto.verifyPassword).toHaveBeenCalledWith(
+        '$argon2id$hash2',
+        'oldpass',
+      );
     });
 
     it('should return false when password does not match any history entry', async () => {
       prisma.passwordHistory.findMany.mockResolvedValue([
         {
           id: 'h1',
-          passwordHash: 'hash1',
+          passwordHash: '$argon2id$hash1',
           userId: 'user-1',
           realmId: 'realm-1',
         },
@@ -310,6 +331,77 @@ describe('PasswordPolicyService', () => {
         orderBy: { createdAt: 'desc' },
         take: 3,
       });
+    });
+  });
+
+  // ─── checkHistory: entries in a migrated format ─────────────
+
+  describe('checkHistory with bcrypt and PBKDF2 entries (real hashes)', () => {
+    let real: PasswordPolicyService;
+    let updateMany: jest.Mock;
+
+    beforeEach(() => {
+      const verifier = realPasswordVerifier();
+      updateMany = verifier.updateMany;
+      real = new PasswordPolicyService(prisma as any, verifier.passwords);
+    });
+
+    const history = (...hashes: string[]) =>
+      prisma.passwordHistory.findMany.mockResolvedValue(
+        hashes.map((passwordHash, i) => ({
+          id: `h${i}`,
+          passwordHash,
+          userId: 'user-1',
+          realmId: 'realm-1',
+        })),
+      );
+
+    it.each([
+      ['bcrypt', () => bcryptHash()],
+      ['PBKDF2-SHA256', () => pbkdf2Hash('sha256')],
+      ['PBKDF2-SHA512', () => pbkdf2Hash('sha512')],
+    ])(
+      'a %s entry detects reuse and rejects nothing else',
+      async (_label, make) => {
+        history(make());
+        await expect(
+          real.checkHistory('user-1', 'realm-1', PASSWORD, 5),
+        ).resolves.toBe(true);
+        await expect(
+          real.checkHistory('user-1', 'realm-1', WRONG, 5),
+        ).resolves.toBe(false);
+        // A history row is never rewritten.
+        expect(updateMany).not.toHaveBeenCalled();
+      },
+    );
+
+    it('finds the reused password behind entries in other formats', async () => {
+      history(bcryptHash(WRONG), pbkdf2Hash('sha256', WRONG), bcryptHash());
+      await expect(
+        real.checkHistory('user-1', 'realm-1', PASSWORD, 5),
+      ).resolves.toBe(true);
+    });
+
+    it.each([
+      ['a bcrypt prefix with garbage', '$2b$10$garbage'],
+      ['a PBKDF2 prefix with garbage', '$pbkdf2-sha256$i=1000$$'],
+      ['an unknown scheme', '{SSHA}c2FsdA=='],
+      ['the plaintext password itself', PASSWORD],
+    ])('a malformed entry (%s) never matches', async (_label, stored) => {
+      history(stored);
+      await expect(
+        real.checkHistory('user-1', 'realm-1', PASSWORD, 5),
+      ).resolves.toBe(false);
+    });
+
+    it('an unlabelled legacy PBKDF2 row (iterations$salt$hash) never matches: history has no algorithm column', async () => {
+      const { salt, hash, iterations } = pbkdf2('sha256');
+      history(
+        `${iterations}$${salt.toString('base64')}$${hash.toString('base64')}`,
+      );
+      await expect(
+        real.checkHistory('user-1', 'realm-1', PASSWORD, 5),
+      ).resolves.toBe(false);
     });
   });
 

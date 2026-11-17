@@ -106,6 +106,7 @@ function passwordsBackedBy(crypto: { verifyPassword: jest.Mock }) {
   return {
     verifyUserPassword: (user: { passwordHash: string }, password: string) =>
       crypto.verifyPassword(user.passwordHash, password),
+    equalizeTiming: jest.fn().mockResolvedValue(undefined),
   };
 }
 
@@ -533,6 +534,34 @@ describe('LoginService', () => {
             'any-password',
           ),
         ).rejects.toThrow(UnauthorizedException);
+      });
+
+      it('spends a password check on an unknown or disabled user (timing)', async () => {
+        const passwords = passwordsBackedBy(crypto);
+        const serviceNoFed = new LoginService(
+          prisma as any,
+          crypto as any,
+          bruteForce as any,
+          passwords as any,
+          undefined,
+        );
+
+        prisma.user.findUnique.mockResolvedValue(null);
+        await expect(
+          serviceNoFed.validateCredentials(realm, 'nonexistent', 'pw-1'),
+        ).rejects.toThrow(UnauthorizedException);
+        expect(passwords.equalizeTiming).toHaveBeenCalledWith('pw-1');
+
+        prisma.user.findUnique.mockResolvedValue({
+          id: 'u-1',
+          enabled: false,
+          passwordHash: '$argon2id$dummy',
+          federationLink: null,
+        });
+        await expect(
+          serviceNoFed.validateCredentials(realm, 'disabled', 'pw-2'),
+        ).rejects.toThrow(UnauthorizedException);
+        expect(passwords.equalizeTiming).toHaveBeenCalledWith('pw-2');
       });
 
       it('should not call federation service when it is not injected', async () => {

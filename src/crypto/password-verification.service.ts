@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { CryptoService, MAX_PASSWORD_LENGTH } from './crypto.service.js';
@@ -123,6 +124,33 @@ export class PasswordVerificationService {
     }
     return result.valid;
   }
+
+  /**
+   * Spend about the time of a real password check on a sign-in that fails
+   * before reaching one: the username does not exist, the account is
+   * disabled, or it has no password. Without this, such a sign-in answers
+   * in a few milliseconds and a real user's in tens to hundreds (Argon2id),
+   * so the response time tells an attacker which usernames exist.
+   *
+   * Verifies `password` against an Argon2id hash of a random secret made
+   * once per process with today's parameters. Never matches, never throws.
+   */
+  async equalizeTiming(password: string): Promise<void> {
+    try {
+      this.dummyHash ??= this.crypto.hashPassword(
+        randomBytes(32).toString('base64url'),
+      );
+      await this.crypto.verifyPassword(
+        await this.dummyHash,
+        password.slice(0, MAX_PASSWORD_LENGTH),
+      );
+    } catch {
+      // Timing only; a failure here must not change the sign-in's answer.
+      this.dummyHash = undefined;
+    }
+  }
+
+  private dummyHash?: Promise<string>;
 
   private async upgrade(
     user: StoredPassword & { id: string },

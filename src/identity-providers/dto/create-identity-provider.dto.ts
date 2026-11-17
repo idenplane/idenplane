@@ -6,6 +6,7 @@ import {
   Matches,
 } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
+import { SUPPORTED_IDP_PROVIDER_TYPES } from '../idp-provider-types.js';
 
 export class CreateIdentityProviderDto {
   @ApiProperty()
@@ -25,9 +26,19 @@ export class CreateIdentityProviderDto {
   @IsBoolean()
   enabled?: boolean;
 
-  @ApiProperty({ required: false, default: 'oidc' })
+  @ApiProperty({
+    required: false,
+    default: 'oidc',
+    enum: SUPPORTED_IDP_PROVIDER_TYPES,
+    description:
+      'The broker signs users in over OpenID Connect or OAuth 2.0 only; ' +
+      'SAML identity providers are not supported. Case-insensitive.',
+  })
   @IsOptional()
   @IsString()
+  @Matches(new RegExp(`^(${SUPPORTED_IDP_PROVIDER_TYPES.join('|')})$`, 'i'), {
+    message: `providerType must be one of: ${SUPPORTED_IDP_PROVIDER_TYPES.join(', ')}`,
+  })
   providerType?: string;
 
   @ApiProperty()

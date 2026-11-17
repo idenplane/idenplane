@@ -209,6 +209,72 @@ describe('Auth0ImporterService', () => {
     ).toBe(true);
   });
 
+  it('stores only connections the broker can use, each complete', async () => {
+    const report = await service.importData(
+      {
+        ...mockAuth0Export,
+        connections: [
+          {
+            name: 'google-social',
+            strategy: 'google-oauth2',
+            options: { client_id: 'goog-id', client_secret: 'goog-secret' },
+          },
+          {
+            name: 'corp-oidc',
+            strategy: 'oidc',
+            options: {
+              client_id: 'corp',
+              client_secret: 'corp-secret',
+              authorization_endpoint: 'https://corp.example/authorize',
+              token_endpoint: 'https://corp.example/token',
+              issuer: 'https://corp.example/',
+            },
+          },
+          {
+            name: 'corp-saml',
+            strategy: 'samlp',
+            options: { signInEndpoint: 'https://corp.example/saml' },
+          },
+          { name: 'email-otp', strategy: 'email', options: {} },
+        ],
+      },
+      { dryRun: false, targetRealm: 'test' },
+    );
+
+    const stored = prisma.identityProvider.create.mock.calls.map(
+      (c: any[]) => c[0].data,
+    );
+    expect(stored.map((d: any) => [d.alias, d.providerType])).toEqual([
+      ['google-social', 'oidc'],
+      ['corp-oidc', 'oidc'],
+    ]);
+    expect(stored[0]).toMatchObject({
+      authorizationUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
+      tokenUrl: 'https://oauth2.googleapis.com/token',
+    });
+    expect(stored[1]).toMatchObject({
+      authorizationUrl: 'https://corp.example/authorize',
+      tokenUrl: 'https://corp.example/token',
+      issuer: 'https://corp.example/',
+    });
+    expect(report.summary.identityProviders).toEqual({
+      created: 2,
+      skipped: 2,
+      failed: 0,
+    });
+    const messages = report.warnings.map((w) => w.message);
+    expect(messages).toContainEqual(
+      expect.stringMatching(
+        /^Identity provider 'corp-saml' was not imported: provider type 'samlp' is SAML/,
+      ),
+    );
+    expect(messages).toContainEqual(
+      expect.stringMatching(
+        /^Identity provider 'email-otp' was not imported: provider type 'email' is not supported/,
+      ),
+    );
+  });
+
   it('should warn about organizations', async () => {
     const report = await service.importData(mockAuth0Export, {
       dryRun: false,
