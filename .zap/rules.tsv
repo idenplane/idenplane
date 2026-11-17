@@ -99,3 +99,8 @@
 # with Handlebars' escaping {{displayName}}, never {{{ }}}.
 #@accept	40014-2	/realms/[^/]+/registration/fields/?$	Admin-configured field labels echoed in an application/json (nosniff) response; the register page renders them HTML-escaped.
 #@accept	40018	/realms/[^/]+/step-up/challenge	False positive: acr is only compared with constants and bound by Prisma; no raw SQL in src/step-up, and the unauthenticated scan always gets the same 400.
+# Registration: the boolean pair (John AND 1=1 -- / John AND 1=2 --) is sent as
+# two registrations of the same form; the first creates the user and the
+# second is refused as a duplicate, so the pages differ. src/registration
+# has no raw SQL; every value is bound by Prisma.
+#@accept	40018	/realms/[^/]+/registration/register	False positive: the second of the paired registrations is a duplicate of the first, so the responses differ; registration uses only Prisma-bound queries (no raw SQL in src/registration).
