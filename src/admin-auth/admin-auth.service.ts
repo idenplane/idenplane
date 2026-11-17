@@ -16,7 +16,7 @@ import {
 import { assertCertificateBinding } from '../mtls/certificate-binding.js';
 import { timingSafeEqual } from 'node:crypto';
 import { PrismaService } from '../prisma/prisma.service.js';
-import { CryptoService } from '../crypto/crypto.service.js';
+import { PasswordVerificationService } from '../crypto/password-verification.service.js';
 import { JwkService } from '../crypto/jwk.service.js';
 import { RateLimitService } from '../rate-limit/rate-limit.service.js';
 import { BruteForceService } from '../brute-force/brute-force.service.js';
@@ -64,7 +64,7 @@ export class AdminAuthService implements OnModuleDestroy {
   constructor(
     private readonly lookups: CachedLookupsService,
     private readonly prisma: PrismaService,
-    private readonly crypto: CryptoService,
+    private readonly passwords: PasswordVerificationService,
     private readonly jwkService: JwkService,
     private readonly rateLimitService: RateLimitService,
     private readonly bruteForceService: BruteForceService,
@@ -160,6 +160,8 @@ export class AdminAuthService implements OnModuleDestroy {
     });
 
     if (!user || !user.enabled || !user.passwordHash) {
+      // As long as a wrong password, so timing doesn't reveal admin usernames.
+      await this.passwords.equalizeTiming(password);
       throw new UnauthorizedException('Invalid credentials');
     }
 
@@ -179,7 +181,7 @@ export class AdminAuthService implements OnModuleDestroy {
     }
 
     // ── Password verification ─────────────────────────────────────────────────
-    const valid = await this.crypto.verifyPassword(user.passwordHash, password);
+    const valid = await this.passwords.verifyUserPassword(user, password);
     if (!valid) {
       // Record the failure so brute-force protection can lock the account.
       await this.bruteForceService.recordFailure(masterRealm, user.id, ip);

@@ -22,6 +22,7 @@ import {
 import { LoginService } from '../login/login.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { CryptoService } from '../crypto/crypto.service.js';
+import { PasswordVerificationService } from '../crypto/password-verification.service.js';
 import { PasswordPolicyService } from '../password-policy/password-policy.service.js';
 import { MfaService, MFA_ENROLLMENT_COOKIE } from '../mfa/mfa.service.js';
 import {
@@ -52,6 +53,7 @@ export class AccountController {
     private readonly loginService: LoginService,
     private readonly prisma: PrismaService,
     private readonly crypto: CryptoService,
+    private readonly passwords: PasswordVerificationService,
     private readonly passwordPolicyService: PasswordPolicyService,
     private readonly mfaService: MfaService,
     private readonly themeRender: ThemeRenderService,
@@ -311,8 +313,8 @@ export class AccountController {
       );
     }
 
-    const valid = await this.crypto.verifyPassword(
-      user.passwordHash,
+    const valid = await this.passwords.verifyUserPassword(
+      user,
       currentPassword,
     );
     if (!valid) {
@@ -688,8 +690,8 @@ export class AccountController {
         if (user.passwordHash) {
           const valid =
             !!body['currentPassword'] &&
-            (await this.crypto.verifyPassword(
-              user.passwordHash,
+            (await this.passwords.verifyUserPassword(
+              user,
               body['currentPassword'],
             ));
           if (!valid) {
@@ -880,10 +882,7 @@ export class AccountController {
     }
     const valid =
       !!body['currentPassword'] &&
-      (await this.crypto.verifyPassword(
-        user.passwordHash,
-        body['currentPassword'],
-      ));
+      (await this.passwords.verifyUserPassword(user, body['currentPassword']));
     if (!valid) return accountError('Password is incorrect.');
 
     await this.mfaService.disableSms(user.id);
@@ -931,8 +930,8 @@ export class AccountController {
       );
     }
 
-    const valid = await this.crypto.verifyPassword(
-      user.passwordHash,
+    const valid = await this.passwords.verifyUserPassword(
+      user,
       currentPassword,
     );
     if (!valid) {
@@ -1035,8 +1034,8 @@ export class AccountController {
       );
     }
 
-    const valid = await this.crypto.verifyPassword(
-      user.passwordHash,
+    const valid = await this.passwords.verifyUserPassword(
+      user,
       currentPassword,
     );
     if (!valid) {
@@ -1087,8 +1086,8 @@ export class AccountController {
       );
     }
 
-    const valid = await this.crypto.verifyPassword(
-      user.passwordHash,
+    const valid = await this.passwords.verifyUserPassword(
+      user,
       currentPassword,
     );
     if (!valid) {
