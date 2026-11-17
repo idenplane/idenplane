@@ -299,7 +299,7 @@ describe('SessionsService', () => {
       expect(text).toContain('u."realm_id" = ?');
       expect(text).toContain('s."user_id" = ?');
       expect(text).toContain('RETURNING');
-      expect(params).toEqual(['realm-1', 'user-1']);
+      expect(params.slice(0, 2)).toEqual(['realm-1', 'user-1']);
       expect(prisma.loginSession.deleteMany).toHaveBeenCalledWith({
         where: { userId: 'user-1', realmId: 'realm-1' },
       });

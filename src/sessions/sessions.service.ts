@@ -3,6 +3,7 @@ import type { Realm } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { revokeAdminTokensOfUser } from '../admin-auth/admin-token-revocation.js';
 import { notIdleWhere } from './session-lifetime.js';
+import { ENDED_SESSION_COLUMNS } from './delete-sessions.js';
 import {
   BackchannelLogoutService,
   type EndedSession,
@@ -236,11 +237,7 @@ export class SessionsService {
          WHERE u."id" = s."user_id"
            AND u."realm_id" = ${realm.id}
            AND s."user_id" = ${userId}
-        RETURNING s."id" AS "id", s."user_id" AS "userId",
-          ARRAY(SELECT DISTINCT rt."client_id"
-                  FROM "refresh_tokens" AS rt
-                 WHERE rt."session_id" = s."id"
-                   AND rt."client_id" IS NOT NULL) AS "clientIds"`,
+        RETURNING ${ENDED_SESSION_COLUMNS}`,
       this.prisma.loginSession.deleteMany({
         where: {
           userId,

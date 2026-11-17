@@ -41,7 +41,13 @@ describe('Back-channel logout on administrative sign-out (e2e)', () => {
   const http = () => request(app.getHttpServer());
 
   /** Signs the seeded user in to `test-client`; returns the session id. */
-  const signIn = async (): Promise<string> => {
+  const signIn = async (): Promise<string> => (await signInTokens()).sid;
+
+  /** Signs the seeded user in; returns the session id and refresh token. */
+  const signInTokens = async (): Promise<{
+    sid: string;
+    refreshToken: string;
+  }> => {
     const res = await http()
       .post(`/realms/${REALM}/protocol/openid-connect/token`)
       .send({
@@ -57,8 +63,25 @@ describe('Back-channel logout on administrative sign-out (e2e)', () => {
     const token = (res.body.id_token ?? res.body.access_token) as string;
     const sid = decodeJwt(token)['sid'];
     expect(typeof sid).toBe('string');
-    return sid as string;
+    return {
+      sid: sid as string,
+      refreshToken: res.body.refresh_token as string,
+    };
   };
+
+  /** Ends the user's sessions without announcing them, between tests. */
+  const quietlyClearSessions = async () => {
+    await ctx.prisma.session.deleteMany({ where: { userId: seeded.user.id } });
+    received = [];
+  };
+
+  const refresh = (refreshToken: string) =>
+    http().post(`/realms/${REALM}/protocol/openid-connect/token`).send({
+      grant_type: 'refresh_token',
+      client_id: 'test-client',
+      client_secret: 'test-client-secret',
+      refresh_token: refreshToken,
+    });
 
   /** Waits until `count` logout tokens have arrived (or fails after 10s). */
   const waitForTokens = async (count: number): Promise<Received[]> => {
@@ -289,6 +312,106 @@ describe('Back-channel logout on administrative sign-out (e2e)', () => {
       await ctx.prisma.realm.update({
         where: { id: seeded.realm.id },
         data: { ssoSessionIdleTimeout: 0 },
+      });
+    }
+  });
+
+  it('a session evicted by maxSessionsPerUser is announced', async () => {
+    await quietlyClearSessions();
+    await ctx.prisma.realm.update({
+      where: { id: seeded.realm.id },
+      data: { maxSessionsPerUser: 1 },
+    });
+    try {
+      const evicted = await signIn();
+      const kept = await signIn();
+
+      const tokens = await waitForTokens(1);
+      expect(tokens).toHaveLength(1);
+      const payload = await verifyLogoutToken(
+        tokens[0].logoutToken,
+        'test-client',
+      );
+      expect(payload.sid).toBe(evicted);
+      expect(
+        await ctx.prisma.session.findUnique({ where: { id: kept } }),
+      ).not.toBeNull();
+    } finally {
+      await ctx.prisma.realm.update({
+        where: { id: seeded.realm.id },
+        data: { maxSessionsPerUser: 10 },
+      });
+    }
+  });
+
+  it('a session ended by refresh token reuse is announced', async () => {
+    await quietlyClearSessions();
+    const { sid, refreshToken } = await signInTokens();
+    await refresh(refreshToken).expect(200);
+
+    // The first token again: reuse, so the whole session ends.
+    const reuse = await refresh(refreshToken);
+    expect(reuse.status).toBe(400);
+
+    const tokens = await waitForTokens(1);
+    expect(tokens).toHaveLength(1);
+    const payload = await verifyLogoutToken(
+      tokens[0].logoutToken,
+      'test-client',
+    );
+    expect(payload.sid).toBe(sid);
+    expect(
+      await ctx.prisma.session.findUnique({ where: { id: sid } }),
+    ).toBeNull();
+  });
+
+  it("the user's own logout reaches every client with a URI when no token records its client", async () => {
+    await quietlyClearSessions();
+    const { sid, refreshToken } = await signInTokens();
+    // A refresh token from before tokens recorded their client.
+    await ctx.prisma.refreshToken.updateMany({
+      where: { sessionId: sid },
+      data: { clientId: null },
+    });
+
+    await http()
+      .post(`/realms/${REALM}/protocol/openid-connect/logout`)
+      .send({ refresh_token: refreshToken })
+      .expect(204);
+
+    // No authorization code either (a password grant): every client of the
+    // realm with a back-channel URI is told, each naming the session.
+    const tokens = await waitForTokens(2);
+    expect(tokens.map((t) => t.path).sort()).toEqual(['/unused', '/used']);
+    for (const t of tokens) {
+      const audience = t.path === '/used' ? 'test-client' : 'unused-client';
+      const payload = await verifyLogoutToken(t.logoutToken, audience);
+      expect(payload.sid).toBe(sid);
+    }
+  });
+
+  it('a back-channel URI on the cloud metadata address gets nothing, and the sign-out still succeeds', async () => {
+    await quietlyClearSessions();
+    await ctx.prisma.client.update({
+      where: { id: seeded.client.id },
+      data: { backchannelLogoutUri: 'http://169.254.169.254/latest/meta-data' },
+    });
+    try {
+      await signIn();
+      await http()
+        .delete(`/admin/realms/${REALM}/users/${seeded.user.id}/sessions`)
+        .set('x-admin-api-key', TEST_ADMIN_API_KEY)
+        .expect(204);
+      // Refused before any connection: nothing to observe but the absence
+      // of a delivery anywhere, and a sign-out that went through.
+      expect(await waitForTokens(1)).toHaveLength(0);
+      expect(
+        await ctx.prisma.session.count({ where: { userId: seeded.user.id } }),
+      ).toBe(0);
+    } finally {
+      await ctx.prisma.client.update({
+        where: { id: seeded.client.id },
+        data: { backchannelLogoutUri: `${baseUri}/used` },
       });
     }
   });

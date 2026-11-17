@@ -3,6 +3,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { JwkService } from '../crypto/jwk.service.js';
 import { createConcurrencyLimiter } from '../common/utils/concurrency-limiter.util.js';
+import { assertNotLinkLocalTarget } from '../common/security/safe-http-client.js';
 import type { Realm } from '@prisma/client';
 
 /** The `events` member of a logout token (Back-Channel Logout 1.0 §2.4). */
@@ -52,6 +53,16 @@ export interface NotifyOptions {
   allSessionsOfUser?: boolean;
 }
 
+/** Every client of the realm with a back-channel logout URI. */
+const ALL = 'all' as const;
+
+/** An ended session with its clients resolved (see `resolveClients`). */
+interface ResolvedSession {
+  id: string;
+  userId: string;
+  clientIds: readonly string[] | typeof ALL;
+}
+
 interface LogoutTarget {
   clientId: string;
   uri: string;
@@ -66,8 +77,9 @@ interface LogoutTarget {
  *
  * Every way a session ends calls `notifySessionsEnded` once the session is
  * gone from the database: RP-initiated logout, the admin API (one session or
- * all of a user's), the forced sign-out on a credential change, disabling a
- * user, SCIM deactivation, and the SSO idle timeout. See
+ * all of a user's), the forced sign-out on a credential change, disabling or
+ * deleting a user, SCIM deactivation, the SSO idle timeout, eviction at
+ * `maxSessionsPerUser`, refresh token reuse and authorization code replay. See
  * docs/docs/guides/authentication.mdx ("Back-Channel Logout").
  *
  * Delivery is fire-and-forget: it runs after the caller's work has
@@ -121,11 +133,63 @@ export class BackchannelLogoutService {
     sessions: readonly EndedSession[],
     options: NotifyOptions = {},
   ): void {
-    if (!sessions.some((s) => s.clientIds.some((c) => c))) return;
+    // A session with no refresh token at all (an impersonation session) was
+    // never handed to a client: there is no one to tell.
+    if (!sessions.some((s) => s.clientIds.length > 0)) return;
     void this.dispatch(realm, sessions, options).catch((err: unknown) => {
       this.logger.warn(
         `Back-channel logout for realm ${realm.name} failed: ${errorMessage(err)}`,
       );
+    });
+  }
+
+  /**
+   * The clients each session was used with. Normally its refresh tokens
+   * name them. A session whose refresh tokens record no client (tokens
+   * issued before refresh tokens carried one) falls back to the
+   * authorization codes it was created from; access tokens are not stored,
+   * so they cannot help. When neither names a client, the session goes to
+   * every client of the realm that registered a back-channel logout URI, as
+   * every logout did before 0.13.0: missing a client that holds the session
+   * is worse than telling one that does not, which ignores an unknown `sid`.
+   */
+  private async resolveClients(
+    realm: Pick<Realm, 'id'>,
+    sessions: readonly EndedSession[],
+  ): Promise<ResolvedSession[]> {
+    const unnamed = sessions
+      .filter(
+        (s) =>
+          s.clientIds.length > 0 &&
+          !s.clientIds.some((c) => typeof c === 'string'),
+      )
+      .map((s) => s.id);
+    const fromCodes = new Map<string, string[]>();
+    if (unnamed.length > 0) {
+      const codes = await this.prisma.authorizationCode.findMany({
+        where: { sessionId: { in: unnamed }, client: { realmId: realm.id } },
+        select: { sessionId: true, client: { select: { clientId: true } } },
+      });
+      for (const code of codes) {
+        if (!code.sessionId) continue;
+        const list = fromCodes.get(code.sessionId) ?? [];
+        list.push(code.client.clientId);
+        fromCodes.set(code.sessionId, list);
+      }
+    }
+    return sessions.map((s) => {
+      const named = s.clientIds.filter(
+        (c): c is string => typeof c === 'string',
+      );
+      if (named.length > 0 || s.clientIds.length === 0) {
+        return { id: s.id, userId: s.userId, clientIds: named };
+      }
+      const codes = fromCodes.get(s.id);
+      return {
+        id: s.id,
+        userId: s.userId,
+        clientIds: codes && codes.length > 0 ? [...new Set(codes)] : ALL,
+      };
     });
   }
 
@@ -138,19 +202,19 @@ export class BackchannelLogoutService {
     sessions: readonly EndedSession[],
     options: NotifyOptions = {},
   ): Promise<void> {
+    const resolved = await this.resolveClients(realm, sessions);
     const clientIds = [
       ...new Set(
-        sessions.flatMap((s) =>
-          s.clientIds.filter((c): c is string => typeof c === 'string'),
-        ),
+        resolved.flatMap((s) => (s.clientIds === ALL ? [] : s.clientIds)),
       ),
     ];
-    if (clientIds.length === 0) return;
+    const anyAll = resolved.some((s) => s.clientIds === ALL);
+    if (clientIds.length === 0 && !anyAll) return;
 
     const clients = await this.prisma.client.findMany({
       where: {
         realmId: realm.id,
-        clientId: { in: clientIds },
+        ...(anyAll ? {} : { clientId: { in: clientIds } }),
         backchannelLogoutUri: { not: null },
       },
       select: {
@@ -163,7 +227,7 @@ export class BackchannelLogoutService {
 
     const targets = logoutTargets(
       clients,
-      sessions,
+      resolved,
       options.allSessionsOfUser === true,
     );
     if (targets.length === 0) return;
@@ -203,6 +267,13 @@ export class BackchannelLogoutService {
     target: LogoutTarget,
   ): Promise<void> {
     try {
+      // Internal URIs are legitimate here (an RP on the operator's network),
+      // so this is not the full SSRF guard; but the cloud metadata service
+      // and other link-local addresses are refused unless explicitly allowed.
+      if (!linkLocalTargetsAllowed()) {
+        await assertNotLinkLocalTarget(target.uri);
+      }
+
       // §2.4: iss, aud, iat, jti (set by signJwt), events, and sub and/or
       // sid. Never a nonce, so a logout token cannot pass as an ID token.
       const payload: Record<string, unknown> = {
@@ -259,14 +330,16 @@ function logoutTargets(
     backchannelLogoutUri: string | null;
     backchannelLogoutSessionRequired: boolean;
   }[],
-  sessions: readonly EndedSession[],
+  sessions: readonly ResolvedSession[],
   allSessionsOfUser: boolean,
 ): LogoutTarget[] {
   const targets: LogoutTarget[] = [];
   for (const client of clients) {
     const uri = client.backchannelLogoutUri;
     if (!uri) continue;
-    const used = sessions.filter((s) => s.clientIds.includes(client.clientId));
+    const used = sessions.filter(
+      (s) => s.clientIds === ALL || s.clientIds.includes(client.clientId),
+    );
     if (client.backchannelLogoutSessionRequired || !allSessionsOfUser) {
       for (const s of used) {
         targets.push({
@@ -283,6 +356,15 @@ function logoutTargets(
     }
   }
   return targets;
+}
+
+/**
+ * `BACKCHANNEL_LOGOUT_ALLOW_LINK_LOCAL=true` lets logout tokens go to
+ * link-local and cloud-metadata addresses. Read per call, so tests can
+ * toggle it.
+ */
+function linkLocalTargetsAllowed(): boolean {
+  return process.env['BACKCHANNEL_LOGOUT_ALLOW_LINK_LOCAL'] === 'true';
 }
 
 function errorMessage(err: unknown): string {

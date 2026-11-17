@@ -3,8 +3,13 @@ import { lookupsBackedBy } from '../cache/cached-lookups.mock.js';
 jest.mock('../crypto/jwk.service.js', () => ({
   JwkService: jest.fn(),
 }));
+// No DNS in unit tests: the link-local check is its own unit, mocked here.
+jest.mock('../common/security/safe-http-client.js', () => ({
+  assertNotLinkLocalTarget: jest.fn().mockResolvedValue(undefined),
+}));
 
 import { Logger } from '@nestjs/common';
+import { assertNotLinkLocalTarget } from '../common/security/safe-http-client.js';
 import {
   BACKCHANNEL_LOGOUT_EVENT,
   BackchannelLogoutService,
@@ -67,6 +72,9 @@ describe('BackchannelLogoutService', () => {
     originalFetch = global.fetch;
     global.fetch = jest.fn().mockResolvedValue({ ok: true, status: 200 });
     warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => {});
+    (assertNotLinkLocalTarget as jest.Mock)
+      .mockReset()
+      .mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -285,6 +293,107 @@ describe('BackchannelLogoutService', () => {
     });
   });
 
+  describe('clients of a session whose refresh tokens name none', () => {
+    it('falls back to the clients of the authorization codes it came from', async () => {
+      prisma.authorizationCode.findMany = jest
+        .fn()
+        .mockResolvedValue([
+          { sessionId: 's-old', client: { clientId: 'app-1' } },
+        ]);
+      prisma.client.findMany.mockResolvedValue([client('app-1', true)]);
+
+      await service.dispatch(realm, [session('s-old', [null])]);
+
+      expect(prisma.authorizationCode.findMany).toHaveBeenCalledWith({
+        where: { sessionId: { in: ['s-old'] }, client: { realmId: 'realm-1' } },
+        select: { sessionId: true, client: { select: { clientId: true } } },
+      });
+      expect(prisma.client.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ clientId: { in: ['app-1'] } }),
+        }),
+      );
+      expect(mockJwkService.signJwt.mock.calls[0][0]).toMatchObject({
+        aud: 'app-1',
+        sid: 's-old',
+      });
+    });
+
+    it('goes to every client of the realm with a back-channel URI when nothing names one', async () => {
+      prisma.authorizationCode.findMany = jest.fn().mockResolvedValue([]);
+      prisma.client.findMany.mockResolvedValue([
+        client('app-1', true),
+        client('app-2', false),
+      ]);
+
+      await service.dispatch(realm, [session('s-old', [null])]);
+
+      // No clientId filter: the realm's clients with a URI.
+      expect(prisma.client.findMany.mock.calls[0][0].where).toEqual({
+        realmId: 'realm-1',
+        backchannelLogoutUri: { not: null },
+      });
+      const sent = mockJwkService.signJwt.mock.calls.map((c) => c[0]);
+      // Both name the session: one ended session is never sub-only.
+      expect(sent).toEqual([
+        expect.objectContaining({ aud: 'app-1', sid: 's-old' }),
+        expect.objectContaining({ aud: 'app-2', sid: 's-old' }),
+      ]);
+    });
+
+    it('does not look further when the refresh tokens name a client', async () => {
+      prisma.authorizationCode.findMany = jest.fn();
+      prisma.client.findMany.mockResolvedValue([]);
+
+      await service.dispatch(realm, [session('s-1', ['app-1', null])]);
+
+      expect(prisma.authorizationCode.findMany).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('link-local and cloud-metadata targets', () => {
+    const original = process.env['BACKCHANNEL_LOGOUT_ALLOW_LINK_LOCAL'];
+    afterEach(() => {
+      if (original === undefined) {
+        delete process.env['BACKCHANNEL_LOGOUT_ALLOW_LINK_LOCAL'];
+      } else {
+        process.env['BACKCHANNEL_LOGOUT_ALLOW_LINK_LOCAL'] = original;
+      }
+    });
+
+    it('refuses a target the check rejects, logs it, and sends nothing there', async () => {
+      delete process.env['BACKCHANNEL_LOGOUT_ALLOW_LINK_LOCAL'];
+      prisma.client.findMany.mockResolvedValue([
+        client('metadata', true, 'http://169.254.169.254/latest'),
+      ]);
+      (assertNotLinkLocalTarget as jest.Mock).mockRejectedValue(
+        new Error(
+          'Delivery blocked: target is a link-local or cloud-metadata address',
+        ),
+      );
+
+      await service.dispatch(realm, [session('s-1', ['metadata'])]);
+
+      expect(assertNotLinkLocalTarget).toHaveBeenCalledWith(
+        'http://169.254.169.254/latest',
+      );
+      expect(global.fetch).not.toHaveBeenCalled();
+      expect(warn).toHaveBeenCalledWith(
+        'Back-channel logout to metadata in realm test-realm failed: Delivery blocked: target is a link-local or cloud-metadata address',
+      );
+    });
+
+    it('skips the check when BACKCHANNEL_LOGOUT_ALLOW_LINK_LOCAL=true', async () => {
+      process.env['BACKCHANNEL_LOGOUT_ALLOW_LINK_LOCAL'] = 'true';
+      prisma.client.findMany.mockResolvedValue([client('app-1', true)]);
+
+      await service.dispatch(realm, [session('s-1', ['app-1'])]);
+
+      expect(assertNotLinkLocalTarget).not.toHaveBeenCalled();
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe('notifySessionsEnded', () => {
     it('returns at once and delivers in the background', async () => {
       prisma.client.findMany.mockResolvedValue([client('app-1', true)]);
@@ -306,8 +415,8 @@ describe('BackchannelLogoutService', () => {
       await flushPromises();
     });
 
-    it('does nothing for sessions no client used', async () => {
-      service.notifySessionsEnded(realm, [session('s-1', [null])]);
+    it('does nothing for sessions without refresh tokens (impersonation)', async () => {
+      service.notifySessionsEnded(realm, [session('s-1', [])]);
       service.notifySessionsEnded(realm, []);
       await flushPromises();
 

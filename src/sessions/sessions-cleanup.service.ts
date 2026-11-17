@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { ENDED_SESSION_COLUMNS } from './delete-sessions.js';
 import {
   BackchannelLogoutService,
   type EndedSession,
@@ -81,12 +82,8 @@ export class SessionsCleanupService {
          AND NOT EXISTS (SELECT 1 FROM "refresh_tokens" AS rt
                           WHERE rt."session_id" = s."id"
                             AND rt."expires_at" >= (now() AT TIME ZONE 'UTC'))
-      RETURNING s."id" AS "id", s."user_id" AS "userId",
-        r."id" AS "realmId", r."name" AS "realmName",
-        ARRAY(SELECT DISTINCT rt."client_id"
-                FROM "refresh_tokens" AS rt
-               WHERE rt."session_id" = s."id"
-                 AND rt."client_id" IS NOT NULL) AS "clientIds"`;
+      RETURNING r."id" AS "realmId", r."name" AS "realmName",
+        ${ENDED_SESSION_COLUMNS}`;
     this.announceEnded(idleSessions);
 
     // Delete any refresh tokens that have individually expired but whose

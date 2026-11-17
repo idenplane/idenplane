@@ -165,6 +165,14 @@ describe('AuthService', () => {
     resetFailures: jest.Mock;
   };
   let userFederationService: { authenticateViaFederation: jest.Mock };
+  let backchannel: { notifySessionsEnded: jest.Mock };
+  /** The id lists of every `DELETE FROM "sessions"` the service ran. */
+  const deletedSessions = () =>
+    prisma.$queryRaw.mock.calls
+      .filter((call) =>
+        (call[0] as string[]).join('?').includes('DELETE FROM "sessions"'),
+      )
+      .map((call) => call[1] as string[]);
 
   beforeEach(() => {
     prisma = createMockPrismaService();
@@ -214,6 +222,7 @@ describe('AuthService', () => {
         .mockResolvedValue({ authenticated: false }),
     };
 
+    backchannel = { notifySessionsEnded: jest.fn() };
     const lookups = lookupsBackedBy(prisma as any) as any;
     service = new AuthService(
       lookups,
@@ -253,6 +262,10 @@ describe('AuthService', () => {
         ) => crypto.verifyPassword(user.passwordHash, password),
         equalizeTiming: async () => {},
       } as any,
+      undefined,
+      undefined,
+      undefined,
+      backchannel as any,
     );
   });
 
@@ -589,7 +602,7 @@ describe('AuthService', () => {
         { id: 'old-1' },
         { id: 'old-2' },
       ]);
-      prisma.session.deleteMany.mockRejectedValue(
+      prisma.$queryRaw.mockRejectedValue(
         new Error('Transaction failed due to a write conflict or a deadlock'),
       );
 
@@ -608,10 +621,10 @@ describe('AuthService', () => {
 
       expect(result.refresh_token).toBe(FAKE_REFRESH_TOKEN_RAW);
       // One statement: the cascade removes the evicted sessions' tokens.
-      expect(prisma.session.deleteMany).toHaveBeenCalledWith({
-        where: { id: { in: ['old-1'] } },
-      });
+      expect(deletedSessions()).toEqual([['old-1']]);
       expect(prisma.refreshToken.updateMany).not.toHaveBeenCalled();
+      // Nothing was evicted, so nothing is announced.
+      expect(backchannel.notifySessionsEnded).not.toHaveBeenCalled();
     });
 
     describe('the session cap and offline sessions', () => {
@@ -636,7 +649,10 @@ describe('AuthService', () => {
           { id: 'old-1' },
           { id: 'old-2' },
         ]);
-        prisma.session.deleteMany.mockResolvedValue({ count: 1 });
+        const evicted = [
+          { id: 'old-1', userId: dbUser.id, clientIds: ['my-client'] },
+        ];
+        prisma.$queryRaw.mockResolvedValue(evicted);
 
         await (service as unknown as Limiter).enforceSessionLimit(
           capped,
@@ -653,9 +669,12 @@ describe('AuthService', () => {
             }),
           }),
         );
-        expect(prisma.session.deleteMany).toHaveBeenCalledWith({
-          where: { id: { in: ['old-1'] } },
-        });
+        expect(deletedSessions()).toEqual([['old-1']]);
+        // The evicted session's clients are told (back-channel logout).
+        expect(backchannel.notifySessionsEnded).toHaveBeenCalledWith(
+          capped,
+          evicted,
+        );
       });
 
       it('evicts nothing when the new session is offline', async () => {
@@ -671,7 +690,8 @@ describe('AuthService', () => {
         );
 
         expect(prisma.session.findMany).not.toHaveBeenCalled();
-        expect(prisma.session.deleteMany).not.toHaveBeenCalled();
+        expect(deletedSessions()).toEqual([]);
+        expect(backchannel.notifySessionsEnded).not.toHaveBeenCalled();
       });
     });
 
@@ -1062,7 +1082,7 @@ describe('AuthService', () => {
         await request();
 
         expect(prisma.session.create).not.toHaveBeenCalled();
-        expect(prisma.session.deleteMany).not.toHaveBeenCalled();
+        expect(deletedSessions()).toEqual([]);
         expect(prisma.refreshToken.create).not.toHaveBeenCalled();
         const payload = jwkService.signJwt.mock.calls[0][0] as Record<
           string,
@@ -1147,9 +1167,7 @@ describe('AuthService', () => {
       });
       // And the session ends, so the winning request's new refresh token,
       // stored after this revocation, cannot outlive it.
-      expect(prisma.session.deleteMany).toHaveBeenCalledWith({
-        where: { id: storedRefreshToken.sessionId },
-      });
+      expect(deletedSessions()).toEqual([[storedRefreshToken.sessionId]]);
       expect(prisma.refreshToken.create).not.toHaveBeenCalled();
     });
 
@@ -1400,9 +1418,44 @@ describe('AuthService', () => {
         where: { sessionId: storedRefreshToken.sessionId },
         data: { revoked: true },
       });
-      expect(prisma.session.deleteMany).toHaveBeenCalledWith({
-        where: { id: storedRefreshToken.sessionId },
+      expect(deletedSessions()).toEqual([[storedRefreshToken.sessionId]]);
+    });
+
+    it("tells the session's clients when a reused refresh token ends it (a security event)", async () => {
+      setupValidClient();
+      prisma.refreshToken.findUnique.mockResolvedValue({
+        ...storedRefreshToken,
+        revoked: true,
       });
+      prisma.refreshToken.updateMany.mockResolvedValue({ count: 3 });
+      const ended = [
+        {
+          id: storedRefreshToken.sessionId,
+          userId: 'user-1',
+          clientIds: ['my-client'],
+        },
+      ];
+      prisma.$queryRaw.mockResolvedValue(ended);
+
+      await expectOAuthError(
+        service.handleTokenRequest(realm, {
+          grant_type: 'refresh_token',
+          refresh_token: 'reused-token',
+          client_id: 'my-client',
+          client_secret: 'correct-secret',
+        }),
+        'invalid_grant',
+        400,
+      );
+
+      expect(backchannel.notifySessionsEnded).toHaveBeenCalledWith(
+        realm,
+        ended,
+      );
+      // Sent after the session is gone, never before.
+      expect(
+        backchannel.notifySessionsEnded.mock.invocationCallOrder[0],
+      ).toBeGreaterThan(prisma.$queryRaw.mock.invocationCallOrder[0]);
     });
 
     it('should not revoke session tokens when a non-revoked expired token is used', async () => {
@@ -1633,10 +1686,22 @@ describe('AuthService', () => {
       it('ends the session issued from it when its own client replays it', async () => {
         prisma.authorizationCode.findUnique.mockResolvedValue(usedCode());
 
+        const ended = [
+          {
+            id: 'session-from-first-exchange',
+            userId: dbUser.id,
+            clientIds: ['my-client'],
+          },
+        ];
+        prisma.$queryRaw.mockResolvedValue(ended);
+
         await expect(replay()).rejects.toMatchObject({ code: 'invalid_grant' });
-        expect(prisma.session.deleteMany).toHaveBeenCalledWith({
-          where: { id: 'session-from-first-exchange' },
-        });
+        expect(deletedSessions()).toEqual([['session-from-first-exchange']]);
+        // The revoked tokens' client learns its session is gone.
+        expect(backchannel.notifySessionsEnded).toHaveBeenCalledWith(
+          realm,
+          ended,
+        );
       });
 
       it('leaves the session alone when another client presents it', async () => {
@@ -1645,7 +1710,8 @@ describe('AuthService', () => {
         );
 
         await expect(replay()).rejects.toMatchObject({ code: 'invalid_grant' });
-        expect(prisma.session.deleteMany).not.toHaveBeenCalled();
+        expect(deletedSessions()).toEqual([]);
+        expect(backchannel.notifySessionsEnded).not.toHaveBeenCalled();
       });
 
       it('leaves the session alone long after the code expired', async () => {
@@ -1654,7 +1720,8 @@ describe('AuthService', () => {
         );
 
         await expect(replay()).rejects.toMatchObject({ code: 'invalid_grant' });
-        expect(prisma.session.deleteMany).not.toHaveBeenCalled();
+        expect(deletedSessions()).toEqual([]);
+        expect(backchannel.notifySessionsEnded).not.toHaveBeenCalled();
       });
     });
 
