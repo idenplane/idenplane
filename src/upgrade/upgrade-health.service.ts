@@ -449,7 +449,8 @@ export class UpgradeHealthService {
    * such as `OIDC`, were lower-cased by the 0.13.0 migration.)
    *
    * SAML rows are reported as needing configuration review rather than as
-   * unusable: they were stored without the settings a SAML sign-in needs.
+   * unusable: they were stored before 0.12.0, when Idenplane had no SAML
+   * broker, and nothing checked their configuration then.
    * Each is listed as `realm/alias (type, enabled|disabled)`. What counts
    * as SAML or supported is decided by classifyIdpProviderType.
    */
@@ -484,8 +485,8 @@ export class UpgradeHealthService {
       if (saml.length > 0) {
         parts.push(
           `${saml.length} SAML identity provider(s) need configuration review: ` +
-            'they were stored before 0.12.0 without the settings a SAML sign-in ' +
-            'needs. Review and complete each one, or delete it.',
+            'they were stored before 0.12.0, when Idenplane had no SAML broker. ' +
+            "Review each one's configuration, or delete it.",
         );
       }
       if (unsupported.length > 0) {

@@ -30,8 +30,8 @@ const SAML_TYPE = /saml|adfs/i;
  * - `supported`: `oidc` or `oauth2`, in any case (`type` is the canonical,
  *   lower-case value);
  * - `saml`: a SAML identity provider. Rows like these were stored before
- *   0.12.0 without the settings a SAML sign-in needs, so they need an
- *   admin's review whatever the broker supports;
+ *   0.12.0, when Idenplane had no SAML broker, so an admin reviews their
+ *   configuration before relying on them, whatever the broker supports;
  * - `unsupported`: anything else.
  *
  * The upgrade health check (`identity_provider_types`) reports by this, so

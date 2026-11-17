@@ -1,4 +1,3 @@
-import { pbkdf2Sync, randomBytes } from 'node:crypto';
 import type { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import type { App } from 'supertest/types';
@@ -10,6 +9,10 @@ import {
 } from './setup';
 import { Browser, csrfFrom, useThemeViews } from './helpers/browser';
 import { VerificationService } from '../src/verification/verification.service.js';
+import {
+  legacyKeycloakRow,
+  pbkdf2Hash,
+} from '../src/crypto/__mocks__/password-hash-fixtures.js';
 
 describe('Password Policy (e2e)', () => {
   let app: INestApplication<App>;
@@ -255,21 +258,12 @@ describe('Password Policy (e2e)', () => {
     const other = 'OtherPass2@';
     const userIds: string[] = [];
 
-    const pbkdf2 = (password: string, digest: 'sha256' | 'sha512') => {
-      const salt = randomBytes(16);
-      const hash = pbkdf2Sync(password, salt, 1000, 64, digest);
-      return { salt: salt.toString('base64'), hash: hash.toString('base64') };
-    };
-    /** Keycloak PBKDF2-SHA512 as the pre-0.11.0 importer stored it. */
-    const legacyRow = (password: string) => {
-      const { salt, hash } = pbkdf2(password, 'sha512');
-      return ['1000', salt, hash].join('$');
-    };
-    /** The self-describing format the importers write since 0.11.0. */
-    const labelled = (password: string) => {
-      const { salt, hash } = pbkdf2(password, 'sha256');
-      return ['', 'pbkdf2-sha256', 'i=1000', salt, hash].join('$');
-    };
+    // The real formats, from the fixtures the unit tests verify:
+    // Keycloak PBKDF2-SHA512 as the pre-0.11.0 importer stored it
+    // (`iterations$salt$hash`, no algorithm in it), and the self-describing
+    // `$pbkdf2-sha256$…` the importers write since 0.11.0.
+    const legacyRow = (password: string) => legacyKeycloakRow(password);
+    const labelled = (password: string) => pbkdf2Hash('sha256', password);
 
     beforeAll(async () => {
       await resetPolicy();
@@ -335,7 +329,7 @@ describe('Password Policy (e2e)', () => {
           username: 'imported-reset',
           email: 'imported-reset@example.com',
           passwordHash: legacyRow(imported),
-          passwordAlgorithm: 'pbkdf2-sha512',
+          passwordAlgorithm: 'pbkdf2-sha256',
         },
       });
       userIds.push(user.id);
