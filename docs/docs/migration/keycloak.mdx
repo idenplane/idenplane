@@ -429,6 +429,7 @@ The importer creates an identity provider for each entry in `identityProviders` 
 - `oidc` and `keycloak-oidc` providers are imported as `oidc`. `google` and `microsoft` (as `oidc`) and `github` (as `oauth2`) get those services' endpoints filled in, since the export has none. Other social providers (`gitlab`, `facebook`, `linkedin-openid-connect`, …) are skipped; add them by hand as `oauth2` or `oidc` providers.
 - An `oidc` provider without a client ID or an `http(s)` authorization or token URL is skipped.
 - Keycloak exports secrets as `**********` unless told otherwise. A provider without a real secret is imported **disabled**, with a warning; set the secret and enable it.
+- Imports made before 0.12.0 stored SAML and other providers too. `GET /admin/upgrade/health` lists them in the `identity_provider_types` warning (see [Providers stored before 0.12.0](/guides/authentication#providers-stored-before-0120)).
 
 See [Identity Providers](/guides/authentication#identity-providers) for the supported types and how to configure one.
 
