@@ -745,6 +745,34 @@ describe('AdminAuthService', () => {
         await expect(service.validateAdminToken('t')).resolves.toBeTruthy();
       });
 
+      it('tells tokens from the same second apart by their millisecond issue time', async () => {
+        const revokedAtMs = now * 1000 + 500;
+        prisma.adminRevokedToken.findMany.mockResolvedValue([
+          {
+            jti: 'user:user-1',
+            revokedAt: new Date(revokedAtMs),
+            expiresAt: new Date((now + 3600) * 1000),
+          },
+        ]);
+        jwkService.verifyJwt.mockResolvedValue({
+          ...token(now),
+          iat_ms: revokedAtMs + 1,
+        });
+        await expect(service.validateAdminToken('t')).resolves.toBeTruthy();
+        jwkService.verifyJwt.mockResolvedValue({
+          ...token(now),
+          iat_ms: revokedAtMs - 1,
+        });
+        await expect(service.validateAdminToken('t')).rejects.toBeInstanceOf(
+          UnauthorizedException,
+        );
+        // A token from before 0.12.0 has no iat_ms: the same second is refused.
+        jwkService.verifyJwt.mockResolvedValue(token(now));
+        await expect(service.validateAdminToken('t')).rejects.toBeInstanceOf(
+          UnauthorizedException,
+        );
+      });
+
       it('still refuses a token revoked by its own jti', async () => {
         jwkService.verifyJwt.mockResolvedValue(token(now));
         prisma.adminRevokedToken.findMany.mockResolvedValue([

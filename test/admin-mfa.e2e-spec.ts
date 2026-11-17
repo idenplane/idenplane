@@ -524,8 +524,6 @@ describe('Admin console MFA (e2e)', () => {
         .get('/admin/auth/me')
         .set(...bearer(before))
         .expect(401);
-      // A token is refused when issued in the second of the reset, or before.
-      await new Promise((resolve) => setTimeout(resolve, 1100));
       // Carol signs in with the password alone again.
       const res = await login('carol').expect(200);
       expect(res.body.access_token).toEqual(expect.any(String));

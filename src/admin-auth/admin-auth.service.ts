@@ -29,6 +29,7 @@ import { ACR_PASSWORD } from '../authn-core/acr.js';
 import type { AuthenticatedAdmin } from '../admin-rbac/admin-principal.service.js';
 import { ADMIN_TOKEN_TTL_SECONDS } from './admin-token-ttl.js';
 import {
+  ADMIN_TOKEN_ISSUED_MS_CLAIM,
   adminUserRevocationKey,
   issuedBeforeRevocation,
 } from './admin-token-revocation.js';
@@ -406,6 +407,9 @@ export class AdminAuthService implements OnModuleDestroy {
         amr: proof.amr,
         acr: proof.acr,
         auth_time: Math.floor(Date.now() / 1000),
+        // Lets a revocation of all this admin's tokens tell a token issued
+        // in the same second, just after it, from the ones it ends.
+        [ADMIN_TOKEN_ISSUED_MS_CLAIM]: Date.now(),
       },
       signingKey.privateKey,
       signingKey.kid,
@@ -588,7 +592,10 @@ export class AdminAuthService implements OnModuleDestroy {
           }
           if (
             issuedBeforeRevocation(
-              typeof payload['iat'] === 'number' ? payload['iat'] : undefined,
+              {
+                iat: payload['iat'],
+                iatMs: payload[ADMIN_TOKEN_ISSUED_MS_CLAIM],
+              },
               record.revokedAt,
             )
           ) {

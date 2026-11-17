@@ -38,15 +38,26 @@ export function revokeAdminTokensOfUser(
 }
 
 /**
- * Whether a token issued at `iat` (seconds) is ended by a user revocation
- * recorded at `revokedAt`. `iat` has whole-second precision, so a token from
- * the same second as the revocation is refused too: ending a token that was
- * issued just after is the safe side of that rounding.
+ * The private claim with an admin token's issue time in milliseconds.
+ * `iat` has whole-second precision, which cannot tell a token issued just
+ * before a revocation from one issued just after it in the same second (an
+ * admin signing in again right after their password was set).
+ */
+export const ADMIN_TOKEN_ISSUED_MS_CLAIM = 'iat_ms';
+
+/**
+ * Whether a token is ended by a user revocation recorded at `revokedAt`.
+ * Judged by `iat_ms` when the token has it. A token without it (issued
+ * before 0.12.0) is judged by `iat`, and one from the same second as the
+ * revocation is refused: the safe side of that rounding.
  */
 export function issuedBeforeRevocation(
-  iat: number | undefined,
+  issued: { iat?: unknown; iatMs?: unknown },
   revokedAt: Date,
 ): boolean {
-  if (typeof iat !== 'number') return true;
-  return iat <= Math.floor(revokedAt.getTime() / 1000);
+  if (typeof issued.iatMs === 'number') {
+    return issued.iatMs <= revokedAt.getTime();
+  }
+  if (typeof issued.iat !== 'number') return true;
+  return issued.iat <= Math.floor(revokedAt.getTime() / 1000);
 }
