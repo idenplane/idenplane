@@ -3,6 +3,11 @@ import { Prisma, type ClientType } from '@prisma/client';
 import { seedDefaultScopesIn } from '../../scopes/scope-seed.service.js';
 import { NEW_REALM_SECURITY_DEFAULTS as SECURE } from '../realm-security-defaults.js';
 import { wildcardRedirectUris } from '../../common/redirect-uri.utils.js';
+import {
+  type IdpProviderType,
+  supportedIdpProviderType,
+  unsupportedIdpTypeReason,
+} from '../../identity-providers/idp-provider-types.js';
 
 /**
  * Import of a version 1 realm export: the mapping the import has always
@@ -310,8 +315,20 @@ export async function importV1(
     }
   }
 
-  // 5. Create identity providers
-  const idps = section<ImportedIdp>(payload, 'identityProviders');
+  // 5. Create identity providers of a type the broker supports; skip the
+  // rest (SAML, unknown types) with a warning instead of storing them.
+  const warnings: string[] = [];
+  const idps: Array<ImportedIdp & { providerType: IdpProviderType }> = [];
+  for (const idp of section<ImportedIdp>(payload, 'identityProviders')) {
+    const providerType = supportedIdpProviderType(idp.providerType ?? 'oidc');
+    if (!providerType) {
+      warnings.push(
+        `identity provider '${idp.alias}': not imported, ${unsupportedIdpTypeReason(idp.providerType)}`,
+      );
+      continue;
+    }
+    idps.push({ ...idp, providerType });
+  }
   for (const idp of idps) {
     await tx.identityProvider.create({
       data: {
@@ -319,7 +336,7 @@ export async function importV1(
         alias: idp.alias,
         displayName: idp.displayName ?? null,
         enabled: idp.enabled ?? true,
-        providerType: idp.providerType ?? 'oidc',
+        providerType: idp.providerType,
         clientId: idp.clientId,
         clientSecret: encryptSecret(idp.clientSecret ?? ''),
         authorizationUrl: idp.authorizationUrl,
@@ -405,5 +422,6 @@ export async function importV1(
     scopesImported: scopes.length,
     idpsImported: idps.length,
     usersImported: users.length,
+    ...(warnings.length ? { warnings } : {}),
   };
 }

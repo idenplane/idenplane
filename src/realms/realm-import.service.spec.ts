@@ -484,4 +484,91 @@ describe('RealmImportService', () => {
       expect(seededScopeNames()).toContain('openid');
     });
   });
+
+  describe('identity provider types', () => {
+    const idpsOf = (types: Array<string | undefined>) =>
+      types.map((providerType, i) => ({
+        alias: `idp-${i}`,
+        ...(providerType === undefined ? {} : { providerType }),
+        clientId: 'c',
+        clientSecret: 's',
+        authorizationUrl: 'https://idp.example/auth',
+        tokenUrl: 'https://idp.example/token',
+      }));
+
+    it('version 1: stores supported types lower-case and skips SAML and unknown types with a warning', async () => {
+      const result = await service.importRealm({
+        version: 1,
+        realm: { name: 'imported-realm' },
+        identityProviders: idpsOf([
+          'OIDC',
+          'oauth2',
+          undefined,
+          'saml',
+          'ldap',
+        ]),
+      });
+
+      const stored = prisma.identityProvider.create.mock.calls.map(
+        (c) => c[0].data,
+      );
+      expect(stored.map((d) => [d.alias, d.providerType])).toEqual([
+        ['idp-0', 'oidc'],
+        ['idp-1', 'oauth2'],
+        ['idp-2', 'oidc'],
+      ]);
+      expect(result.idpsImported).toBe(3);
+      const warnings = (result as { warnings?: string[] }).warnings ?? [];
+      expect(warnings).toHaveLength(2);
+      expect(warnings[0]).toMatch(
+        /^identity provider 'idp-3': not imported, provider type 'saml' is SAML/,
+      );
+      expect(warnings[1]).toMatch(
+        /^identity provider 'idp-4': not imported, provider type 'ldap' is not supported \(supported: oidc, oauth2\)/,
+      );
+    });
+
+    it('version 2: never stores a SAML or unknown identity provider', async () => {
+      // Version 2 writes through more model methods than the shared mock
+      // has; give every missing one a harmless default.
+      const autoMock = (target: Record<string, any>) =>
+        new Proxy(target, {
+          get: (obj, method: string) =>
+            (obj[method] ??= jest
+              .fn()
+              .mockResolvedValue({ id: `${method}-id`, count: 0 })),
+        });
+      const tx = new Proxy(prisma as unknown as Record<string, any>, {
+        get: (obj, model: string) =>
+          typeof obj[model] === 'function'
+            ? obj[model]
+            : autoMock((obj[model] ??= {})),
+      });
+      prisma.$transaction.mockImplementation((fn: (t: unknown) => unknown) =>
+        fn(tx),
+      );
+      const result = (await service.importRealm({
+        version: 2,
+        realm: { name: 'imported-realm' },
+        identityProviders: idpsOf(['oidc', 'SAML', 'kerberos']),
+      })) as { idpsImported: number; warnings: string[] };
+
+      const data = (prisma.identityProvider as any).createMany.mock.calls[0][0]
+        .data;
+      expect(data.map((d: any) => [d.alias, d.providerType])).toEqual([
+        ['idp-0', 'oidc'],
+      ]);
+      expect(result.idpsImported).toBe(1);
+      expect(result.warnings).toEqual(
+        expect.arrayContaining([
+          expect.stringMatching(
+            /^identity provider 'idp-1': not imported, provider type 'SAML' is SAML/,
+          ),
+          expect.stringMatching(
+            /^identity provider 'idp-2': not imported, provider type 'kerberos' is not supported/,
+          ),
+        ]),
+      );
+    });
+  });
 });
