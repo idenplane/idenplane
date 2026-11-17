@@ -53,7 +53,9 @@ describe('Back-channel logout on administrative sign-out (e2e)', () => {
         scope: 'openid',
       })
       .expect(200);
-    const sid = decodeJwt(res.body.id_token as string)['sid'];
+    // The ID token and the access token both carry the session id.
+    const token = (res.body.id_token ?? res.body.access_token) as string;
+    const sid = decodeJwt(token)['sid'];
     expect(typeof sid).toBe('string');
     return sid as string;
   };

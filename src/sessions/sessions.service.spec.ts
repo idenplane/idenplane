@@ -341,9 +341,12 @@ describe('SessionsService', () => {
 
       await service.revokeAllUserSessions(mockRealm, 'user-1');
 
+      // Every session of the user ended: a client that does not need sid
+      // may get one sub-only token.
       expect(backchannel.notifySessionsEnded).toHaveBeenCalledWith(
         mockRealm,
         ended,
+        { allSessionsOfUser: true },
       );
       expect(
         backchannel.notifySessionsEnded.mock.invocationCallOrder[0],

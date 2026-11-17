@@ -253,6 +253,8 @@ export class SessionsService {
         ? [revokeAdminTokensOfUser(this.prisma, userId)]
         : []),
     ]);
-    this.backchannelLogout.notifySessionsEnded(realm, ended);
+    this.backchannelLogout.notifySessionsEnded(realm, ended, {
+      allSessionsOfUser: true,
+    });
   }
 }

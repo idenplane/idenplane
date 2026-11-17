@@ -42,6 +42,16 @@ export interface EndedSession {
   clientIds: readonly (string | null)[];
 }
 
+export interface NotifyOptions {
+  /**
+   * The sessions are every OAuth session their users had (signing a user
+   * out everywhere). Only then may a client that does not require `sid` get
+   * a single `sub`-only token per user: a token without `sid` tells the RP
+   * to end all of that user's sessions (Back-Channel Logout 1.0 §2.4).
+   */
+  allSessionsOfUser?: boolean;
+}
+
 interface LogoutTarget {
   clientId: string;
   uri: string;
@@ -109,9 +119,10 @@ export class BackchannelLogoutService {
   notifySessionsEnded(
     realm: Pick<Realm, 'id' | 'name'>,
     sessions: readonly EndedSession[],
+    options: NotifyOptions = {},
   ): void {
     if (!sessions.some((s) => s.clientIds.some((c) => c))) return;
-    void this.dispatch(realm, sessions).catch((err: unknown) => {
+    void this.dispatch(realm, sessions, options).catch((err: unknown) => {
       this.logger.warn(
         `Back-channel logout for realm ${realm.name} failed: ${errorMessage(err)}`,
       );
@@ -125,6 +136,7 @@ export class BackchannelLogoutService {
   async dispatch(
     realm: Pick<Realm, 'id' | 'name'>,
     sessions: readonly EndedSession[],
+    options: NotifyOptions = {},
   ): Promise<void> {
     const clientIds = [
       ...new Set(
@@ -149,7 +161,11 @@ export class BackchannelLogoutService {
     });
     if (clients.length === 0) return;
 
-    const targets = logoutTargets(clients, sessions);
+    const targets = logoutTargets(
+      clients,
+      sessions,
+      options.allSessionsOfUser === true,
+    );
     if (targets.length === 0) return;
 
     const signingKey = await this.lookups.activeSigningKey(realm.id);
@@ -230,10 +246,12 @@ export class BackchannelLogoutService {
 }
 
 /**
- * One logout token per client and session when the client requires `sid`
- * (`backchannel_logout_session_required`); otherwise one per client and
- * user, carrying `sub` only, since the RP then ends every session of that
- * user anyway. `sub` is always included: the spec allows both.
+ * One logout token per client and session, carrying `sub` and `sid` (the
+ * spec allows both, and `sid` keeps the RP from ending the user's other
+ * sessions). The one exception: when every session of the user ended and
+ * the client does not require `sid` (`backchannel_logout_session_required`),
+ * one `sub`-only token per client and user, which tells the RP to end all of
+ * them.
  */
 function logoutTargets(
   clients: readonly {
@@ -242,13 +260,14 @@ function logoutTargets(
     backchannelLogoutSessionRequired: boolean;
   }[],
   sessions: readonly EndedSession[],
+  allSessionsOfUser: boolean,
 ): LogoutTarget[] {
   const targets: LogoutTarget[] = [];
   for (const client of clients) {
     const uri = client.backchannelLogoutUri;
     if (!uri) continue;
     const used = sessions.filter((s) => s.clientIds.includes(client.clientId));
-    if (client.backchannelLogoutSessionRequired) {
+    if (client.backchannelLogoutSessionRequired || !allSessionsOfUser) {
       for (const s of used) {
         targets.push({
           clientId: client.clientId,

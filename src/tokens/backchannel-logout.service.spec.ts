@@ -173,24 +173,42 @@ describe('BackchannelLogoutService', () => {
     it('sends one token per session, with sid, to a client that requires sid', async () => {
       prisma.client.findMany.mockResolvedValue([client('app-1', true)]);
 
-      await service.dispatch(realm, [
-        session('s-1', ['app-1']),
-        session('s-2', ['app-1']),
-        session('s-3', ['other-app']),
-      ]);
+      await service.dispatch(
+        realm,
+        [
+          session('s-1', ['app-1']),
+          session('s-2', ['app-1']),
+          session('s-3', ['other-app']),
+        ],
+        { allSessionsOfUser: true },
+      );
 
       const sids = mockJwkService.signJwt.mock.calls.map((c) => c[0].sid);
       expect(sids.sort()).toEqual(['s-1', 's-2']);
       expect(global.fetch).toHaveBeenCalledTimes(2);
     });
 
-    it('sends one sub-only token per user to a client that does not require sid', async () => {
+    it('still names the session to a client that does not require sid when only some sessions ended', async () => {
       prisma.client.findMany.mockResolvedValue([client('app-1', false)]);
 
-      await service.dispatch(realm, [
-        session('s-1', ['app-1']),
-        session('s-2', ['app-1']),
-      ]);
+      await service.dispatch(realm, [session('s-1', ['app-1'])]);
+
+      // A sub-only token would end the user's other sessions at the RP.
+      expect(mockJwkService.signJwt).toHaveBeenCalledTimes(1);
+      expect(mockJwkService.signJwt.mock.calls[0][0]).toMatchObject({
+        sub: 'user-1',
+        sid: 's-1',
+      });
+    });
+
+    it('sends one sub-only token per user to a client that does not require sid when every session of the user ended', async () => {
+      prisma.client.findMany.mockResolvedValue([client('app-1', false)]);
+
+      await service.dispatch(
+        realm,
+        [session('s-1', ['app-1']), session('s-2', ['app-1'])],
+        { allSessionsOfUser: true },
+      );
 
       expect(mockJwkService.signJwt).toHaveBeenCalledTimes(1);
       const payload = mockJwkService.signJwt.mock.calls[0][0];

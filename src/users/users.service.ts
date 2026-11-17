@@ -273,6 +273,10 @@ export class UsersService {
 
   async remove(realm: Realm, userId: string) {
     await this.findById(realm, userId);
+    // End the user's sessions first, rather than leaving them to the delete's
+    // cascade: that also tells the apps they were used with (back-channel
+    // logout) and ends a master realm user's admin console tokens.
+    await this.sessions.revokeAllUserSessions(realm, userId);
     await this.prisma.user.delete({ where: { id: userId } });
   }
 
