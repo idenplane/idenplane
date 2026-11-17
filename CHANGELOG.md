@@ -15,6 +15,7 @@ For full per-commit detail, see the [GitHub Releases](https://github.com/idenpla
 
 ### Changed
 - **OpenSSF Scorecard sees the Gradle wrapper validation.** The two `gradle-wrapper.jar` files were already checked against Gradle's checksums in CI, but Scorecard only counts that when the validating workflow has already succeeded on the commit it scans, and it scanned on push, before CI finished. A dedicated, seconds-long `Gradle wrapper validation` workflow now runs on every push to dev and weekly, and Scorecard starts when it completes.
+- **PR hygiene runs the checks it lists, on the PRs contributors open.** `pr-hygiene.yml` said it blocks workflow changes from contributor PRs, but no step did, and it ran only on PRs to `main`, while contributor PRs target `dev`. It now runs on PRs to `dev` and `main`, diffs each against the PR's own base branch (it always diffed against `main`), and fails a PR from a fork that changes `.github/workflows/`. Branches of this repository (the maintainer's, Dependabot's, the dev→main promotion) may still change workflows.
 
 ### Removed
 - **OIDC discovery no longer advertises `passkey_endpoint`.** A realm with WebAuthn enabled listed `passkey_endpoint: {realm}/webauthn`, a URL nothing served. The field is not defined by OpenID Connect Discovery or any other specification, and nothing read it. The WebAuthn endpoints that do exist are still advertised as `webauthn_registration_endpoint` and `webauthn_authentication_endpoint`.
