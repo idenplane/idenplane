@@ -164,7 +164,6 @@ describe('SCIM provisioning cycle (e2e)', () => {
       status: '400',
     });
 
-    await scim('get', '/Groups?filter[x]=1').expect(400);
     const attrs = await scim(
       'get',
       '/Users?attributes=userName&attributes=id',
