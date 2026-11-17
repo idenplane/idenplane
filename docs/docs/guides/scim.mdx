@@ -1,12 +1,12 @@
 ---
 id: scim
 title: SCIM 2.0 Provisioning
-description: Automate user and group lifecycle management from Okta, Azure AD, or any SCIM 2.0 client — real endpoints, filter support, bearer tokens, and IdP setup walkthroughs.
+description: Automate user and group lifecycle management from Microsoft Entra ID, Okta, OneLogin or any SCIM 2.0 client — endpoints, passwords, filters, bearer tokens, and IdP setup walkthroughs.
 ---
 
 # SCIM 2.0 Provisioning
 
-Idenplane implements the SCIM 2.0 protocol (RFC 7644) so an external identity provider — Okta, Azure AD (Entra ID), or anything else that speaks SCIM — can create, update, and deprovision users and groups directly, instead of you syncing them by hand.
+Idenplane implements the SCIM 2.0 protocol (RFC 7643, RFC 7644) so an external identity provider — Microsoft Entra ID (Azure AD), Okta, OneLogin, or anything else that speaks SCIM — can create, update, and deprovision users and groups, and set their passwords, instead of you syncing them by hand. To connect one, see [Configuring Your Identity Provider](#configuring-your-identity-provider).
 
 ---
 
@@ -32,7 +32,7 @@ where `{realmName}` is the realm's `name` (not its UUID). The implemented resour
 | `POST` | `/Groups/.search` | Search via POST body |
 | `POST` | `/Bulk` | Batch of the operations above in one request |
 
-The discovery endpoints need **no authentication** and are served both at `/scim/v2` and under each realm's base URL, where SCIM clients look for them: `GET /ServiceProviderConfig`, `GET /Schemas` (and `/Schemas/{id}`), and `GET /ResourceTypes` (and `/ResourceTypes/{name}`). `/Schemas` and `/ResourceTypes` answer with a `ListResponse`, as RFC 7644 §4 requires.
+The discovery endpoints need **no authentication** and are served both at `/scim/v2` and under each realm's base URL, where SCIM clients look for them: `GET /ServiceProviderConfig`, `GET /Schemas` (and `/Schemas/{id}`), and `GET /ResourceTypes` (and `/ResourceTypes/{name}`). `/Schemas` and `/ResourceTypes` answer with a `ListResponse`, as RFC 7644 §4 requires; see *Discovery* below for what they claim.
 
 Requests may be sent as `application/scim+json` (what Entra ID, Okta and OneLogin send, per RFC 7644 §3.1) or `application/json`. Responses are `application/scim+json`.
 
@@ -46,9 +46,9 @@ Tokens carry `scopes` (defaulting to `["urn:scim:schemas:core:1.0:Users", "urn:s
 
 ### Schema URNs and Errors
 
-Resources and messages use the RFC 7643/7644 **2.0** URNs: `urn:ietf:params:scim:schemas:core:2.0:User` and `:Group`, the enterprise extension `urn:ietf:params:scim:schemas:extension:enterprise:2.0:User`, and `urn:ietf:params:scim:api:messages:2.0:ListResponse`, `:Error`, `:PatchOp`, `:BulkRequest` and `:BulkResponse`. `meta.location` is the resource's absolute URL under the realm's base URL (built from `BASE_URL`), and a create also returns it in the `Location` header.
+Resources and messages use the RFC 7643/7644 **2.0** URNs: `urn:ietf:params:scim:schemas:core:2.0:User` and `:Group`, the enterprise extension `urn:ietf:params:scim:schemas:extension:enterprise:2.0:User`, and `urn:ietf:params:scim:api:messages:2.0:ListResponse`, `:Error`, `:PatchOp`, `:BulkRequest` and `:BulkResponse`. A user that has enterprise attributes lists the extension URN in its `schemas`. `meta` carries `resourceType`, `created`, `lastModified` and `location`: the resource's absolute URL under the realm's base URL (built from `BASE_URL`); a create also returns it in the `Location` header. `meta.version` and ETags are not provided (`etag.supported` is `false`).
 
-Errors use the RFC 7644 §3.12 body:
+Errors use the RFC 7644 §3.12 body, with `status` as a string:
 
 ```json
 {
@@ -59,27 +59,61 @@ Errors use the RFC 7644 §3.12 body:
 }
 ```
 
-`scimType` is set where RFC 7644 defines one: `uniqueness` (409: userName, email or group name taken), `invalidFilter`, `invalidPath`, `noTarget`, `invalidValue`, `invalidSyntax`, `mutability` (400) and `tooMany` (413, Bulk).
+`scimType` is set where RFC 7644 defines one: `uniqueness` (409: userName, email or group name taken), `invalidFilter`, `invalidPath`, `noTarget`, `invalidValue` (including a password the realm's policy refuses), `invalidSyntax`, `mutability` (400), `tooMany` (413, Bulk) and `invalidValue` with 409 for a Bulk `bulkId` reference that cannot be resolved.
+
+### Discovery
+
+`GET /ServiceProviderConfig` claims only what works:
+
+| Feature | Supported | Notes |
+|---|---|---|
+| `patch` | yes | |
+| `bulk` | yes | `maxOperations` 1000, `maxPayloadSize` 1048576 (1 MiB, the SCIM body limit) |
+| `filter` | yes | `maxResults` 100 |
+| `changePassword` | yes | See *Passwords* below |
+| `sort` | no | `sortBy` is ignored; lists are ordered by `userName` / `displayName` |
+| `etag` | no | |
+
+The only authentication scheme is `oauthbearertoken`. `/Schemas` lists the attributes that are stored and returned, with their RFC 7643 characteristics (`password` is `writeOnly` and `returned: never`). `ims`, `photos`, `entitlements`, `roles` and `x509Certificates` are not stored and not listed; a client that sends them anyway is not refused, the values are dropped.
 
 ### User and Group Field Mapping
 
 | SCIM attribute | Idenplane field | Notes |
 |---|---|---|
-| `userName` | `username` | Required; must be unique in the realm |
-| `name.givenName` | `firstName` | |
-| `name.familyName` | `lastName` | |
-| `emails` (primary, or first if none marked primary) | `email` | Must be unique in the realm. Returned as one email with `type: "work"` and `primary: true`. |
-| `active` | `enabled` | Honored by POST, PUT and PATCH. `"True"`/`"False"` strings (as Entra ID sends) are read as booleans. |
-| `externalId` | *(not persisted)* | Accepted and ignored. Earlier versions stored it in `federationLink`, the LDAP federation link, which made a SCIM user look LDAP-federated at sign-in. |
-| `displayName`, `title`, `preferredLanguage`, `locale`, `timezone`, `nickName`, `phoneNumbers`, `addresses`, the enterprise extension (`department`, `manager`, and so on) and the other User schema attributes | *(not persisted)* | No column on the user record. POST, PUT and PATCH accept them and drop them, so an IdP that sends them on every sync is not refused. `displayName` in responses is built from `"firstName lastName"`; the rest always come back absent. Don't build an IdP attribute mapping that depends on round-tripping these. `phoneNumbers` is never written to the user's SMS MFA number. |
-| `password` | *(not persisted)* | Accepted and ignored; SCIM cannot set a password. It is left out of the audit event. |
-| `groups` | Read-only, derived from group membership | Not settable on a user (400 `mutability`) |
+| `userName` | `username` | Required; unique in the realm, compared case-insensitively |
+| `name.givenName`, `name.familyName` | `firstName`, `lastName` | |
+| `emails` (primary, or first if none marked primary) | `email` | One email is stored: unique in the realm, compared case-insensitively. Returned as one email with `type: "work"` and `primary: true`. |
+| `active` | `enabled` | `"True"`/`"False"` strings (as Entra ID sends) are read as booleans. A PUT without `active` keeps the current value. |
+| `password` | `passwordHash` | Write-only. See *Passwords*. |
+| `externalId` | its own column | Stored, returned and filterable; compared case-sensitively (RFC 7643 `caseExact`). Never written to `federationLink`. |
+| `displayName`, `nickName`, `profileUrl`, `title`, `userType`, `preferredLanguage`, `locale`, `timezone`, `name.formatted`, `name.middleName`, `name.honorificPrefix`, `name.honorificSuffix`, `phoneNumbers`, `addresses` | the user's SCIM profile | Stored as SCIM sent them and returned. `displayName` and `name.formatted`, when never set, are built from `"firstName lastName"`. Up to 20 phone numbers or addresses, 2048 characters per value. **`phoneNumbers` is never the user's SMS MFA number.** |
+| Enterprise extension: `employeeNumber`, `costCenter`, `organization`, `division`, `department`, `manager` | the user's SCIM profile | `manager` is returned as `{"value": "<id>"}`; Entra ID's bare-string form is accepted too. |
+| `groups` | Read-only, derived from group membership | Each with `value`, `display`, `$ref` and `type: "direct"`. Refused in a PATCH (400 `mutability`), ignored in a POST or PUT body. |
+
+The SCIM profile is SCIM's own copy: the admin console and the rest of Idenplane don't read it.
 
 | SCIM attribute | Idenplane field | Notes |
 |---|---|---|
-| `displayName` | `name` (and `description`) | Required; must be unique in the realm |
-| `members` | Group membership join rows | `value` is the Idenplane user ID; ids that are not users of the realm are skipped |
-| `externalId` | *(not persisted)* | Accepted and ignored |
+| `displayName` | `name` (and `description`) | Required; unique in the realm, compared case-insensitively |
+| `members` | Group membership | `value` is the Idenplane user ID; ids that are not users of the realm are skipped. Only users can be members. |
+| `externalId` | its own column | Stored, returned and filterable (case-sensitive) |
+
+### Create and Replace
+
+`POST /Users` and `PUT /Users/{id}` read the same attributes as PATCH. A PUT **replaces** the user (RFC 7644 §3.5.1): a stored attribute the body leaves out is cleared, except `active` (kept, so a PUT without it never disables the user) and `password` (kept unless sent). `id`, `meta`, `groups` and attributes outside the schema are ignored in these bodies. `PUT /Groups/{id}` replaces the group, members included: a body without `members` leaves the group empty.
+
+### Passwords
+
+`password` can be set when the user is created, by PUT, or by PATCH in any of the forms clients send:
+
+```json
+{ "op": "replace", "path": "password", "value": "N3w-passphrase" }
+{ "op": "replace", "value": { "password": "N3w-passphrase" } }
+```
+
+A new password is checked against the realm's password policy (minimum length, character classes) and, for an existing user, its history (`passwordHistoryCount`): a password that fails either is refused with **400 `invalidValue`** naming the rule, and nothing in the request is applied. It is hashed with Argon2id like every other password and never returned, in any response or audit event. Setting it is a credential reset, as when an admin sets it: **the user is signed out everywhere** (every session ends and its refresh tokens are revoked, offline ones included), brute-force failures are cleared, and the password joins the history.
+
+Sending the user's **current** password is not a change: Okta, with password sync on, sends the password on every update, and that neither fails the history check nor signs the user out. `remove` on `password` is refused (400 `invalidValue`). Passwords longer than 1024 characters are refused.
 
 ### PATCH
 
@@ -91,18 +125,23 @@ Supported user paths:
 |---|---|---|
 | `active` | Sets `enabled` (`true`/`false` or `"True"`/`"False"`) | 400 `invalidValue` |
 | `userName` | Sets the username (409 if taken) | 400 `invalidValue` |
-| `name.givenName`, `name.familyName` | Sets the name part | Clears it |
-| `name` (object value) | Sets the sub-attributes given | Clears both parts |
+| `password` | Sets the password (see *Passwords*) | 400 `invalidValue` |
+| `externalId`, `displayName`, `title`, and the other singular attributes | Sets it | Clears it |
+| `name.givenName`, `name.familyName`, `name.formatted`, ... | Sets the name part | Clears it |
+| `name` (object value) | Sets the sub-attributes given | Clears every part |
 | `emails`, `emails.value` | Sets the email (primary, or first, of the list) | Clears it |
 | `emails[type eq "work"].value`, `emails[primary eq true].value`, `emails[value eq "..."]` | Sets the stored email | Clears it if the filter selects it |
 | `emails[type eq "home"]` and other email kinds | Ignored (only one email is stored) | Ignored |
-| The unstored attributes listed above, with or without a schema URN prefix | Ignored | Ignored |
+| `phoneNumbers`, `addresses` | `replace` sets the list; `add` adds values, replacing the one of the same `type` | Clears the list |
+| `phoneNumbers[type eq "work"].value`, `addresses[type eq "work"].locality`, ... | Sets that sub-attribute, creating the `work` value if there is none (Entra ID's form) | Clears the sub-attribute, or the whole value without `.sub` |
+| `urn:ietf:params:scim:schemas:extension:enterprise:2.0:User:department`, `...:manager`, `...:manager.value` | Sets it (`manager` may be `"<id>"` or `{"value": "<id>"}`) | Clears it |
+| `ims`, `photos`, `entitlements`, `roles`, `x509Certificates` | Ignored | Ignored |
 | `id`, `meta`, `groups` | 400 `mutability` | 400 `mutability` |
 | Anything else | 400 `invalidPath` | 400 `invalidPath` |
 
-An operation without a `path` takes an object `value` whose keys are paths: plain (`active`), dotted (`name.givenName`) or nested (`{"name": {"givenName": "Ada"}}`). A `remove` without a `path` is a 400 `noTarget`. Paths may carry the core schema prefix (`urn:ietf:params:scim:schemas:core:2.0:User:name.givenName`).
+An operation without a `path` takes an object `value` whose keys are paths: plain (`active`), dotted (`name.givenName`), URN-prefixed (`urn:ietf:params:scim:schemas:extension:enterprise:2.0:User:department`) or nested (`{"name": {"givenName": "Ada"}}`, `{"urn:ietf:params:scim:schemas:extension:enterprise:2.0:User": {"department": "R&D"}}`). A `remove` without a `path` is a 400 `noTarget`. Paths may carry the core schema prefix (`urn:ietf:params:scim:schemas:core:2.0:User:name.givenName`). A user PATCH answers 200 with the user.
 
-Group paths are `displayName` (replace) and `members`:
+Group paths are `displayName` (replace), `externalId` and `members`:
 
 | Operation | Effect |
 |---|---|
@@ -112,25 +151,27 @@ Group paths are `displayName` (replace) and `members`:
 | `remove`, path `members`, value `[{"value": "<userId>"}]` (Entra ID) | Removes those users |
 | `remove`, path `members`, no value | Removes every member |
 
+A group PATCH is written in one transaction and answers **204 No Content**, so adding a batch of members to a large group does not send the whole member list back. Send `attributes` or `excludedAttributes` as query parameters to get 200 with the group instead (`?excludedAttributes=members` for the group without its members).
+
 ### Deprovisioning and Sessions
 
 Deactivating a user through SCIM — `PATCH` with `{"op": "Replace", "path": "active", "value": "False"}` (Entra ID), `{"op": "replace", "value": {"active": false}}` (Okta), or `PUT` with `"active": false` — sets `enabled: false` **and signs the user out everywhere**: every session ends and its refresh tokens are revoked, as the admin API's "sign out all sessions" does. Their access tokens stop passing introspection and userinfo at once. Re-activating the user does not bring those tokens back; the user signs in again.
 
-`DELETE /Users/{id}` does **not** hard-delete — it sets `enabled: false` and ends the user's sessions the same way (a soft deprovision). A later `GET` still returns the user, with `active: false`. `DELETE /Groups/{id}` **does** hard-delete the group.
+`DELETE /Users/{id}` does **not** hard-delete — it sets `enabled: false` and ends the user's sessions the same way (a soft deprovision, so the account and its audit history are kept and an admin can restore it). A later `GET` still returns the user, with `active: false`; this differs from RFC 7644 §3.6, which expects 404. A client that provisions the same `userName` again gets 409 from the create, finds the user with its `userName eq` lookup and re-activates it. To remove the account for good, delete it in the admin console or API. `DELETE /Groups/{id}` **does** hard-delete the group.
 
 ### Filtering
 
 Filters use the RFC 7644 §3.4.2.2 format `attribute operator value`, for example `userName eq "jsmith"`. Supported operators: `eq`, `ne`, `co`, `sw`, `ew`, `gt`, `ge`, `lt`, `le`, and `pr` (present). The value must be one JSON value: a double-quoted string, a number, `true`, `false` or `null`.
 
-- **Only a single condition is supported** — there's no `and`/`or`/grouping. A compound filter is refused with 400 `invalidFilter`.
+- Comparisons can be joined with **`and`** and **`or`** (`and` binds tighter), up to 20 of them. Parentheses, `not` and value-path filters such as `emails[type eq "work"].value eq "..."` are not supported and are refused with 400 `invalidFilter`.
 - **An invalid or unsupported filter is a 400 `invalidFilter`**, never an empty list, so an IdP can't mistake a filter it got wrong for "no such user" and create a duplicate.
-- Attribute names are case-insensitive, and string comparisons on `userName`, the name parts and `emails` are case-insensitive (RFC 7643 `caseExact: false`).
+- Attribute names are case-insensitive. String comparisons on `userName`, the name parts, `emails` and `displayName` are case-insensitive (RFC 7643 `caseExact: false`); on `externalId` they are case-sensitive.
 
-Filterable attributes: `userName`, `name.givenName`, `name.familyName`, `emails` / `emails.value`, `active` (`eq`/`ne` with `true`/`false`) and `id` for Users; `displayName` and `id` for Groups. This covers the lookup Okta and Entra ID make before every create (`userName eq "<value>"`) and Entra ID's group lookup (`displayName eq "<value>"`).
+Filterable attributes for Users: `userName`, `externalId`, `name.givenName`, `name.familyName`, `emails` / `emails.value`, `active` (`eq`/`ne` with `true`/`false`) and `id`. For Groups: `displayName`, `externalId`, `id`, and `members` / `members.value` (`eq` with a user id, or `pr`). This covers the lookups Okta and Entra ID make before every create (`userName eq "<value>"`, or `externalId eq "<value>"` when that is the matching attribute), Entra ID's group lookup (`displayName eq "<value>"`) and its membership check (`id eq "<groupId>" and members eq "<userId>"`).
 
-### Pagination
+### Pagination and Attribute Selection
 
-`startIndex` is 1-based (values below 1 are read as 1); `count` is capped at 100 per page server-side regardless of what you request (defaults: `startIndex=1`, `count=100`; `count=0` returns only `totalResults`). List and search responses are shaped as:
+`startIndex` is 1-based (values below 1 are read as 1); `count` is capped at 100 per page server-side regardless of what you request (defaults: `startIndex=1`, `count=100`; `count=0` returns only `totalResults`). Pages are ordered by `userName` (or `displayName`) and then `id`, so they never overlap. List and search responses are shaped as:
 
 ```json
 {
@@ -142,11 +183,17 @@ Filterable attributes: `userName`, `name.givenName`, `name.familyName`, `emails`
 }
 ```
 
-`excludedAttributes=members` leaves `members` out of group responses.
+`attributes` and `excludedAttributes` (comma-separated query parameters, or arrays in a `.search` body) work on every list, search and single-resource read, and on PUT and PATCH responses. Names are case-insensitive and may be dotted (`name.givenName`, `emails.value`) or URN-prefixed (`urn:ietf:params:scim:schemas:extension:enterprise:2.0:User:department`). `id`, `schemas`, `meta` and `userName` (Users) or `displayName` (Groups) are always returned. A group read with `excludedAttributes=members` doesn't read its members at all, so large groups cost no more than empty ones.
 
 ### Bulk Operations
 
-`POST /Bulk` accepts `{ "schemas": [...], "Operations": [{ method, path, data, bulkId }] }` (lowercase `operations` is also read). `path` is `/Users` or `/Groups` for `POST`, and `/Users/{id}` or `/Groups/{id}` for `PUT`, `PATCH` and `DELETE`; a `PATCH` operation's `data` is a PatchOp body. Each operation runs through the same code as the individual endpoints. The response is a `BulkResponse` whose `Operations` give each operation's `method`, `bulkId`, `status`, `location` and, on failure, the SCIM error as `response`. `failOnErrors` stops processing after that many errors. More than 1000 operations is a 413 `tooMany`. `bulkId` references between operations (`"bulkId:..."`) are not resolved.
+`POST /Bulk` accepts `{ "schemas": [...], "Operations": [{ method, path, data, bulkId }] }` (lowercase `operations` is also read). `path` is `/Users` or `/Groups` for `POST`, and `/Users/{id}` or `/Groups/{id}` for `PUT`, `PATCH` and `DELETE`; a `PATCH` operation's `data` is a PatchOp body. Each operation runs through the same code as the individual endpoints. The response is a `BulkResponse` whose `Operations` give each operation's `method`, `bulkId`, `status`, `location` and, on failure, the SCIM error as `response`. `failOnErrors` stops processing after that many errors. More than 1000 operations is a 413 `tooMany`; a body over 1 MiB is a 413.
+
+`bulkId` references are resolved (RFC 7644 §3.7.2): a value `"bulkId:<id>"` anywhere in an operation's `data`, or as the id in its `path` (`/Groups/bulkId:<id>`), becomes the id of the resource the operation with that `bulkId` created. An operation that refers to one listed later in the request runs after it. A reference to an unknown `bulkId`, to an operation that failed, or a circular one fails that operation with 409 `invalidValue`.
+
+### Request Size
+
+SCIM request bodies may be up to **1 MiB** (other endpoints keep 100 KB), enough for a PUT of a group with more than 10,000 members. A larger body is answered with 413.
 
 ---
 
@@ -221,36 +268,66 @@ curl -X POST http://localhost:3000/scim/v2/my-realm/Users \
   }'
 ```
 
-The new user is created enabled unless the request sends `"active": false`. If your IdP's create payload always includes `displayName`, `title`, `preferredLanguage`, `locale`, or `timezone`, that's expected and harmless — see the mapping table above for why those attributes never persist, on this or any other verb.
+The new user is created enabled unless the request sends `"active": false`. Add `"password": "..."` to set a password (checked against the realm's policy). `displayName`, `title`, `phoneNumbers`, the enterprise extension and the other attributes in the mapping table are stored and returned.
 
 ---
 
-## Okta Integration Walkthrough
+## Configuring Your Identity Provider
 
-1. In Idenplane, enable **SCIM Provisioning** for the realm (Applications → SCIM), then create a SCIM token (Applications → SCIM → Tokens → Create Token). Copy the plaintext token immediately — it won't be shown again.
-2. In Okta, go to **Applications** and create (or edit) a SCIM-capable app integration. Under **Provisioning**, choose **SCIM**.
-3. Set the **SCIM connector base URL** to:
-   ```
-   https://your-idenplane-host/scim/v2/{realmName}
-   ```
-   substituting your realm's name.
-4. Set **Unique identifier field for users** to `userName`.
-5. Under **Authentication Mode**, choose **HTTP Header** and paste the SCIM token from step 1 as the bearer token.
-6. Click **Test Connector Configuration**. Okta may call the unauthenticated `GET /scim/v2/{realmName}/ServiceProviderConfig` and then an authenticated `GET /scim/v2/{realmName}/Users` with a bearer token — a 401 here almost always means either SCIM isn't enabled for the realm or the token was mistyped.
-7. Enable the provisioning actions you want: **Create Users**, **Update User Attributes**, and **Deactivate Users** map directly to `POST /Users`, `PATCH /Users/{id}` (`replace`), and `PATCH` with `{"active": false}`, which disables the user and ends their sessions (see *Deprovisioning and Sessions* above).
-8. Assign users/groups to the app in Okta to trigger provisioning. Okta's assignment-check filter is a single `userName eq "<value>"` query, which is within what the filter parser supports.
+Both walkthroughs need the same two values from Idenplane:
 
-## Azure AD (Entra ID) Integration Walkthrough
+- **Base URL** (Okta calls it *SCIM connector base URL*, Entra ID *Tenant URL*):
 
-1. In Idenplane, enable SCIM and create a token, same as steps 1 in the Okta walkthrough above.
-2. In the Azure portal, open your Enterprise Application and go to **Provisioning** → **Get started** → set **Provisioning Mode** to **Automatic**.
+  ```
+  https://<your-idenplane-host>/scim/v2/<realm-name>
+  ```
+
+  `<your-idenplane-host>` is the public URL Idenplane is served at (the `BASE_URL` it runs with, which also builds `meta.location`), and `<realm-name>` is the realm's `name`, not its UUID. No trailing slash, and nothing after the realm name: the client appends `/Users`, `/Groups` and `/ServiceProviderConfig` itself. For example `https://id.example.com/scim/v2/acme`.
+- **Bearer token**: a SCIM token of that realm. Turn on **SCIM Provisioning** for the realm (**Applications → SCIM**), then **Tokens → Create Token** (or `POST /admin/realms/{realm}/scim/tokens`, see *Admin API* above) and copy the token: it is shown once. The client sends it as `Authorization: Bearer <token>`. Create one token per client, so you can revoke one without the other.
+
+Before you start, check both by hand; a `200` with a `ListResponse` means the base URL, the token and the realm's SCIM switch are all right, and a `401` that one of them is not:
+
+```bash
+curl -s "https://id.example.com/scim/v2/acme/Users?count=1" \
+  -H "Authorization: Bearer $SCIM_TOKEN"
+```
+
+### Microsoft Entra ID
+
+1. In the [Microsoft Entra admin center](https://entra.microsoft.com), go to **Identity → Applications → Enterprise applications → New application → Create your own application**, name it (for example "Idenplane"), and choose **Integrate any other application you don't find in the gallery (Non-gallery)**.
+2. In the new application, open **Provisioning → Get started** (or **New configuration**) and set **Provisioning Mode** to **Automatic**.
 3. Under **Admin Credentials**:
-   - **Tenant URL**: `https://your-idenplane-host/scim/v2/{realmName}`
-   - **Secret Token**: the SCIM token from step 1
-4. Click **Test Connection**. Azure AD calls `GET /scim/v2/{realmName}/Users` (and typically `/ServiceProviderConfig`) with the bearer token to confirm connectivity before saving.
-5. Under **Mappings**, review the default **Provision Azure Active Directory Users** attribute mapping. Azure AD's default mapping expects `userName`, `active`, `emails[type eq "work"].value`, `name.givenName`, and `name.familyName` — all of which line up with the field mapping table above. Entra ID also sends `displayName`, `title`, `externalId`, phone numbers, addresses and enterprise attributes such as `department`; Idenplane accepts and ignores them (see the mapping table). Keep **Matching precedence** on `userName`: `externalId` is not stored, so it cannot be used to match. Deactivation arrives as `{"op": "Replace", "path": "active", "value": "False"}` and signs the user out everywhere.
-6. Set **Scope** to assigned users and groups (or "All Users", depending on your directory size), then turn **Provisioning Status** to **On**.
-7. Azure AD polls periodically (its own schedule, not something Idenplane controls) rather than provisioning instantly on assignment — use **Provision on demand** in the Azure portal to test a single user without waiting for the next cycle.
+   - **Tenant URL**: `https://<your-idenplane-host>/scim/v2/<realm-name>`
+   - **Secret Token**: the SCIM token
+4. Click **Test Connection**. Entra ID sends a `GET /Users?filter=userName eq "<random id>"` lookup with the token and expects `200` with no results. A `401` means SCIM is off for the realm or the token is wrong; anything else, check the base URL.
+5. Save, then open **Mappings**.
+   - **Provision Microsoft Entra ID Users**: the default mapping works as it is. Every attribute it sends is stored and returned: `userName`, `active`, `displayName`, `title`, `emails[type eq "work"].value`, `preferredLanguage`, `name.givenName`, `name.familyName`, `name.formatted`, `addresses[type eq "work"].*`, `phoneNumbers[type eq "work"|"mobile"|"fax"].value`, `externalId` and the enterprise attributes, `manager` included. Keep `userName` as the matching attribute (matching precedence 1); `externalId` also works as a matching attribute, since it is stored. Entra ID does not provision passwords: users get one in Idenplane (an admin reset, a reset email) or sign in through federation.
+   - **Provision Microsoft Entra ID Groups**: the default (`displayName`, `members`, `externalId` from `objectId`) works. Group membership is sent with `PATCH` in batches.
+6. Under **Settings**, set **Scope** to *Sync only assigned users and groups*, assign users and groups under **Users and groups**, and set **Provisioning Status** to **On**.
+7. Entra ID runs a cycle about every 40 minutes. Use **Provision on demand** to push one user or group at once, and **Provisioning logs** to see each request and Idenplane's answer.
+
+What Idenplane receives from Entra ID: a lookup `GET /Users?filter=userName eq "..."` before each create; `POST /Users` with the enterprise extension; `PATCH` with `Replace`/`Add`/`Remove`, `"value": "False"` strings for `active`, path-less values with dotted keys, `emails[type eq "work"].value`-style paths and the manager as a bare id; `PATCH ... active "False"` when a user is unassigned or soft-deleted, and `DELETE /Users/{id}` when they are hard-deleted (see *Deprovisioning and Sessions*); `GET /Groups?excludedAttributes=members&filter=displayName eq "..."`, `POST /Groups`, member `PATCH`es and `DELETE /Groups/{id}`. All of these are supported. Microsoft's `aadOptscim062020` flag (appended to the Tenant URL to make Entra ID send standard booleans and PATCH forms) is not needed, and Idenplane works with it too.
+
+### Okta
+
+1. In the Okta Admin Console, go to **Applications → Browse App Catalog**, find **SCIM 2.0 Test App (Header Auth)**, and **Add Integration** (or create your own app integration and enable SCIM provisioning on it). Name it and finish the wizard.
+2. Open the app's **Provisioning** tab → **Configure API Integration** → **Enable API integration**, then:
+   - **Base URL** (SCIM connector base URL): `https://<your-idenplane-host>/scim/v2/<realm-name>`
+   - **API Token**: the SCIM token. Okta sends it as `Authorization: Bearer <token>`.
+
+   For an app integration you created yourself, the same values go under **Provisioning → Integration**: **SCIM connector base URL**, **Unique identifier field for users** = `userName`, **Authentication Mode** = **HTTP Header**, **Authorization** = the token.
+3. Click **Test API Credentials** (or **Test Connector Configuration**). Okta calls `GET /Users` with the token (and, for custom integrations, may read `GET /ServiceProviderConfig`, which needs no token).
+4. Under **Provisioning → To App**, enable what you want:
+   - **Create Users**: `POST /Users` after a `userName eq` lookup.
+   - **Update User Attributes**: `PUT /Users/{id}` with the whole user (custom integrations may use `PATCH`). Attributes Okta leaves out of a PUT are cleared, as RFC 7644 replaces; `active` and the password are kept.
+   - **Deactivate Users**: `PATCH` with `{"op": "replace", "value": {"active": false}}`; the user is disabled and signed out everywhere.
+   - **Sync Password**: Okta sends the user's Okta password (or a random one) as `password` on create and on change. Idenplane checks it against the realm's password policy and history: if your realm's policy is stricter than Okta's, Okta's push fails with a 400 `invalidValue` in its task list, so keep the two policies compatible. Each real change signs the user out of Idenplane everywhere; Okta re-sending the current password does not.
+5. Under **Push Groups**, push the groups you want. Okta creates them with `POST /Groups`, renames them with a path-less `PATCH`, adds members with `PATCH ... "op": "add", "path": "members"` and removes them with `PATCH ... "path": "members[value eq \"<id>\"]"`; some versions replace the members with `PUT /Groups/{id}`. All are supported; group `PATCH` answers `204`.
+6. Assign users and groups under **Assignments**.
+
+### OneLogin and other clients
+
+Any SCIM 2.0 client works with the same base URL and bearer token. For OneLogin's **SCIM Provisioner with SAML (SCIM v2 Enterprise)**, set **SCIM Base URL** to the base URL above and **SCIM Bearer Token** to the token; its default SCIM JSON template (`userName`, `name`, `emails`, `externalId`, enterprise extension) maps as in the field mapping table.
 
 ---
 

@@ -9,6 +9,34 @@ For full per-commit detail, see the [GitHub Releases](https://github.com/idenpla
 
 ## [Unreleased]
 
+### Before you upgrade
+- **A database migration runs at startup.** It adds `users.scim_external_id`, `users.scim_profile` (JSON) and `groups.scim_external_id`, all nullable, with an index on each `externalId` column. It changes no existing data.
+- **SCIM behaviour you may notice** (see *Changed* below):
+  - `PATCH /Groups/{id}` answers `204 No Content` unless the request has an `attributes` or `excludedAttributes` query parameter;
+  - `PUT /Users/{id}` clears the stored attributes the body leaves out, and `PUT /Groups/{id}` without `members` leaves the group empty, as RFC 7644 replaces;
+  - SCIM `userName`, email and group names are unique case-insensitively, so a create that differs only in case from an existing one is a 409;
+  - a password sent through SCIM is now set, checked against the realm's password policy, and signs the user out everywhere.
+
+### Security
+- **SCIM sets passwords, with the realm's password policy and the usual sign-out.** SCIM accepted `password` and silently dropped it, so an IdP that synced passwords (Okta's *Sync Password*) left users with no password or an old one. A password sent on `POST /Users`, `PUT /Users/{id}` or `PATCH` (path `password`, the URN-prefixed path, or a path-less `{"password": ...}`) is now checked against the realm's policy and password history, refused with `400 invalidValue` naming the rule (nothing in the request is applied), hashed with Argon2id, and never returned or logged. Setting it is a credential reset, as when an admin sets it: the user's sessions and refresh tokens (offline ones included) and proxy sessions end, brute-force failures are cleared, and the history is updated. Re-sending the user's current password is not a change, so Okta's updates do not sign users out or trip the history check. `ServiceProviderConfig` now reports `changePassword.supported: true`.
+- **SCIM `phoneNumbers` are stored apart from the SMS MFA number.** The new SCIM profile keeps phone numbers as provisioning data only; `users.phone_number` (the verified SMS factor) is never written by SCIM.
+
+### Added
+- **SCIM `externalId` is stored, returned and filterable** for users and groups (`filter=externalId eq "..."`, case-sensitive as RFC 7643 defines it), so Entra ID and OneLogin can match on it and get it back.
+- **SCIM stores and returns the rest of the User schema.** `displayName`, `nickName`, `profileUrl`, `title`, `userType`, `preferredLanguage`, `locale`, `timezone`, `name.formatted`/`middleName`/`honorificPrefix`/`honorificSuffix`, `phoneNumbers`, `addresses` and the enterprise extension (`employeeNumber`, `costCenter`, `organization`, `division`, `department`, `manager`) were accepted and dropped; they are now kept in a per-user SCIM profile and returned, so what an IdP writes reads back the same. Entra ID's forms are understood: `phoneNumbers[type eq "work"].value` and `addresses[type eq "work"].locality` create the typed value when it is missing, and `manager` may be a bare id. Users with enterprise attributes list the extension URN in `schemas`. `ims`, `photos`, `entitlements`, `roles` and `x509Certificates` are still accepted and dropped.
+- **SCIM filters join comparisons with `and` and `or`** (`and` binds tighter, up to 20 comparisons), and Groups filter on `members`/`members.value` and `externalId`, which covers Entra ID's membership check `id eq "<group>" and members eq "<user>"`. Parentheses, `not` and value-path filters are still refused with `400 invalidFilter`.
+- **SCIM `attributes` and `excludedAttributes` work everywhere**: on every list, search and single read of users and groups (user reads ignored `excludedAttributes`, and group reads ignored `attributes`), and on PUT and PATCH responses. Names are case-insensitive and may be dotted or URN-prefixed. A group read with `excludedAttributes=members` no longer loads its members.
+- **SCIM Bulk resolves `bulkId` references** (RFC 7644 §3.7.2): `"bulkId:<id>"` in an operation's data or path becomes the id the referenced `POST` created, in whatever order the operations are listed. An unresolvable (unknown, failed or circular) reference fails that operation with `409 invalidValue`; before, the literal string was used.
+- **Docs: configuring Entra ID and Okta.** The SCIM guide has step-by-step setup for Microsoft Entra ID and Okta (and OneLogin) with the exact base URL and bearer token, what each client sends, and sections on passwords, discovery, replace semantics and attribute selection.
+
+### Changed
+- **SCIM discovery claims only what works.** `/ServiceProviderConfig` no longer lists an `apiKey` authentication scheme the server never accepted, its Bulk `maxPayloadSize` (10 MB) now matches the real limit (1 MiB), and it links to the SCIM guide. `/Schemas` describes `password` (`writeOnly`, `returned: never`), drops the attributes that are not stored, gives every attribute the characteristics RFC 7643 §7 lists, and fixes `returned` flags that contradicted the responses (`groups` and `emails.primary` were `never` but returned; `phoneNumbers` and `addresses` were `always` but never returned). Schemas, resource types and the configuration carry `meta`, and are found case-insensitively.
+- **SCIM request bodies may be up to 1 MiB** (other endpoints keep 100 KB), so Okta can `PUT` a group with thousands of members; the limit is the Bulk `maxPayloadSize` advertised.
+- **SCIM `PUT` replaces** (RFC 7644 §3.5.1): a stored attribute left out of the body is cleared, except `active` and `password`, which are kept. `PUT /Users/{id}` kept the old name and email when the body left them out, and `PUT /Groups/{id}` kept the old members when the body had no `members`. `id`, `meta` and `groups` in a PUT or POST body are ignored rather than refused.
+- **SCIM `PATCH /Groups/{id}` is one transaction and answers 204** unless the request asks for `attributes`/`excludedAttributes`, then 200 with the group: returning the whole member list after each of Entra ID's member batches cost more than the change. Bulk reports group PATCHes as `204` and every DELETE with its `location`.
+- **SCIM uniqueness is case-insensitive.** `userName`, email and group `displayName` are checked the way the `eq` lookup compares them, so a client can no longer create `Ada` next to `ada` and then get two results from its `userName eq` lookup, which Entra ID and Okta treat as an error.
+- **SCIM list pages are ordered by name, then id**, so pages never overlap or skip a resource.
+
 ## [0.12.0] - 2026-11-17
 
 Session security and making advertised features real. A password or second-factor change now ends the user's other sessions, realms can set an SSO session idle timeout, and response time no longer reveals which usernames exist. Users imported with bcrypt or PBKDF2 hashes can now confirm their password everywhere, not only at sign-in.
