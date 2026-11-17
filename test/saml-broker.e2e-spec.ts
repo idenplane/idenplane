@@ -326,6 +326,170 @@ describe('SAML identity-provider broker (e2e)', () => {
     ).toBe(0);
   });
 
+  it('accepts a response larger than the 100 KB default form limit', async () => {
+    const browser = new Browser(app);
+    const { requestId, relayState } = await toIdp(browser);
+    // Entra ID and ADFS can send hundreds of group claims.
+    const groups = Array.from(
+      { length: 2500 },
+      (_, i) => `cn=group-${i},ou=groups,dc=corp,dc=example,dc=test`,
+    );
+    const big = idpResponse(requestId, {
+      nameId: 'okta-big',
+      attributes: { email: ['big.saml@example.test'], groups },
+    });
+    expect(big.length).toBeGreaterThan(150 * 1024);
+    const acs = await postToAcs(big, relayState);
+    expect(acs.status).toBe(303);
+    codeFrom(
+      (await browser.get(acs.headers['location'] as string)).headers[
+        'location'
+      ],
+    );
+  });
+
+  it('keeps the 100 KB form limit on other routes', async () => {
+    const res = await request(app.getHttpServer())
+      .post(`/realms/${REALM}/broker/${ALIAS}/saml/complete`)
+      .type('form')
+      .send({ x: 'a'.repeat(200 * 1024) });
+    expect(res.status).toBe(413);
+  });
+
+  it('refuses an account already linked to the provider with another subject, and records it', async () => {
+    await ctx.prisma.realm.update({
+      where: { id: seeded.realm.id },
+      data: { eventsEnabled: true },
+    });
+    try {
+      const user = await createUser(
+        ctx.prisma,
+        seeded.realm.id,
+        `saml-user-${++userSeq}`,
+      );
+      const signIn = async (nameId: string) => {
+        const browser = new Browser(app);
+        const { requestId, relayState } = await toIdp(browser);
+        const acs = await postToAcs(
+          idpResponse(requestId, {
+            nameId,
+            attributes: { email: [user.email as string] },
+          }),
+          relayState,
+        );
+        return browser.get(acs.headers['location'] as string);
+      };
+      codeFrom((await signIn('okta-first-subject')).headers['location']);
+
+      // The IdP now sends another subject for the same address (a changed
+      // NameID format, or another IdP account with that email).
+      const second = await signIn('okta-second-subject');
+      expect(second.status).toBe(409);
+      expect(second.text).toMatch(
+        /already linked to Okta SAML through a different/,
+      );
+      const links = await ctx.prisma.federatedIdentity.findMany({
+        where: { userId: user.id },
+      });
+      expect(links.map((l) => l.externalUserId)).toEqual([
+        'okta-first-subject',
+      ]);
+      const event = await ctx.prisma.loginEvent.findFirst({
+        where: {
+          realmId: seeded.realm.id,
+          userId: user.id,
+          error: 'federated_identity_conflict',
+        },
+      });
+      expect(event?.type).toBe('LOGIN_ERROR');
+      expect(event?.details).toMatchObject({
+        identityProvider: ALIAS,
+        providerType: 'saml',
+        externalUserId: 'okta-second-subject',
+        linkedExternalUserId: 'okta-first-subject',
+      });
+    } finally {
+      await ctx.prisma.realm.update({
+        where: { id: seeded.realm.id },
+        data: { eventsEnabled: false },
+      });
+    }
+  });
+
+  it('OIDC too: an account linked to the provider with another subject gets a 409, not a 500', async () => {
+    const OIDC = 'mockoidc';
+    const IDP_BASE = 'https://oidc.example.test';
+    await ctx.prisma.identityProvider.create({
+      data: {
+        realmId: seeded.realm.id,
+        alias: OIDC,
+        displayName: 'Mock OIDC',
+        clientId: 'idenplane',
+        clientSecret: 'idp-secret',
+        authorizationUrl: `${IDP_BASE}/authorize`,
+        tokenUrl: `${IDP_BASE}/token`,
+        userinfoUrl: `${IDP_BASE}/userinfo`,
+        trustEmail: true,
+      },
+    });
+    const user = await createUser(
+      ctx.prisma,
+      seeded.realm.id,
+      `oidc-user-${++userSeq}`,
+    );
+    const realFetch = global.fetch;
+    let sub = 'oidc-first';
+    const spy = jest
+      .spyOn(global, 'fetch')
+      .mockImplementation(async (input, init) => {
+        const url = typeof input === 'string' ? input : input.toString();
+        if (url === `${IDP_BASE}/token`) {
+          return new Response(JSON.stringify({ access_token: 'at' }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+        if (url === `${IDP_BASE}/userinfo`) {
+          return new Response(
+            JSON.stringify({ sub, email: user.email, email_verified: true }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          );
+        }
+        return realFetch(input, init);
+      });
+    try {
+      const signIn = async () => {
+        const browser = new Browser(app);
+        const qs = new URLSearchParams({
+          client_id: 'test-client',
+          redirect_uri: REDIRECT_URI,
+          scope: 'openid',
+          state: 'xyz',
+        });
+        const toIdp = await browser.get(
+          `/realms/${REALM}/broker/${OIDC}/login?${qs.toString()}`,
+        );
+        const state = new URL(
+          toIdp.headers['location'] as string,
+        ).searchParams.get('state') as string;
+        return browser.get(
+          `/realms/${REALM}/broker/${OIDC}/callback?code=c&state=${encodeURIComponent(state)}`,
+        );
+      };
+      codeFrom((await signIn()).headers['location']);
+      sub = 'oidc-second';
+      const second = await signIn();
+      expect(second.status).toBe(409);
+      expect(second.text).toMatch(/already linked to Mock OIDC/);
+      const links = await ctx.prisma.federatedIdentity.findMany({
+        where: { userId: user.id },
+      });
+      expect(links.map((l) => l.externalUserId)).toEqual(['oidc-first']);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
   it('refuses an unsolicited (IdP-initiated) response', async () => {
     const res = await postToAcs(idpResponse('_x', { inResponseTo: null }), '');
     expect(res.status).toBe(400);
