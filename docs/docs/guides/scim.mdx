@@ -115,6 +115,13 @@ A new password is checked against the realm's password policy (minimum length, c
 
 Sending the user's **current** password is not a change: Okta, with password sync on, sends the password on every update, and that neither fails the history check nor signs the user out. `remove` on `password` is refused (400 `invalidValue`). Passwords longer than 1024 characters are refused.
 
+**Users federated from LDAP** (users with a user-federation link, who sign in against the directory) keep their password in the directory. Storing a local one would silently switch them to local password sign-in, so SCIM never does:
+
+- a `PATCH` that sets their password is refused with **400 `mutability`** ("managed by the user federation"), and nothing else in that request is applied;
+- in a `PUT`, the password is **dropped** and the rest of the user is applied. A PUT is the client's whole representation of the user, and Okta with *Sync Password* on includes the password in every profile update, so refusing it would fail every update of every federated user. Turn *Sync Password* off for directories whose users come from LDAP.
+
+A password equal to the one already stored is a no-op for every user, federated or not.
+
 ### PATCH
 
 `PATCH /Users/{id}` and `PATCH /Groups/{id}` follow RFC 7644 §3.5.2. The request lists its operations in `Operations` (lowercase `operations` is also read, for older clients). Op names are case-insensitive, so Entra ID's `Add`, `Replace` and `Remove` work. A request is checked in full before anything is written: if one operation is refused, none is applied.
@@ -321,7 +328,7 @@ What Idenplane receives from Entra ID: a lookup `GET /Users?filter=userName eq "
    - **Create Users**: `POST /Users` after a `userName eq` lookup.
    - **Update User Attributes**: `PUT /Users/{id}` with the whole user (custom integrations may use `PATCH`). Attributes Okta leaves out of a PUT are cleared, as RFC 7644 replaces; `active` and the password are kept.
    - **Deactivate Users**: `PATCH` with `{"op": "replace", "value": {"active": false}}`; the user is disabled and signed out everywhere.
-   - **Sync Password**: Okta sends the user's Okta password (or a random one) as `password` on create and on change. Idenplane checks it against the realm's password policy and history: if your realm's policy is stricter than Okta's, Okta's push fails with a 400 `invalidValue` in its task list, so keep the two policies compatible. Each real change signs the user out of Idenplane everywhere; Okta re-sending the current password does not.
+   - **Sync Password**: Okta sends the user's Okta password (or a random one) as `password` on create and on change. Idenplane checks it against the realm's password policy and history: if your realm's policy is stricter than Okta's, Okta's push fails with a 400 `invalidValue` in its task list, so keep the two policies compatible. Each real change signs the user out of Idenplane everywhere; Okta re-sending the current password does not. For users federated from LDAP, Idenplane ignores the password Okta sends in a PUT and refuses one sent in a PATCH (see *Passwords*).
 5. Under **Push Groups**, push the groups you want. Okta creates them with `POST /Groups`, renames them with a path-less `PATCH`, adds members with `PATCH ... "op": "add", "path": "members"` and removes them with `PATCH ... "path": "members[value eq \"<id>\"]"`; some versions replace the members with `PUT /Groups/{id}`. All are supported; group `PATCH` answers `204`.
 6. Assign users and groups under **Assignments**.
 
