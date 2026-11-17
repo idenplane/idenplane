@@ -133,7 +133,7 @@ curl -X POST "http://localhost:3000/admin/migration/auth0" \
 
 A dry run returns the same report as a real migration but doesn't modify any data.
 
-The endpoint needs a global (super-admin) credential. The server accepts JSON request bodies up to 100 KB, so most exports with users must be imported in batches; see [Handling Large Exports](#handling-large-exports).
+The endpoint needs a global (super-admin) credential. It accepts a JSON body of up to 10 MB, so a very large export must be imported in batches; see [Handling Large Exports](#handling-large-exports).
 
 ---
 
@@ -410,9 +410,9 @@ The import endpoint accepts a JSON body of up to **10 MB** (every other endpoint
 # Count users
 USER_COUNT=$(jq '.users | length' auth0-export.json)
 
-# Batches of 200 users, each a complete export with a slice of users
-jq '.users |= .[0:200]'   auth0-export.json > batch1-export.json
-jq '.users |= .[200:400]' auth0-export.json > batch2-export.json
+# Batches of 5,000 users, each a complete export with a slice of users
+jq '.users |= .[0:5000]'     auth0-export.json > batch1-export.json
+jq '.users |= .[5000:10000]' auth0-export.json > batch2-export.json
 ```
 
 ### Sequential Import
@@ -453,9 +453,9 @@ curl -X GET "http://localhost:3000/admin/realms/my-realm/roles" \
 
 ### 3. Test Authentication
 
-Sign in through the browser login (`/realms/{realm}/protocol/openid-connect/auth`) with a client you created, using a few migrated users. The browser login is what verifies a bcrypt hash and rehashes it; the password grant fails for a migrated user until after a first browser sign-in.
+Sign in through the browser login (`/realms/{realm}/protocol/openid-connect/auth`) with a client you created, using a few migrated users. The password grant checks imported hashes the same way as the login page, and either one moves the hash to Argon2id on the first successful sign-in.
 
-If a client allows the password grant, you can script the check for users who have signed in once:
+If a client allows the password grant, you can script the check:
 
 ```typescript
 async function testMigration(realm: string, testUsers: { username: string; password: string }[]) {
@@ -602,7 +602,7 @@ Import data from Auth0 Management API export.
 | 400 | Bad request — invalid payload or missing targetRealm |
 | 401 | Unauthorized — missing or invalid admin credentials |
 | 403 | The admin has no global (super-admin) scope |
-| 413 | Request body over 100 KB |
+| 413 | Request body over 10 MB |
 
 The same endpoint family also imports [Keycloak](./keycloak.mdx) and [Authentik](./authentik.mdx).
 
