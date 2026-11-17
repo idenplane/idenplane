@@ -196,6 +196,8 @@ Roles are imported by name and description only. Which users had which role is *
 
 Users keep their Auth0 password: Idenplane imports the hash with its real algorithm and checks it on sign-in (hosted login page and password grant). On the first successful sign-in the hash is replaced with an Argon2id hash, transparently.
 
+The imported password counts as used for the realm's password history (`passwordHistoryCount`): a user cannot "change" it to the same password, at the first change or the next ones (since 0.13.0).
+
 | Source | Format | Imported as (`passwordAlgorithm`) |
 |--------|--------|-----------------------------------|
 | `password_hash` (Auth0's own export) | bcrypt (`$2a$`/`$2b$`/`$2y$`) | `bcrypt` |

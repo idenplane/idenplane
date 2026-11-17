@@ -822,11 +822,15 @@ model MagicLinkRequest {
 // ─── PASSWORD HISTORY ────────────────────────────────────
 
 model PasswordHistory {
-  id           String   @id @default(uuid())
-  userId       String   @map("user_id")
-  realmId      String   @map("realm_id")
-  passwordHash String   @map("password_hash")
-  createdAt    DateTime @default(now()) @map("created_at")
+  id                String   @id @default(uuid())
+  userId            String   @map("user_id")
+  realmId           String   @map("realm_id")
+  passwordHash      String   @map("password_hash")
+  /// The user's `passwordAlgorithm` when the hash was theirs. Only an
+  /// unlabelled legacy PBKDF2 hash (imported before 0.11.0) needs it; null
+  /// for the self-describing formats (Argon2, bcrypt, `$pbkdf2-…`).
+  passwordAlgorithm String?  @map("password_algorithm")
+  createdAt         DateTime @default(now()) @map("created_at")
 
   user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
   realm Realm @relation(fields: [realmId], references: [id], onDelete: Cascade)

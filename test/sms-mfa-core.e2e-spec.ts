@@ -98,7 +98,7 @@ describe('SMS MFA core (e2e)', () => {
       .set('x-admin-api-key', TEST_ADMIN_API_KEY)
       .expect(200);
 
-    expect(res.body).toEqual({ enabled: true, methods: ['sms'] });
+    expect(res.body).toEqual({ enabled: true, methods: ['sms'], passkeys: 0 });
   });
 
   it('accepts a correct code exactly once', async () => {
@@ -289,12 +289,16 @@ describe('SMS MFA core (e2e)', () => {
 
     await mfa.disableTotp(seeded.user.id);
     expect(
-      await ctx.prisma.recoveryCode.count({ where: { userId: seeded.user.id } }),
+      await ctx.prisma.recoveryCode.count({
+        where: { userId: seeded.user.id },
+      }),
     ).toBe(10);
 
     await mfa.disableSms(seeded.user.id);
     expect(
-      await ctx.prisma.recoveryCode.count({ where: { userId: seeded.user.id } }),
+      await ctx.prisma.recoveryCode.count({
+        where: { userId: seeded.user.id },
+      }),
     ).toBe(0);
     expect(await mfa.isMfaEnabled(seeded.user.id)).toBe(false);
   });

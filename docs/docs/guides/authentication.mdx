@@ -861,6 +861,15 @@ Two neighbouring features are managed separately:
 - **SAML 2.0**: Idenplane cannot sign users in through an upstream SAML identity provider; SAML brokering is not supported. Idenplane is itself a SAML 2.0 identity provider for downstream service providers, which the console lists under **SAML Providers**
 - **LDAP** and other external user stores live under **User Federation**, which synchronises users rather than delegating the login
 
+### Providers stored before 0.12.0
+
+Before 0.12.0 the admin API and the importers stored any `providerType`. On upgrade to 0.13.0:
+
+- a supported type stored in another case or with spaces (`OIDC`, ` OAuth2 `) is rewritten to `oidc` or `oauth2` by a migration;
+- any other row is left as it is, and `GET /admin/upgrade/health` reports it in the `identity_provider_types` warning, as `realm/alias (type, enabled|disabled)`. **SAML** rows (`saml`, `samlp`, `adfs`) are listed as needing configuration review: they were saved before 0.12.0, when Idenplane had no SAML broker, so review each one's configuration before relying on it. Other types are listed as unsupported: change them to `oidc` or `oauth2` if the provider speaks it, or delete them.
+
+An enabled provider in either list still shows a button on the login page that cannot complete a sign-in, so review these first. The check is a warning only and never blocks an upgrade.
+
 ### Configuring one
 
 ```bash

@@ -630,6 +630,32 @@ describe('WebAuthnService', () => {
   // hasCredentials
   // ──────────────────────────────────────────────────────────────────────
 
+  describe('removeAllCredentials', () => {
+    it('deletes every passkey of the user in this realm and says how many', async () => {
+      prisma.webAuthnCredential.deleteMany.mockResolvedValue({ count: 2 });
+
+      await expect(
+        service.removeAllCredentials('user-1', 'realm-1'),
+      ).resolves.toBe(2);
+      expect(prisma.webAuthnCredential.deleteMany).toHaveBeenCalledWith({
+        where: { userId: 'user-1', realmId: 'realm-1' },
+      });
+    });
+  });
+
+  describe('countCredentials', () => {
+    it('counts the passkeys of the user in this realm', async () => {
+      prisma.webAuthnCredential.count.mockResolvedValue(3);
+
+      await expect(service.countCredentials('user-1', 'realm-1')).resolves.toBe(
+        3,
+      );
+      expect(prisma.webAuthnCredential.count).toHaveBeenCalledWith({
+        where: { userId: 'user-1', realmId: 'realm-1' },
+      });
+    });
+  });
+
   describe('hasCredentials', () => {
     it('should return true when user has credentials', async () => {
       prisma.webAuthnCredential.count.mockResolvedValue(2);

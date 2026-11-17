@@ -180,6 +180,47 @@ describe('VerificationService', () => {
 
   // ─── validateToken ─────────────────────────────────────────
 
+  describe('peekToken', () => {
+    it('returns the user of a valid token without using it up', async () => {
+      prisma.verificationToken.findUnique.mockResolvedValue({
+        id: 't1',
+        userId: 'user-1',
+        type: 'password_reset',
+        expiresAt: new Date(Date.now() + 60_000),
+      });
+
+      await expect(
+        service.peekToken('raw-token-abc', 'password_reset', 'realm-1'),
+      ).resolves.toEqual({ userId: 'user-1' });
+      expect(prisma.verificationToken.findUnique).toHaveBeenCalledWith({
+        where: { tokenHash: 'hashed-token-abc', user: { realmId: 'realm-1' } },
+      });
+      expect(prisma.verificationToken.delete).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      [
+        'of another type',
+        { type: 'email_verify', expiresAt: new Date(Date.now() + 60_000) },
+      ],
+      [
+        'expired',
+        { type: 'password_reset', expiresAt: new Date(Date.now() - 1) },
+      ],
+    ])('null for a token %s, and nothing deleted', async (_label, fields) => {
+      prisma.verificationToken.findUnique.mockResolvedValue({
+        id: 't1',
+        userId: 'user-1',
+        ...fields,
+      });
+
+      await expect(
+        service.peekToken('raw-token-abc', 'password_reset'),
+      ).resolves.toBeNull();
+      expect(prisma.verificationToken.delete).not.toHaveBeenCalled();
+    });
+  });
+
   describe('validateToken', () => {
     it('binds realm-scoped links to the token owner without consuming a foreign token', async () => {
       prisma.verificationToken.findUnique.mockResolvedValue(null);

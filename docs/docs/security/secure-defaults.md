@@ -34,6 +34,7 @@ The values live in one place, `src/realms/realm-security-defaults.ts`. They are 
 ### How the lockout works
 
 - Each failed password or LDAP bind counts as a failure: on the hosted login page, the password grant, device approval and admin console sign-in. Failed TOTP codes and passkey assertions are counted separately, with the same limits.
+- So does a wrong **current password in the account console** (since 0.13.0): when changing the password, adding or removing a phone for text-message codes, turning off the authenticator app, and requesting or cancelling account deletion. A stolen session therefore cannot be used to guess the password faster than the sign-in page allows. While the account is locked these forms are refused without checking the password, and the right password clears the failures, as a sign-in does. An empty password field is not counted.
 - When `maxLoginFailures` failures fall within `failureResetTime`, the account is locked for `lockoutDuration`.
 - **While the account is locked, the password is not checked at all.** The answer is the same whether the password was right or wrong, so a locked account can't be used to test passwords. Attempts during the lock are not counted and don't extend it.
 - The lock ends by itself. A successful sign-in afterwards clears the failures.
