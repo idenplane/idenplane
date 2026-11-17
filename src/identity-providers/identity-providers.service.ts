@@ -8,6 +8,7 @@ import type { IdentityProvider, Prisma, Realm } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { CryptoService } from '../crypto/crypto.service.js';
 import { idpSecrets } from './idp-secrets.js';
+import { SECRET_PLACEHOLDER } from '../realms/secret-placeholder.js';
 import { supportedIdpProviderType } from './idp-provider-types.js';
 import {
   SAML_UNUSED_OAUTH_COLUMNS,
@@ -213,7 +214,11 @@ export class IdentityProvidersService {
     }
     // A provider switched from SAML to OAuth must bring its endpoints.
     if (current.providerType === 'saml') {
-      const missing = OAUTH_REQUIRED.filter((k) => !rest[k]);
+      // The stored secret of a SAML provider is empty: the placeholder the
+      // console sends back for it is no secret either.
+      const missing = OAUTH_REQUIRED.filter(
+        (k) => !rest[k] || rest[k] === SECRET_PLACEHOLDER,
+      );
       if (missing.length) {
         throw new BadRequestException(
           `${missing.join(', ')} required to change a SAML identity provider to ${providerType}`,

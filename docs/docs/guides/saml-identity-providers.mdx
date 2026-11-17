@@ -90,6 +90,7 @@ Whatever the two "want … signed" settings say, a response is only accepted whe
 - **Email, first and last name**: the attributes in `attributes`; when one is left empty, the usual names are tried: `email`, `mail`, `firstName`, `givenName`, `lastName`, `sn`, `surname`, the WS-Federation claim URIs Entra ID and ADFS send (`http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress`, `…/givenname`, `…/surname`) and the LDAP OIDs. With an `emailAddress` NameID and no email attribute, the NameID is the email.
 - **Email verified**: SAML has no "verified" flag. An email address from the IdP counts as verified only when the provider's **Trust email from provider** (`trustEmail`) is on, and only then can it link the sign-in to an existing account with that address. Turn it on only for an IdP whose email values users cannot set themselves. In Entra ID, the `mail` / `email` claims can come from user-editable or guest data in some tenants: keep `trustEmail` off there, or map a domain-verified value such as the UPN.
 - Linking, creation, **Link only** and **Sync user profile** work as for OIDC providers.
+- **Do not change** `nameIdFormat` or `subjectAttribute` once users have signed in: the link key changes with them, so every returning user looks new, and one whose account is already linked to this provider cannot be linked again by email.
 
 ## Identity provider notes
 

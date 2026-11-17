@@ -403,6 +403,16 @@ describe('IdentityProvidersService', () => {
       await expect(
         service.update(mockRealm, 'okta', { providerType: 'oidc' }),
       ).rejects.toThrow(/required to change a SAML identity provider/);
+      // The console sends the hidden-secret placeholder back: still no secret.
+      await expect(
+        service.update(mockRealm, 'okta', {
+          providerType: 'oidc',
+          clientId: 'c',
+          clientSecret: SECRET_PLACEHOLDER,
+          authorizationUrl: 'https://idp/auth',
+          tokenUrl: 'https://idp/token',
+        }),
+      ).rejects.toThrow(/clientSecret required/);
     });
 
     it('adds the SP endpoints to a SAML provider', () => {
