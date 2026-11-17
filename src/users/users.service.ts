@@ -278,6 +278,11 @@ export class UsersService {
 
   async setPassword(realm: Realm, userId: string, password: string) {
     await this.findById(realm, userId);
+    // The hash being replaced, for the password history.
+    const previous = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { passwordHash: true, passwordAlgorithm: true },
+    });
 
     // Validate against realm password policy
     const validation = this.passwordPolicyService.validate(realm, password);
@@ -314,12 +319,14 @@ export class UsersService {
     // Unlock brute-force locked account and clear failure records
     await this.bruteForceService.resetFailures(realm.id, userId);
 
-    // Record password history
+    // Record password history, with the replaced hash if it was not in it
+    // yet (an imported password, say).
     await this.passwordPolicyService.recordHistory(
       userId,
       realm.id,
       passwordHash,
       realm.passwordHistoryCount,
+      previous,
     );
   }
 

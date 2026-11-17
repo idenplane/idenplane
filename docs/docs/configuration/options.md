@@ -248,7 +248,7 @@ The password policy is a set of realm fields. Passwords are hashed with Argon2id
 | `passwordRequireLowercase` | boolean | `false` | At least one lowercase letter |
 | `passwordRequireDigits` | boolean | `false` | At least one digit |
 | `passwordRequireSpecialChars` | boolean | `false` | At least one special character |
-| `passwordHistoryCount` | integer | `0` | Previous passwords that cannot be reused |
+| `passwordHistoryCount` | integer | `0` | Recent passwords that cannot be reused; the current one always counts, an imported one included |
 | `passwordMaxAgeDays` | integer | `0` | Days until a password expires; `0` never |
 
 ```bash

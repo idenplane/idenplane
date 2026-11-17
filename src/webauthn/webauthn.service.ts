@@ -440,6 +440,29 @@ export class WebAuthnService {
     );
   }
 
+  /**
+   * Remove every passkey of the user in this realm (an admin's full MFA
+   * reset). Returns how many were removed.
+   */
+  async removeAllCredentials(userId: string, realmId: string): Promise<number> {
+    const { count } = await this.prisma.webAuthnCredential.deleteMany({
+      where: { userId, realmId },
+    });
+    if (count > 0) {
+      this.logger.log(
+        `${count} WebAuthn credential(s) removed for user ${userId}`,
+      );
+    }
+    return count;
+  }
+
+  /** How many passkeys the user has in this realm. */
+  async countCredentials(userId: string, realmId: string): Promise<number> {
+    return this.prisma.webAuthnCredential.count({
+      where: { userId, realmId },
+    });
+  }
+
   async hasCredentials(userId: string, realmId: string): Promise<boolean> {
     const count = await this.prisma.webAuthnCredential.count({
       where: { userId, realmId },

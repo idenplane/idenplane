@@ -22,11 +22,40 @@ export function supportedIdpProviderType(
     : null;
 }
 
+/** A provider type that names SAML (Keycloak `saml`, Auth0 `samlp`/`adfs`). */
+const SAML_TYPE = /saml|adfs/i;
+
+/**
+ * What a stored `providerType` means for the broker:
+ * - `supported`: `oidc` or `oauth2`, in any case (`type` is the canonical,
+ *   lower-case value);
+ * - `saml`: a SAML identity provider. Rows like these were stored before
+ *   0.12.0, when Idenplane had no SAML broker, so an admin reviews their
+ *   configuration before relying on them, whatever the broker supports;
+ * - `unsupported`: anything else.
+ *
+ * The upgrade health check (`identity_provider_types`) reports by this, so
+ * a change to what the broker accepts is made here.
+ */
+export type IdpProviderTypeClass =
+  | { kind: 'supported'; type: IdpProviderType }
+  | { kind: 'saml' }
+  | { kind: 'unsupported' };
+
+export function classifyIdpProviderType(value: unknown): IdpProviderTypeClass {
+  const type = supportedIdpProviderType(value);
+  if (type) return { kind: 'supported', type };
+  if (typeof value === 'string' && SAML_TYPE.test(value)) {
+    return { kind: 'saml' };
+  }
+  return { kind: 'unsupported' };
+}
+
 /** Why an identity provider of type `value` cannot be imported. */
 export function unsupportedIdpTypeReason(value: unknown): string {
   const shown = typeof value === 'string' && value ? value : '(none)';
   const supported = SUPPORTED_IDP_PROVIDER_TYPES.join(', ');
-  if (typeof value === 'string' && /saml|adfs/i.test(value)) {
+  if (classifyIdpProviderType(value).kind === 'saml') {
     return (
       `provider type '${shown}' is SAML, and Idenplane cannot sign users in ` +
       `through a SAML identity provider (it brokers ${supported} only). ` +
