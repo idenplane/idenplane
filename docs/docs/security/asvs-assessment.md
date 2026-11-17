@@ -260,10 +260,10 @@ Every row below has its own recommendation.
 | V7.4.2 | 1 | Pass | src/users/users.service.ts; src/auth/auth.service.ts (code and device grants check enabled); src/tokens/tokens.service.ts:525 | FIXED gap: the code exchange did not check enabled. |
 | V7.4.3 | 2 | Pass | src/sessions/sessions.service.ts revokeAllUserSessions; test/theme-views.e2e-spec.ts, test/offline-sessions.e2e-spec.ts | FIXED: every credential change ends the user's sessions, offline ones included: a password reset by email, a password set by an admin, an admin removing second factors, and an admin MFA reset (console tokens too). A password change in the account console ends every other session and keeps the current one (0.12.0). |
 | V7.4.4 | 2 | Pass | themes/idenplane/account/templates/account.hbs:11; admin-ui Layout.tsx |  |
-| V7.4.5 | 2 | Partial | src/sessions/sessions.controller.ts:58-83 | No realm-wide termination; admin termination sends no back-channel logout. **Recommendation:** (S) |
+| V7.4.5 | 2 | Partial | src/sessions/sessions.controller.ts:58-83 | No realm-wide termination. Admin termination sends back-channel logout tokens (FIXED in 0.13.0). **Recommendation:** (S) |
 | V7.5.1 | 2 | Partial | src/account/account.controller.ts:283-322,688-702; src/webauthn/webauthn.controller.ts:78-118,341-354; src/admin-mfa/admin-mfa.controller.ts | Admin console (0.11.0): changing a factor or the recovery codes needs a second factor checked in the last 15 minutes. End-user account console: TOTP enrolment and passkey add/delete still need only the session. **Recommendation:** Require re-authentication there too (S). |
 | V7.5.2 | 2 | **Fail** | src/account/account.controller.ts | Users cannot list or end their own sessions. **Recommendation:** Account session list (M). |
-| V7.6.1 | 2 | Partial | src/tokens/backchannel-logout.service.ts; src/oauth/oauth.controller.ts:208-231 | Admin and account-console terminations do not notify RPs. **Recommendation:** (S) |
+| V7.6.1 | 2 | Partial | src/tokens/backchannel-logout.service.ts; src/sessions/sessions.service.ts; src/sessions/sessions-cleanup.service.ts; src/oauth/oauth.controller.ts:208-231 | FIXED in part in 0.13.0: admin, account-console and credential-change terminations and the SSO idle timeout notify RPs by back-channel logout. A session reaching its maximum lifetime is not announced (documented). **Recommendation:** (S) |
 | V7.6.2 | 2 | Pass | src/oauth/oauth.controller.ts:174-231; src/login/session-issuer.service.ts:50-97 |  |
 
 ### V8 Authorization

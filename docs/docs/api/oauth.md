@@ -231,6 +231,10 @@ OIDC Backchannel Logout endpoint for logout propagation to clients.
 
 Returns HTTP 200 with empty body on success. Returns HTTP 400 for invalid logout tokens.
 
+### Logout tokens sent to clients
+
+In the other direction, Idenplane `POST`s a logout token to a client's registered `backchannelLogoutUri` when a session the client holds ends: the user signing out and, since 0.13.0, an admin ending one session or all of a user's, disabling the user, SCIM deactivation, a credential change, and the SSO idle timeout. The token carries `iss`, `aud`, `iat`, `exp`, `jti`, `events`, `sub`, and `sid` when the client sets `backchannelLogoutSessionRequired`; never `nonce`. Its `typ` header is `logout+jwt`. See [Back-Channel Logout](../guides/authentication.mdx#back-channel-logout) for which sessions are announced and how delivery works.
+
 ## Endpoints Summary
 
 | Endpoint | Method | Description |

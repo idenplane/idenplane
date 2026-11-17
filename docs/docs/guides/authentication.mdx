@@ -697,6 +697,41 @@ async function logout(accessToken: string, refreshToken: string) {
 }
 ```
 
+### Back-Channel Logout
+
+A client that registers a `backchannelLogoutUri` ([OpenID Connect Back-Channel Logout 1.0](https://openid.net/specs/openid-connect-backchannel-1_0.html)) is told when a session it holds ends, by a server-to-server `POST` of a signed logout token to that URI. Idenplane sends one whenever an OAuth session ends:
+
+| How the session ended | Since |
+|---|---|
+| The user signs out (`/protocol/openid-connect/logout`) | earlier |
+| An admin ends one session (`DELETE /admin/realms/{realm}/sessions/{id}`) or continuous verification ends a risky one | 0.13.0 |
+| The user is signed out everywhere: admin "sign out all sessions" (`DELETE /admin/realms/{realm}/users/{id}/sessions`), disabling the user, SCIM deactivation, and every credential change (a password set or reset, second factors removed) | 0.13.0 |
+| The SSO idle timeout (`ssoSessionIdleTimeout`): a session whose refresh token went unused for longer ends at the next hourly clean-up | 0.13.0 |
+
+Only the clients the session was used with (the clients holding its refresh tokens) are told, not every client of the realm.
+
+The request is `Content-Type: application/x-www-form-urlencoded` with one parameter, `logout_token`, a JWT signed with the realm's active key (`RS256`, verifiable with the realm's JWKS) and typed `logout+jwt`:
+
+```json
+{
+  "iss": "https://auth.example.com/realms/my-realm",
+  "aud": "my-app",
+  "sub": "<user id>",
+  "sid": "<session id: the sid claim of the session's ID tokens>",
+  "iat": 1795000000,
+  "exp": 1795000120,
+  "jti": "<unique id>",
+  "events": { "http://schemas.openid.net/event/backchannel-logout": {} }
+}
+```
+
+- `sid` is included when the client has `backchannelLogoutSessionRequired` (the default): one token per ended session. Without it the token carries `sub` only, one per user, and the client should end every session of that user.
+- There is never a `nonce`, so a logout token cannot be mistaken for an ID token. Check the signature, `iss`, `aud`, `iat`/`exp`, the `events` member and the absence of `nonce`, as the specification describes.
+- **Offline sessions are included.** Signing a user out everywhere revokes their offline tokens too, so a client that keeps one for background work is told that the session (`sid`) is gone. A user's own sign-out keeps offline tokens, as before.
+- Browser SSO sessions (the `IDENPLANE_SESSION` cookie) are not tied to a client's session, so ending one, or one expiring, sends nothing. A session reaching its maximum lifetime (`refreshTokenLifespan`, `offlineTokenLifespan`) sends nothing either: the client already knows the refresh token's lifetime.
+
+**Delivery** is fire-and-forget, after the sign-out has been committed: the admin call or sign-out never waits for, or fails because of, a client. Each `POST` has a 10-second timeout and does not follow redirects; at most 8 are in flight at once per server. A failure (a network error, a timeout, or a non-2xx answer) is logged as a warning by `BackchannelLogoutService` and not retried: the token is valid for two minutes, and the client's refresh token and session are already revoked, so a client that missed the token finds out at its next refresh or UserInfo call.
+
 ---
 
 ## Security Best Practices
