@@ -1,14 +1,19 @@
 name: PR Hygiene
 
-## Baseline checks that every PR must pass:
+## Baseline checks that every PR to dev or main must pass:
 ##  - No accidental secret in the diff
-##  - No changes to workflow files from a contributor PR (must be merged deliberately)
+##  - No changes to workflow files from a contributor PR, i.e. one opened from
+##    a fork (must be merged deliberately, by the maintainer redoing the change
+##    on a branch of this repository)
 ##  - No env / credentials files leaked
 ##  - Bot / auto-generated PRs (marked with the `autonomous` label) are bounded in size
+##
+## Contributor PRs target dev (CONTRIBUTING.md); dev is promoted to main by a
+## PR as well. Every diff is taken against the PR's own base branch.
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, dev]
 
 # Re-pushing to a PR supersedes the previous diff, so only the latest push
 # needs checking.
@@ -29,10 +34,34 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Forbid sensitive path changes in contributor PRs
+      - name: Forbid workflow changes in contributor PRs
+        env:
+          BASE: origin/${{ github.base_ref }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          THIS_REPO: ${{ github.repository }}
         run: |
           set -e
-          CHANGED=$(git diff --name-only origin/main...HEAD)
+          # A PR from a fork is a contributor PR. Branches of this repository
+          # (the maintainer's, Dependabot's, the dev→main promotion) can only
+          # be pushed by people who may change workflows anyway.
+          if [ "$HEAD_REPO" = "$THIS_REPO" ]; then
+            echo "PR from a branch of $THIS_REPO — workflow changes allowed"
+            exit 0
+          fi
+          WORKFLOWS=$(git diff --name-only "$BASE"...HEAD -- .github/workflows/ || true)
+          if [ -n "$WORKFLOWS" ]; then
+            echo "::error::A PR from a fork changes workflow files. The maintainer has to make these changes on a branch of this repository:"
+            echo "$WORKFLOWS"
+            exit 1
+          fi
+          echo "No workflow changes"
+
+      - name: Forbid sensitive path changes in contributor PRs
+        env:
+          BASE: origin/${{ github.base_ref }}
+        run: |
+          set -e
+          CHANGED=$(git diff --name-only "$BASE"...HEAD)
           echo "$CHANGED"
           # Block real env / secret / credential files, but allow committed
           # templates such as .env.example / .env.sample (they carry no secrets).
@@ -46,6 +75,8 @@ jobs:
           fi
 
       - name: Scan diff for inline secrets
+        env:
+          BASE: origin/${{ github.base_ref }}
         run: |
           set -e
           # Scan only ADDED lines (skip context, the +++ header and @@ hunk
@@ -66,7 +97,7 @@ jobs:
           # VALUE, deliberately, not on the path: excluding examples/ wholesale
           # would hide a genuine leak committed there, which is exactly the kind
           # of place one gets committed.
-          HITS=$(git diff origin/main...HEAD \
+          HITS=$(git diff "$BASE"...HEAD \
               -- . ':(exclude)*.example' ':(exclude)*.sample' ':(exclude)*.template' ':(exclude)*.dist' \
             | grep -E '^\+[^+]' \
             | grep -iE '(api[_-]?key|secret|password|token|bearer)[^A-Za-z]*[:=][^A-Za-z]*[A-Za-z0-9_-]{20,}' \
@@ -97,7 +128,7 @@ jobs:
           #
           # The '...' exclusion keeps documentation quiet: every truncated example
           # in docs/ writes the token elided, and a real leak never is.
-          HEADER_HITS=$(git diff origin/main...HEAD \
+          HEADER_HITS=$(git diff "$BASE"...HEAD \
               -- . ':(exclude)*.example' ':(exclude)*.sample' ':(exclude)*.template' ':(exclude)*.dist' \
             | grep -E '^\+[^+]' \
             | grep -E '[Aa]uthorization[^A-Za-z]*:[^A-Za-z]*(Bearer|Basic|Token)[[:space:]]+[A-Za-z0-9_.=-]{20,}' \
@@ -109,12 +140,14 @@ jobs:
           fi
 
       - name: Size limits for automated PRs
+        env:
+          BASE: origin/${{ github.base_ref }}
         run: |
           set -e
           LABELS='${{ toJson(github.event.pull_request.labels.*.name) }}'
           if echo "$LABELS" | grep -q '"autonomous"'; then
-            FILES=$(git diff --name-only origin/main...HEAD | wc -l)
-            LINES=$(git diff --shortstat origin/main...HEAD | awk '{print $4 + $6}')
+            FILES=$(git diff --name-only "$BASE"...HEAD | wc -l)
+            LINES=$(git diff --shortstat "$BASE"...HEAD | awk '{print $4 + $6}')
             echo "Automated PR — files=$FILES lines=${LINES:-0}"
             if [ "$FILES" -gt 15 ]; then
               echo "::error::Automated PR exceeds 15 files; split required"

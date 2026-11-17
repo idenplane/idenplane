@@ -7,7 +7,7 @@ _idenplane_completion() {
   local cur prev words cword
   _init_completion || return
 
-  local commands="login logout whoami init realm user client role group config completion upgrade migrate"
+  local commands="login logout whoami init realm user client role group config completion upgrade migrate plugins"
   local realm_cmds="list create get update delete export import"
   local user_cmds="list create get update delete set-password bulk-import"
   local client_cmds="list create get update delete rotate-secret"
@@ -15,6 +15,7 @@ _idenplane_completion() {
   local group_cmds="list create get update delete"
   local config_cmds="show validate"
   local completion_cmds="bash zsh fish"
+  local plugins_cmds="hash"
 
   case "\${words[1]}" in
     realm)
@@ -37,6 +38,9 @@ _idenplane_completion() {
       return ;;
     completion)
       COMPREPLY=( $(compgen -W "\${completion_cmds}" -- "\${cur}") )
+      return ;;
+    plugins)
+      COMPREPLY=( $(compgen -W "\${plugins_cmds}" -- "\${cur}") )
       return ;;
     *)
       COMPREPLY=( $(compgen -W "\${commands}" -- "\${cur}") )
@@ -75,6 +79,7 @@ _idenplane() {
         'completion:Output shell completion script'
         'upgrade:Upgrade the Idenplane server to a new version'
         'migrate:Migrate users and configuration from another IdP'
+        'plugins:Work with server plugins on this machine'
       )
       _describe 'command' commands
       ;;
@@ -101,6 +106,9 @@ _idenplane() {
         completion)
           local sub=(bash zsh fish)
           _describe 'shell' sub ;;
+        plugins)
+          local sub=(hash)
+          _describe 'subcommand' sub ;;
       esac
       ;;
   esac
@@ -112,7 +120,7 @@ _idenplane
 const FISH_COMPLETION = `
 # idenplane fish completion
 
-set -l idenplane_commands login logout whoami init realm user client role group config completion upgrade migrate
+set -l idenplane_commands login logout whoami init realm user client role group config completion upgrade migrate plugins
 
 complete -c idenplane -f -n '__fish_use_subcommand' -a login       -d 'Authenticate with an Idenplane server'
 complete -c idenplane -f -n '__fish_use_subcommand' -a logout      -d 'Clear saved credentials'
@@ -127,6 +135,7 @@ complete -c idenplane -f -n '__fish_use_subcommand' -a config      -d 'Manage CL
 complete -c idenplane -f -n '__fish_use_subcommand' -a completion  -d 'Output shell completion script'
 complete -c idenplane -f -n '__fish_use_subcommand' -a upgrade     -d 'Upgrade the Idenplane server to a new version'
 complete -c idenplane -f -n '__fish_use_subcommand' -a migrate     -d 'Migrate users and configuration from another IdP'
+complete -c idenplane -f -n '__fish_use_subcommand' -a plugins     -d 'Work with server plugins on this machine'
 
 # realm subcommands
 complete -c idenplane -f -n '__fish_seen_subcommand_from realm' -a 'list create get update delete export import'
@@ -142,6 +151,8 @@ complete -c idenplane -f -n '__fish_seen_subcommand_from group' -a 'list create 
 complete -c idenplane -f -n '__fish_seen_subcommand_from config' -a 'show validate'
 # completion subcommands
 complete -c idenplane -f -n '__fish_seen_subcommand_from completion' -a 'bash zsh fish'
+# plugins subcommands
+complete -c idenplane -f -n '__fish_seen_subcommand_from plugins' -a 'hash'
 `;
 
 const SCRIPTS: Record<string, string> = {

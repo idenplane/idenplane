@@ -189,6 +189,39 @@ describe('KeycloakImporterService', () => {
       expect(report.summary.realms.created).toBe(1);
     });
 
+    it("maps Keycloak's session idle timeout, and leaves it off when absent", async () => {
+      await service.importRealm(
+        { ...mockKeycloakExport, ssoSessionIdleTimeout: 900 },
+        { dryRun: false },
+      );
+      expect(prisma.realm.create).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            refreshTokenLifespan: 3600,
+            ssoSessionIdleTimeout: 900,
+          }),
+        }),
+      );
+
+      await service.importRealm(
+        { ...mockKeycloakExport, ssoSessionIdleTimeout: 30 },
+        { dryRun: false },
+      );
+      expect(prisma.realm.create).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ ssoSessionIdleTimeout: 60 }),
+        }),
+      );
+
+      // The fixture sets no idle timeout.
+      await service.importRealm(mockKeycloakExport, { dryRun: false });
+      expect(prisma.realm.create).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ ssoSessionIdleTimeout: 0 }),
+        }),
+      );
+    });
+
     it('should use targetRealm if provided', async () => {
       await service.importRealm(mockKeycloakExport, {
         dryRun: false,

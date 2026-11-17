@@ -10,6 +10,7 @@ import { createEmptyReport, type MigrationReport } from './migration-report.js';
 import { keycloakPassword } from './password-import.js';
 import type { Prisma } from '@prisma/client';
 import { idpSecrets } from '../identity-providers/idp-secrets.js';
+import { idpCreateData, planIdpImport, reportIdpPlan } from './idp-import.js';
 import { REALM_BRUTE_FORCE_DEFAULTS } from '../realms/realm-security-defaults.js';
 import { wildcardRedirectUris } from '../common/redirect-uri.utils.js';
 
@@ -151,6 +152,12 @@ export class KeycloakImporterService {
           registrationAllowed: data.registrationAllowed ?? false,
           accessTokenLifespan: data.accessTokenLifespan ?? 300,
           refreshTokenLifespan: data.ssoSessionMaxLifespan ?? 1800,
+          // Keycloak's idle timeout carries over as is (its exports always
+          // set it, 1800 by default), raised to Idenplane's minimum of 60.
+          // Absent or 0, it stays off.
+          ssoSessionIdleTimeout: data.ssoSessionIdleTimeout
+            ? Math.max(60, data.ssoSessionIdleTimeout)
+            : 0,
           ...(data.smtpServer?.host && {
             smtpHost: data.smtpServer.host,
             smtpPort: parseInt(data.smtpServer.port ?? '587', 10),
@@ -487,6 +494,25 @@ export class KeycloakImporterService {
   ): Promise<void> {
     const db = tx ?? this.prisma;
     for (const idp of data.identityProviders ?? []) {
+      const config = idp.config ?? {};
+      const mapped = this.mapKeycloakProviderType(idp.providerId);
+      const plan = planIdpImport({
+        alias: idp.alias,
+        providerType: mapped?.providerType ?? idp.providerId,
+        wellKnown: mapped?.wellKnown,
+        enabled: idp.enabled ?? true,
+        fields: {
+          clientId: config['clientId'],
+          clientSecret: config['clientSecret'],
+          authorizationUrl: config['authorizationUrl'],
+          tokenUrl: config['tokenUrl'],
+          userinfoUrl: config['userInfoUrl'],
+          jwksUrl: config['jwksUrl'],
+          issuer: config['issuer'],
+          defaultScopes: config['defaultScope'],
+        },
+      });
+      if (!reportIdpPlan(report, idp.alias, plan)) continue;
       try {
         const existing = await db.identityProvider.findFirst({
           where: { realmId, alias: idp.alias },
@@ -496,24 +522,15 @@ export class KeycloakImporterService {
           continue;
         }
         if (!dryRun) {
-          const providerType = this.mapKeycloakProviderType(idp.providerId);
           await db.identityProvider.create({
             data: {
               realmId,
               alias: idp.alias,
               displayName: idp.displayName ?? idp.alias,
-              providerType,
-              enabled: idp.enabled ?? true,
               trustEmail: idp.trustEmail ?? false,
-              clientId: idp.config?.clientId ?? '',
-              clientSecret: idpSecrets.forCreate(
-                this.crypto,
-                idp.config?.clientSecret ?? '',
+              ...idpCreateData(plan, (secret) =>
+                idpSecrets.forCreate(this.crypto, secret),
               ),
-              authorizationUrl: idp.config?.authorizationUrl ?? '',
-              tokenUrl: idp.config?.tokenUrl ?? '',
-              userinfoUrl: idp.config?.userInfoUrl,
-              issuer: idp.config?.issuer,
             },
           });
         }
@@ -538,17 +555,29 @@ export class KeycloakImporterService {
     return grants;
   }
 
-  private mapKeycloakProviderType(providerId: string): string {
-    const map: Record<string, string> = {
-      oidc: 'OIDC',
-      'keycloak-oidc': 'OIDC',
-      google: 'OIDC',
-      github: 'OIDC',
-      facebook: 'OIDC',
-      microsoft: 'OIDC',
-      saml: 'SAML',
-    };
-    return map[providerId] ?? 'OIDC';
+  /**
+   * The Idenplane provider type of a Keycloak identity provider, with the
+   * well-known endpoints of the social providers whose export carries no
+   * URLs. Null for a type Idenplane cannot broker (`saml`, and social
+   * providers whose endpoints it does not know).
+   */
+  private mapKeycloakProviderType(providerId: string): {
+    providerType: string;
+    wellKnown?: 'google' | 'github' | 'microsoft';
+  } | null {
+    switch (providerId) {
+      case 'oidc':
+      case 'keycloak-oidc':
+        return { providerType: 'oidc' };
+      case 'google':
+        return { providerType: 'oidc', wellKnown: 'google' };
+      case 'microsoft':
+        return { providerType: 'oidc', wellKnown: 'microsoft' };
+      case 'github':
+        return { providerType: 'oauth2', wellKnown: 'github' };
+      default:
+        return null;
+    }
   }
 
   private isKeycloakBuiltinClient(clientId: string): boolean {

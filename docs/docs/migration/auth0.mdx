@@ -340,17 +340,18 @@ Auth0 connections are migrated as identity providers based on strategy:
 
 | Strategy | Idenplane Provider Type |
 |----------|---------------------|
-| `google-oauth2`, `github`, `facebook`, `microsoft`, `apple`, `linkedin`, `twitter` | OIDC |
-| `oauth2` variants | OIDC |
-| `samlp`, `adfs` | Not usable: see below |
-| any other strategy | OIDC |
+| `oidc` | `oidc`, with the connection's `authorization_endpoint`, `token_endpoint`, `userinfo_endpoint`, `jwks_uri` and `issuer` |
+| `oauth2` | `oauth2`, with the connection's `authorizationURL` and `tokenURL` |
+| `google-oauth2`, `windowslive` | `oidc`, with Google's or Microsoft's endpoints filled in |
+| `github` | `oauth2`, with GitHub's endpoints filled in |
+| `samlp`, `adfs`, `waad` and every other strategy | Not imported: listed in `warnings` |
 | `auth0` | Skipped (database connections) |
 
-:::warning SAML connections are not imported as working providers
-Idenplane brokers OpenID Connect and OAuth 2.0 identity providers only; it cannot sign users in through a SAML IdP. The importer still creates a row of type `SAML` for each `samlp` or `adfs` connection, enabled and with no endpoints, and it cannot sign anyone in. Disable or delete those rows after the import. If the IdP behind the connection also speaks OpenID Connect (ADFS and Entra ID do), create an OIDC provider for it instead.
+:::warning SAML connections are not imported
+Idenplane brokers OpenID Connect and OAuth 2.0 identity providers only; it cannot sign users in through a SAML IdP. A `samlp` or `adfs` connection is skipped, counted in `summary.identityProviders.skipped`, and named in `warnings` with the reason. If the IdP behind the connection also speaks OpenID Connect (ADFS and Entra ID do), create an OIDC provider for it instead.
 :::
 
-Every imported provider is created **enabled**, with `trustEmail` off. Auth0 social connections usually carry no `authorization_endpoint` or `token_endpoint`, so those providers have empty URLs; fill them in before you use them.
+A connection is imported only with everything the broker needs: a client ID and `http(s)` authorization and token URLs. One without them is skipped with a warning naming the missing fields. Imported providers keep `trustEmail` off; a connection exported without its client secret is imported **disabled**, with a warning, until you set the secret.
 
 ### Database Connections
 
@@ -552,7 +553,7 @@ curl -X POST "http://localhost:3000/admin/realms" \
 
 **Cause:** Database connections are skipped automatically.
 
-**Solution:** Database connections don't map to identity providers. Social and OAuth 2.0 connections are imported; SAML (`samlp`, `adfs`) connections are created but can't be used. Check the `strategy` field in your export.
+**Solution:** Database connections don't map to identity providers. OIDC, OAuth 2.0, Google, Microsoft account and GitHub connections are imported; every other strategy, SAML (`samlp`, `adfs`) included, is skipped. `warnings` names each skipped connection and why. Check the `strategy` field in your export.
 
 ### Wildcard Origins Stripped
 

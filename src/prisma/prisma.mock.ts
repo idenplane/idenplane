@@ -73,7 +73,8 @@ export function createMockPrismaService(): MockPrismaService {
       findMany: jest.fn(),
       create: jest.fn(),
       delete: jest.fn(),
-      deleteMany: jest.fn(),
+      deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+      updateMany: jest.fn().mockResolvedValue({ count: 1 }),
     },
     userConsent: {
       findUnique: jest.fn(),
@@ -473,11 +474,18 @@ export function createMockPrismaService(): MockPrismaService {
       createMany: jest.fn(),
       deleteMany: jest.fn(),
     },
+    adminRevokedToken: {
+      findUnique: jest.fn().mockResolvedValue(null),
+      findMany: jest.fn().mockResolvedValue([]),
+      upsert: jest.fn(),
+      deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+    },
     $connect: jest.fn(),
     $disconnect: jest.fn(),
     onBeforeDisconnect: jest.fn(),
     $transaction: jest.fn(),
     $queryRaw: jest.fn().mockResolvedValue([]),
+    $executeRaw: jest.fn().mockResolvedValue(0),
     $transactionAsync: jest.fn(),
   } as unknown as MockPrismaService;
 }

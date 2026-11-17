@@ -357,6 +357,18 @@ export class CreateRealmDto {
   @Min(0)
   maxSessionsPerUser?: number;
 
+  @ApiPropertyOptional({
+    default: 0,
+    description:
+      'SSO session idle timeout in seconds (Keycloak ssoSessionIdleTimeout). A browser SSO session not used for this long ends, and a normal (not offline) refresh token not used for this long expires. 0 = off (the default): sessions end only at their maximum lifetime (refreshTokenLifespan). Otherwise at least 60. Set it longer than accessTokenLifespan, or clients that refresh only when their access token expires are signed out between refreshes.',
+  })
+  @IsOptional()
+  // 0 (off) needs no further check; any other value must be at least 60.
+  @ValidateIf((_, value) => value !== 0)
+  @IsInt()
+  @Min(60, { message: 'ssoSessionIdleTimeout must be 0 (off) or at least 60' })
+  ssoSessionIdleTimeout?: number;
+
   // Theming
   @ApiPropertyOptional({
     default: 'idenplane',

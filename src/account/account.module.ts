@@ -3,11 +3,12 @@ import { AccountController } from './account.controller.js';
 import { LoginCoreModule } from '../login/login-core.module.js';
 import { ThemeModule } from '../theme/theme.module.js';
 import { WebAuthnCoreModule } from '../webauthn/webauthn-core.module.js';
+import { SessionsModule } from '../sessions/sessions.module.js';
 import { DataExportService } from './data-export.service.js';
 import { AccountDeletionService } from './account-deletion.service.js';
 
 @Module({
-  imports: [LoginCoreModule, ThemeModule, WebAuthnCoreModule],
+  imports: [LoginCoreModule, ThemeModule, WebAuthnCoreModule, SessionsModule],
   controllers: [AccountController],
   providers: [DataExportService, AccountDeletionService],
 })

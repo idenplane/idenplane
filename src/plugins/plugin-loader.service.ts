@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { existsSync, readdirSync, readFileSync } from 'fs';
 import { createHash } from 'crypto';
-import { join, resolve } from 'path';
+import { basename, dirname, join, resolve } from 'path';
 import type { IdenplanePlugin } from './plugin.interface.js';
 
 export interface DiscoveredPlugin {
@@ -145,7 +145,11 @@ export class PluginLoaderService {
         if (existsSync(candidate)) {
           // Compute SHA-256 hash BEFORE loading the plugin code
           const fileHash = this.computeFileHash(candidate);
-          const manifestHash = this.getManifestHash(candidate);
+          const manifestHash = this.getManifestHash(
+            candidate,
+            pluginPath,
+            source,
+          );
 
           if (manifestHash && fileHash && manifestHash !== fileHash) {
             this.logger.error(
@@ -161,7 +165,8 @@ export class PluginLoaderService {
               this.logger.error(
                 `Plugin '${candidate}' rejected — no manifest hash found. ` +
                   `In production, all plugins must have integrity verification. ` +
-                  `Generate a manifest with: idenplane plugins hash`,
+                  `Generate a manifest with: idenplane plugins hash --write ` +
+                  `(or --npm --write for npm plugins).`,
               );
               return null;
             }
@@ -254,17 +259,25 @@ export class PluginLoaderService {
    * Look up the expected hash for a plugin file from the manifest.
    *
    * Two manifest locations are checked in order:
-   *  1. `plugins/.manifest.json`  — for plugins loaded from the local plugins/
-   *     directory (source === 'directory').
-   *  2. `node_modules/.idenplane-plugin-manifest.json` — for npm-installed plugins
-   *     (source === 'npm').  The npm manifest uses the npm package name as its
-   *     key (e.g. "idenplane-plugin-my-plugin") in addition to the full file path.
+   *  1. `.manifest.json` in the plugins directory (`plugins/` by default) —
+   *     for plugins loaded from that directory. Keyed by the plugin's
+   *     directory name (e.g. "my-plugin"), or by the entry file's path.
+   *  2. `.idenplane-plugin-manifest.json` in `node_modules/` — for npm-installed
+   *     plugins. Keyed by the package name (e.g. "idenplane-plugin-my-plugin"),
+   *     or by the entry file's path.
    *
-   * Both manifests map file paths (absolute or relative) OR plugin names to
-   * their expected SHA-256 hashes.
+   * Values are the lowercase hex SHA-256 of the entry file. Keying by name
+   * keeps a manifest valid wherever the server runs from; `idenplane plugins
+   * hash` writes name-keyed manifests.
    */
-  private getManifestHash(filePath: string): string | null {
+  private getManifestHash(
+    filePath: string,
+    pluginPath: string,
+    source: 'directory' | 'npm',
+  ): string | null {
     const absoluteFilePath = resolve(filePath);
+    const pluginName = basename(resolve(pluginPath));
+    const parentDir = dirname(resolve(pluginPath));
 
     // Helper: look up a hash in a manifest file using several possible keys.
     const lookupInManifest = (
@@ -275,42 +288,36 @@ export class PluginLoaderService {
         if (!existsSync(manifestPath)) return null;
         const manifest = JSON.parse(
           readFileSync(manifestPath, 'utf-8'),
-        ) as Record<string, string>;
+        ) as Record<string, unknown>;
         // Try the provided path as-is, its resolved absolute form, then any
-        // extra keys (e.g. package name).
-        return (
-          manifest[filePath] ??
-          manifest[absoluteFilePath] ??
-          extraKeys.reduce<string | null>(
-            (found, key) => found ?? manifest[key] ?? null,
-            null,
-          ) ??
-          null
-        );
+        // extra keys (the plugin's directory or package name).
+        for (const key of [filePath, absoluteFilePath, ...extraKeys]) {
+          const value = manifest[key];
+          if (typeof value === 'string') return value.toLowerCase();
+        }
+        return null;
       } catch {
         return null;
       }
     };
 
-    // 1. Local plugins/ manifest
-    const localManifest = resolve(process.cwd(), 'plugins', '.manifest.json');
-    const localHash = lookupInManifest(localManifest);
+    // 1. The plugins directory's manifest.
+    const localManifest =
+      source === 'directory'
+        ? join(parentDir, '.manifest.json')
+        : resolve(process.cwd(), 'plugins', '.manifest.json');
+    const localHash = lookupInManifest(
+      localManifest,
+      source === 'directory' ? [pluginName] : [],
+    );
     if (localHash !== null) return localHash;
 
-    // 2. npm manifest — also try the package name derived from the path so
-    //    that entries like { "idenplane-plugin-foo": "<hash>" } are matched even
-    //    when the manifest was generated without full paths.
-    const npmManifest = resolve(
-      process.cwd(),
-      'node_modules',
+    // 2. The npm manifest — also keyed by package name, so that entries like
+    //    { "idenplane-plugin-foo": "<hash>" } match wherever node_modules is.
+    const npmManifest = join(
+      source === 'npm' ? parentDir : resolve(process.cwd(), 'node_modules'),
       '.idenplane-plugin-manifest.json',
     );
-    // Extract package name: last segment of node_modules/<name>/...
-    const nmDir = resolve(process.cwd(), 'node_modules');
-    let packageName: string | undefined;
-    if (absoluteFilePath.startsWith(nmDir + '/')) {
-      packageName = absoluteFilePath.slice(nmDir.length + 1).split('/')[0];
-    }
-    return lookupInManifest(npmManifest, packageName ? [packageName] : []);
+    return lookupInManifest(npmManifest, source === 'npm' ? [pluginName] : []);
   }
 }

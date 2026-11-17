@@ -106,7 +106,7 @@ Each entry below is sourced from an actual commit, PR description, or the projec
 
 **Decision**: In production (`NODE_ENV === 'production'`), the plugin loader computes a SHA-256 hash of the plugin file and refuses to load it if there's no matching manifest hash to verify against. Outside production, a missing hash only logs a warning.
 
-**Consequences**: A plugin author must record the plugin's SHA-256 hash in the plugin manifest (`plugins/.manifest.json`, for example with `sha256sum`) before a plugin will load in production — friction that's deliberate, not accidental. Development stays low-friction (warn, don't block) so local plugin iteration isn't blocked on re-hashing after every change.
+**Consequences**: A plugin's SHA-256 hash must be recorded in the plugin manifest (`plugins/.manifest.json`, or `node_modules/.idenplane-plugin-manifest.json` for npm plugins) before the plugin will load in production. `idenplane plugins hash --write` generates it: a JSON object mapping the plugin's directory or package name to the hex SHA-256 of its entry file. That friction is deliberate, not accidental. Development stays low-friction (warn, don't block) so local plugin iteration isn't blocked on re-hashing after every change.
 
 **References**: Issues #400, #430, #448, #465; commit `0f4f541` ("Plugin loader denies unverified plugins in production (#465)"); `src/plugins/plugin-loader.service.ts`.
 

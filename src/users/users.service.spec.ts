@@ -299,12 +299,29 @@ describe('UsersService', () => {
       });
     });
 
+    it("ends the user's sessions, offline ones included, after the new password is stored", async () => {
+      prisma.user.findFirst.mockResolvedValue(mockUser);
+      cryptoService.hashPassword.mockResolvedValue('new-hashed-password');
+      prisma.user.update.mockResolvedValue({});
+
+      await service.setPassword(mockRealm, 'user-1', 'newpassword');
+
+      expect(sessionsService.revokeAllUserSessions).toHaveBeenCalledWith(
+        mockRealm,
+        'user-1',
+      );
+      expect(
+        sessionsService.revokeAllUserSessions.mock.invocationCallOrder[0],
+      ).toBeGreaterThan(prisma.user.update.mock.invocationCallOrder[0]);
+    });
+
     it('should throw NotFoundException when user does not exist', async () => {
       prisma.user.findFirst.mockResolvedValue(null);
 
       await expect(
         service.setPassword(mockRealm, 'nonexistent', 'password'),
       ).rejects.toThrow(NotFoundException);
+      expect(sessionsService.revokeAllUserSessions).not.toHaveBeenCalled();
     });
   });
 });

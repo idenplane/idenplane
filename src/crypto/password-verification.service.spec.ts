@@ -1,4 +1,4 @@
-import { pbkdf2Sync, randomBytes } from 'node:crypto';
+import { randomBytes } from 'node:crypto';
 import * as argon2 from 'argon2';
 import * as bcryptjs from 'bcryptjs';
 import { CryptoService } from './crypto.service.js';
@@ -10,34 +10,8 @@ import {
   parsePbkdf2,
   verifyBcrypt,
   verifyPbkdf2,
-  type Pbkdf2Digest,
 } from './password-hash-formats.js';
-
-// Test passwords only; never real credentials.
-const PASSWORD = 'correct-horse-example-1';
-const WRONG = 'wrong-horse-example-2';
-
-const KEY_BYTES: Record<Pbkdf2Digest, number> = {
-  sha1: 20,
-  sha256: 64, // Keycloak derives 512 bits whatever the digest
-  sha512: 64,
-};
-
-function pbkdf2(
-  digest: Pbkdf2Digest,
-  password = PASSWORD,
-  iterations = 1000,
-): { salt: Buffer; hash: Buffer; iterations: number } {
-  const salt = randomBytes(16);
-  const hash = pbkdf2Sync(
-    password,
-    salt,
-    iterations,
-    KEY_BYTES[digest],
-    digest,
-  );
-  return { salt, hash, iterations };
-}
+import { PASSWORD, WRONG, pbkdf2 } from './__mocks__/password-hash-fixtures.js';
 
 describe('password hash formats', () => {
   describe('PBKDF2 (PHC form)', () => {
@@ -312,6 +286,52 @@ describe('PasswordVerificationService', () => {
     await expect(
       service.verifyUserPassword(user(stored, 'bcrypt'), PASSWORD),
     ).resolves.toBe(true);
+  });
+
+  describe('equalizeTiming (sign-in for a user that cannot be checked)', () => {
+    it('runs one real Argon2 verification against a dummy hash made once per process', async () => {
+      const hash = jest.spyOn(crypto, 'hashPassword');
+      const verify = jest.spyOn(crypto, 'verifyPassword');
+      try {
+        await expect(service.equalizeTiming(PASSWORD)).resolves.toBeUndefined();
+        await expect(service.equalizeTiming(WRONG)).resolves.toBeUndefined();
+        expect(hash).toHaveBeenCalledTimes(1);
+        expect(verify).toHaveBeenCalledTimes(2);
+        const [dummy, presented] = verify.mock.calls[0];
+        expect(dummy).toMatch(/^\$argon2id\$/);
+        expect(presented).toBe(PASSWORD);
+        // The dummy is a hash of a random secret, never of the password.
+        await expect(crypto.verifyPassword(dummy, PASSWORD)).resolves.toBe(
+          false,
+        );
+      } finally {
+        hash.mockRestore();
+        verify.mockRestore();
+      }
+    });
+
+    it('caps the presented password at the length limit', async () => {
+      const verify = jest.spyOn(crypto, 'verifyPassword');
+      try {
+        await service.equalizeTiming('x'.repeat(100_000));
+        expect(verify.mock.calls[0][1].length).toBeLessThanOrEqual(1024);
+      } finally {
+        verify.mockRestore();
+      }
+    });
+
+    it('never throws, and retries making the dummy hash after a failure', async () => {
+      const hash = jest
+        .spyOn(crypto, 'hashPassword')
+        .mockRejectedValueOnce(new Error('argon2 unavailable'));
+      try {
+        await expect(service.equalizeTiming(PASSWORD)).resolves.toBeUndefined();
+        await expect(service.equalizeTiming(PASSWORD)).resolves.toBeUndefined();
+        expect(hash).toHaveBeenCalledTimes(2);
+      } finally {
+        hash.mockRestore();
+      }
+    });
   });
 });
 

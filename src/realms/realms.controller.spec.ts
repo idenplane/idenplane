@@ -1,6 +1,8 @@
 jest.mock('../crypto/jwk.service.js', () => ({ JwkService: jest.fn() }));
 
+import { BadRequestException } from '@nestjs/common';
 import { RealmsController } from './realms.controller.js';
+import { EmailDeliveryException } from '../email/email-delivery.exception.js';
 
 describe('RealmsController', () => {
   let controller: RealmsController;
@@ -13,7 +15,7 @@ describe('RealmsController', () => {
   };
   let exportService: { exportRealm: jest.Mock };
   let importService: { importRealm: jest.Mock };
-  let emailService: { isConfigured: jest.Mock; sendEmail: jest.Mock };
+  let emailService: { sendTestMessage: jest.Mock; sendTestEmail: jest.Mock };
   let themeService: { getAvailableThemes: jest.Mock };
   let themeEmail: { getSubject: jest.Mock; renderEmail: jest.Mock };
 
@@ -27,7 +29,7 @@ describe('RealmsController', () => {
     };
     exportService = { exportRealm: jest.fn() };
     importService = { importRealm: jest.fn() };
-    emailService = { isConfigured: jest.fn(), sendEmail: jest.fn() };
+    emailService = { sendTestMessage: jest.fn(), sendTestEmail: jest.fn() };
     themeService = { getAvailableThemes: jest.fn() };
     themeEmail = { getSubject: jest.fn(), renderEmail: jest.fn() };
 
@@ -219,43 +221,55 @@ describe('RealmsController', () => {
   });
 
   describe('sendTestEmail', () => {
-    it('should return error when "to" is missing', async () => {
-      const result = await controller.sendTestEmail('my-realm', '');
-      expect(result).toEqual({
-        success: false,
-        error: 'Missing "to" email address',
-      });
-    });
+    it.each([[''], [undefined], ['not-an-email'], [42]])(
+      'is a 400 when "to" is %p',
+      async (to) => {
+        await expect(
+          controller.sendTestEmail('my-realm', to),
+        ).rejects.toBeInstanceOf(BadRequestException);
+        expect(emailService.sendTestMessage).not.toHaveBeenCalled();
+      },
+    );
 
-    it('should return error when SMTP is not configured', async () => {
-      emailService.isConfigured.mockResolvedValue(false);
-
-      const result = await controller.sendTestEmail(
-        'my-realm',
-        'user@example.com',
+    it('passes a delivery failure through as an error, never a 200', async () => {
+      realmsService.findByName.mockResolvedValue({ name: 'my-realm' });
+      themeEmail.getSubject.mockReturnValue('Subject');
+      themeEmail.renderEmail.mockReturnValue('<p>x</p>');
+      emailService.sendTestMessage.mockRejectedValue(
+        new EmailDeliveryException('The test email could not be sent: x'),
       );
 
-      expect(result).toEqual({
-        success: false,
-        error: 'SMTP is not configured for this realm',
-      });
-      expect(emailService.isConfigured).toHaveBeenCalledWith('my-realm');
+      await expect(
+        controller.sendTestEmail('my-realm', 'user@example.com'),
+      ).rejects.toBeInstanceOf(EmailDeliveryException);
+    });
+
+    it('accepts an address without a TLD, as dev mail catchers use', async () => {
+      realmsService.findByName.mockResolvedValue({ name: 'my-realm' });
+      emailService.sendTestMessage.mockResolvedValue(undefined);
+
+      await controller.sendTestEmail('my-realm', 'admin@localhost');
+
+      expect(emailService.sendTestMessage).toHaveBeenCalledWith(
+        'my-realm',
+        'admin@localhost',
+        undefined,
+        undefined,
+      );
     });
 
     it('should send test email and return success message', async () => {
       const realm = { id: 'r1', name: 'my-realm', theme: 'default' };
-      emailService.isConfigured.mockResolvedValue(true);
       realmsService.findByName.mockResolvedValue(realm);
       themeEmail.getSubject.mockReturnValue('Test Email Subject');
       themeEmail.renderEmail.mockReturnValue('<h1>Test</h1>');
-      emailService.sendEmail.mockResolvedValue(undefined);
+      emailService.sendTestMessage.mockResolvedValue(undefined);
 
       const result = await controller.sendTestEmail(
         'my-realm',
         'user@example.com',
       );
 
-      expect(emailService.isConfigured).toHaveBeenCalledWith('my-realm');
       expect(realmsService.findByName).toHaveBeenCalledWith('my-realm');
       expect(themeEmail.getSubject).toHaveBeenCalledWith(
         realm,
@@ -266,7 +280,7 @@ describe('RealmsController', () => {
         'test-email',
         {},
       );
-      expect(emailService.sendEmail).toHaveBeenCalledWith(
+      expect(emailService.sendTestMessage).toHaveBeenCalledWith(
         'my-realm',
         'user@example.com',
         'Test Email Subject',

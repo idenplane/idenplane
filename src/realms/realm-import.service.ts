@@ -35,6 +35,10 @@ import { MASTER_REALM } from './realm.constants.js';
 import { signingKeySecrets } from '../crypto/signing-key-secrets.js';
 import { wildcardRedirectUris } from '../common/redirect-uri.utils.js';
 import { idpSecrets } from '../identity-providers/idp-secrets.js';
+import {
+  supportedIdpProviderType,
+  unsupportedIdpTypeReason,
+} from '../identity-providers/idp-provider-types.js';
 import { federationSecrets } from '../user-federation/federation-secrets.js';
 import { STREAM_HEADERS_SHAPE } from '../events/audit-stream-secrets.js';
 import { SSO_CONFIG_SHAPE } from '../organizations/sso-connection-secrets.js';
@@ -616,7 +620,21 @@ export class RealmImportService {
     }
 
     // ── Identity providers and federation ──
-    const idps = items(payload, 'identityProviders');
+    // Only types the broker can sign in with (oidc, oauth2) are stored; a
+    // SAML or unknown type is skipped with a warning, never stored.
+    const idps: Item[] = [];
+    for (const idp of items(payload, 'identityProviders')) {
+      const providerType = supportedIdpProviderType(
+        idp['providerType'] ?? 'oidc',
+      );
+      if (!providerType) {
+        warnings.push(
+          `identity provider '${idp['alias'] as string}': not imported, ${unsupportedIdpTypeReason(idp['providerType'])}`,
+        );
+        continue;
+      }
+      idps.push({ ...idp, providerType });
+    }
     await tx.identityProvider.createMany({
       data: many<Prisma.IdentityProviderCreateManyInput>(
         'IdentityProvider',

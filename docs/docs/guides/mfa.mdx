@@ -210,6 +210,8 @@ curl -X DELETE "http://localhost:3000/admin/realms/my-realm/users/${USER_ID}/mfa
 
 This removes every second factor (authenticator app and SMS phone) and the recovery codes. To remove only one factor, use `DELETE .../mfa/totp` or `DELETE .../mfa/sms`; the recovery codes are kept while the user still has another factor.
 
+Each of these routes also **signs the user out everywhere** (since 0.12.0): every OAuth session ends and its refresh tokens are revoked, offline tokens included, and every browser SSO and forward-auth proxy session ends. Whoever signed in with the removed factor, or got past it, has to sign in again. Access tokens already issued stay valid until they expire.
+
 :::caution MFA Step-Up Required
 This operation requires the administrator to have MFA-verified session. API key authentication is not permitted for disabling user MFA.
 :::

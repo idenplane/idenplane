@@ -7,6 +7,7 @@ import type { Realm } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { CryptoService } from '../crypto/crypto.service.js';
 import { idpSecrets } from './idp-secrets.js';
+import { supportedIdpProviderType } from './idp-provider-types.js';
 import type { CreateIdentityProviderDto } from './dto/create-identity-provider.dto.js';
 import type { UpdateIdentityProviderDto } from './dto/update-identity-provider.dto.js';
 
@@ -33,7 +34,7 @@ export class IdentityProvidersService {
         alias: dto.alias,
         displayName: dto.displayName,
         enabled: dto.enabled ?? true,
-        providerType: dto.providerType ?? 'oidc',
+        providerType: supportedIdpProviderType(dto.providerType) ?? 'oidc',
         clientId: dto.clientId,
         clientSecret: idpSecrets.forCreate(this.crypto, dto.clientSecret),
         authorizationUrl: dto.authorizationUrl,
@@ -87,6 +88,12 @@ export class IdentityProvidersService {
       where: { realmId_alias: { realmId: realm.id, alias } },
       data: {
         ...dto,
+        ...(dto.providerType !== undefined
+          ? {
+              providerType:
+                supportedIdpProviderType(dto.providerType) ?? 'oidc',
+            }
+          : {}),
         clientSecret: idpSecrets.forUpdate(this.crypto, dto.clientSecret),
       },
     });

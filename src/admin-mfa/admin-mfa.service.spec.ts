@@ -36,6 +36,7 @@ describe('AdminMfaService', () => {
   let events: { recordAdminEvent: jest.Mock; recordLoginEvent: jest.Mock };
   let principals: { adminMfaPolicy: jest.Mock };
   let env: Record<string, string | undefined>;
+  let sessions: { revokeAllUserSessions: jest.Mock };
   let service: AdminMfaService;
 
   beforeEach(() => {
@@ -93,6 +94,9 @@ describe('AdminMfaService', () => {
         .mockResolvedValue({ required: false, source: 'setting' }),
     };
     env = { BASE_URL: 'https://id.example.com' };
+    sessions = {
+      revokeAllUserSessions: jest.fn().mockResolvedValue(undefined),
+    };
     service = new AdminMfaService(
       prisma,
       crypto as any,
@@ -102,6 +106,7 @@ describe('AdminMfaService', () => {
       events as any,
       principals as any,
       { get: (k: string) => env[k] } as any,
+      sessions as any,
     );
   });
 
@@ -412,6 +417,11 @@ describe('AdminMfaService', () => {
       expect(prisma.webAuthnCredential.deleteMany).toHaveBeenCalledWith({
         where: { userId: 'admin-2' },
       });
+      // Signed out everywhere, console tokens included.
+      expect(sessions.revokeAllUserSessions).toHaveBeenCalledWith(
+        master,
+        'admin-2',
+      );
       expect(events.recordAdminEvent).toHaveBeenCalledWith({
         realmId: 'master-id',
         adminUserId: 'api-key:admin',
@@ -438,6 +448,7 @@ describe('AdminMfaService', () => {
         BadRequestException,
       );
       expect(mfa.disableAllFactors).not.toHaveBeenCalled();
+      expect(sessions.revokeAllUserSessions).not.toHaveBeenCalled();
     });
   });
 

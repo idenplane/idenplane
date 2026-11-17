@@ -281,7 +281,9 @@ describe('AuthentikImporterService', () => {
       }),
     });
     expect(
-      report.warnings.some((w) => w.message.includes("Source 'corp-saml'")),
+      report.warnings.some((w) =>
+        w.message.includes("Identity provider 'corp-saml' was not imported"),
+      ),
     ).toBe(true);
   });
 

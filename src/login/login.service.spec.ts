@@ -106,6 +106,7 @@ function passwordsBackedBy(crypto: { verifyPassword: jest.Mock }) {
   return {
     verifyUserPassword: (user: { passwordHash: string }, password: string) =>
       crypto.verifyPassword(user.passwordHash, password),
+    equalizeTiming: jest.fn().mockResolvedValue(undefined),
   };
 }
 
@@ -535,6 +536,34 @@ describe('LoginService', () => {
         ).rejects.toThrow(UnauthorizedException);
       });
 
+      it('spends a password check on an unknown or disabled user (timing)', async () => {
+        const passwords = passwordsBackedBy(crypto);
+        const serviceNoFed = new LoginService(
+          prisma as any,
+          crypto as any,
+          bruteForce as any,
+          passwords as any,
+          undefined,
+        );
+
+        prisma.user.findUnique.mockResolvedValue(null);
+        await expect(
+          serviceNoFed.validateCredentials(realm, 'nonexistent', 'pw-1'),
+        ).rejects.toThrow(UnauthorizedException);
+        expect(passwords.equalizeTiming).toHaveBeenCalledWith('pw-1');
+
+        prisma.user.findUnique.mockResolvedValue({
+          id: 'u-1',
+          enabled: false,
+          passwordHash: '$argon2id$dummy',
+          federationLink: null,
+        });
+        await expect(
+          serviceNoFed.validateCredentials(realm, 'disabled', 'pw-2'),
+        ).rejects.toThrow(UnauthorizedException);
+        expect(passwords.equalizeTiming).toHaveBeenCalledWith('pw-2');
+      });
+
       it('should not call federation service when it is not injected', async () => {
         const serviceNoFed = new LoginService(
           prisma as any,
@@ -806,6 +835,127 @@ describe('LoginService', () => {
       );
 
       expect(result).toBeNull();
+    });
+
+    describe('the SSO idle timeout', () => {
+      const idleRealm = { ...realm, ssoSessionIdleTimeout: 1800 } as Realm;
+      const minutesAgo = (m: number) => new Date(Date.now() - m * 60_000);
+
+      it('ends a session unused for longer than the idle timeout', async () => {
+        prisma.loginSession.findUnique.mockResolvedValue({
+          ...validSession,
+          lastActivityAt: minutesAgo(31),
+        });
+
+        await expect(
+          service.validateLoginSession(idleRealm, 'raw-session-token'),
+        ).resolves.toBeNull();
+        // Deleted at once, so raising the timeout cannot revive it.
+        expect(prisma.loginSession.deleteMany).toHaveBeenCalledWith({
+          where: { id: 'session-1' },
+        });
+        expect(prisma.loginSession.updateMany).not.toHaveBeenCalled();
+      });
+
+      it('keeps a session used within the idle timeout', async () => {
+        prisma.loginSession.findUnique.mockResolvedValue({
+          ...validSession,
+          lastActivityAt: minutesAgo(29),
+        });
+
+        await expect(
+          service.validateLoginSession(idleRealm, 'raw-session-token'),
+        ).resolves.toEqual(dbUser);
+        expect(prisma.loginSession.deleteMany).not.toHaveBeenCalled();
+      });
+
+      it('ignores idleness while the timeout is off', async () => {
+        prisma.loginSession.findUnique.mockResolvedValue({
+          ...validSession,
+          lastActivityAt: minutesAgo(600),
+        });
+
+        await expect(
+          service.validateLoginSession(
+            { ...realm, ssoSessionIdleTimeout: 0 } as Realm,
+            'raw-session-token',
+          ),
+        ).resolves.toEqual(dbUser);
+      });
+
+      it('records the use, at most once a minute, with a conditional write', async () => {
+        prisma.loginSession.findUnique.mockResolvedValue({
+          ...validSession,
+          lastActivityAt: minutesAgo(5),
+        });
+
+        await service.validateLoginSession(idleRealm, 'raw-session-token');
+
+        expect(prisma.loginSession.updateMany).toHaveBeenCalledTimes(1);
+        const call = prisma.loginSession.updateMany.mock.calls[0][0];
+        expect(call.where.id).toBe('session-1');
+        // Only a row whose stored time is still old is written: of several
+        // concurrent requests, one writes.
+        expect(call.where.lastActivityAt.lt.getTime()).toBeGreaterThan(
+          Date.now() - 61_000,
+        );
+        expect(call.data.lastActivityAt).toBeInstanceOf(Date);
+      });
+
+      it('writes nothing while the recorded use is recent', async () => {
+        prisma.loginSession.findUnique.mockResolvedValue({
+          ...validSession,
+          lastActivityAt: new Date(Date.now() - 10_000),
+        });
+
+        await service.validateLoginSession(idleRealm, 'raw-session-token');
+
+        expect(prisma.loginSession.updateMany).not.toHaveBeenCalled();
+      });
+
+      it('records the use even while the timeout is off', async () => {
+        prisma.loginSession.findUnique.mockResolvedValue({
+          ...validSession,
+          lastActivityAt: minutesAgo(5),
+        });
+
+        await service.validateLoginSession(realm, 'raw-session-token');
+
+        expect(prisma.loginSession.updateMany).toHaveBeenCalledTimes(1);
+      });
+
+      it('records nothing for a session it refuses', async () => {
+        prisma.loginSession.findUnique.mockResolvedValue({
+          ...validSession,
+          lastActivityAt: minutesAgo(5),
+          user: { ...dbUser, enabled: false },
+        });
+
+        await service.validateLoginSession(idleRealm, 'raw-session-token');
+
+        expect(prisma.loginSession.updateMany).not.toHaveBeenCalled();
+      });
+
+      it('leaves idle sessions out of the per-user cap', async () => {
+        prisma.loginSession.create.mockResolvedValue({
+          id: 'session-new',
+          createdAt: new Date(),
+        });
+        prisma.loginSession.findMany.mockResolvedValue([]);
+
+        await service.createLoginSession(
+          { ...idleRealm, maxSessionsPerUser: 2 } as Realm,
+          dbUser,
+        );
+
+        const where = prisma.loginSession.findMany.mock.calls[0][0].where;
+        expect(where.lastActivityAt.gte.getTime()).toBeLessThanOrEqual(
+          Date.now() - 1800_000,
+        );
+        expect(where.lastActivityAt.gte.getTime()).toBeGreaterThan(
+          Date.now() - 1801_000,
+        );
+      });
     });
 
     // A realm that requires MFA only accepts sessions with a second factor

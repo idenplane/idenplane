@@ -105,7 +105,7 @@ Flows run during real logins: `FlowRuntimeService` (`src/auth-flow/flow-runtime.
 - **`token-enrichment`** — add custom claims to issued tokens
 - **`theme`** — supply templates/styles for an alternate look
 
-Plugins are discovered from two sources: a local `plugins/<name>/` directory (each with its own manifest + entry file) or npm packages installed in `node_modules` matching the `idenplane-plugin-*` naming convention. `PluginLoaderService` scans both at startup; `PluginRegistry` holds the loaded instances; `PluginManagerService` handles install/enable/disable/uninstall lifecycle calls.
+Plugins are discovered from two sources: a local `plugins/<name>/` directory (each with its own entry file: `index.js`, `dist/index.js` or `index.ts`) or npm packages installed in `node_modules` matching the `idenplane-plugin-*` naming convention. Before importing a plugin, `PluginLoaderService` checks the SHA-256 of its entry file against an integrity manifest (`plugins/.manifest.json`, or `node_modules/.idenplane-plugin-manifest.json`) written by `idenplane plugins hash --write`; in production a plugin without a matching entry is not loaded (ADR-007). It scans both sources at startup; `PluginRegistry` holds the loaded instances; `PluginManagerService` handles install/enable/disable/uninstall lifecycle calls.
 
 ---
 

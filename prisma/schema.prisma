@@ -218,7 +218,12 @@ model Realm {
   supportedLocales String[] @default(["en"]) @map("supported_locales")
 
   // Session management
-  maxSessionsPerUser Int @default(10) @map("max_sessions_per_user")
+  maxSessionsPerUser    Int @default(10) @map("max_sessions_per_user")
+  /// SSO session idle timeout in seconds (Keycloak `ssoSessionIdleTimeout`):
+  /// a browser SSO session not used for this long ends, and a normal (not
+  /// offline) refresh token not used for this long expires. 0 turns it off
+  /// (the default); sessions then end only at their maximum lifetime.
+  ssoSessionIdleTimeout Int @default(0) @map("sso_session_idle_timeout")
 
   // Adaptive authentication / risk assessment
   adaptiveAuthEnabled Boolean @default(false) @map("adaptive_auth_enabled")
@@ -659,8 +664,12 @@ model LoginSession {
   /// The authentication methods (RFC 8176) performed to establish the session.
   amr          String[] @default([]) @map("amr")
 
-  createdAt DateTime @default(now()) @map("created_at")
-  expiresAt DateTime @map("expires_at")
+  createdAt      DateTime @default(now()) @map("created_at")
+  expiresAt      DateTime @map("expires_at")
+  /// When the session was last used (an authorization request or another
+  /// hosted page reading the cookie), for the realm's SSO idle timeout.
+  /// Written at most once a minute per session (sessions/session-lifetime.ts).
+  lastActivityAt DateTime @default(now()) @map("last_activity_at")
 
   user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
   realm Realm @relation(fields: [realmId], references: [id], onDelete: Cascade)

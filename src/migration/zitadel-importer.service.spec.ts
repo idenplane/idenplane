@@ -245,13 +245,15 @@ describe('ZitadelImporterService', () => {
       expect.objectContaining({
         data: expect.objectContaining({
           alias: 'corp-oidc',
-          providerType: 'OIDC',
+          providerType: 'oidc',
           clientId: 'idp-client',
         }),
       }),
     );
     expect(
-      report.warnings.some((w) => w.message.includes("IdP 'corp-google'")),
+      report.warnings.some((w) =>
+        w.message.includes("Identity provider 'corp-google' was not imported"),
+      ),
     ).toBe(true);
   });
 
@@ -282,6 +284,7 @@ describe('ZitadelImporterService', () => {
     expect(report.summary.users.skipped).toBe(2);
     expect(report.summary.clients.skipped).toBe(1);
     expect(report.summary.roles.skipped).toBe(2);
-    expect(report.summary.identityProviders.skipped).toBe(1);
+    // The existing OIDC IdP, plus the SAML one that is never imported.
+    expect(report.summary.identityProviders.skipped).toBe(2);
   });
 });

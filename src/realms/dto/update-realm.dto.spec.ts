@@ -71,3 +71,29 @@ describe('UpdateRealmDto captchaScoreThreshold validation', () => {
     ).toHaveLength(0);
   });
 });
+
+describe('UpdateRealmDto ssoSessionIdleTimeout', () => {
+  const errors = async (value: unknown) => {
+    const dto = plainToInstance(UpdateRealmDto, {
+      ssoSessionIdleTimeout: value,
+    });
+    return (await validate(dto)).filter(
+      (e) => e.property === 'ssoSessionIdleTimeout',
+    );
+  };
+
+  it('accepts 0 (off), 60 and more, and leaving it out', async () => {
+    expect(await errors(0)).toHaveLength(0);
+    expect(await errors(60)).toHaveLength(0);
+    expect(await errors(1800)).toHaveLength(0);
+    expect(
+      (await validate(plainToInstance(UpdateRealmDto, {}))).filter(
+        (e) => e.property === 'ssoSessionIdleTimeout',
+      ),
+    ).toHaveLength(0);
+  });
+
+  it.each([1, 59, -1, 1.5, '1800'])('refuses %p', async (value) => {
+    expect(await errors(value)).toHaveLength(1);
+  });
+});

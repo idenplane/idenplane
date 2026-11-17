@@ -159,6 +159,7 @@ export const EXPORT_MODELS = {
       defaultLocale: 'String @default',
       supportedLocales: 'String[] @default',
       maxSessionsPerUser: 'Int @default',
+      ssoSessionIdleTimeout: 'Int @default',
       adaptiveAuthEnabled: 'Boolean @default',
       riskThresholdStepUp: 'Int @default',
       riskThresholdBlock: 'Int @default',

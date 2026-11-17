@@ -4,11 +4,18 @@ name: OpenSSF Scorecard
 # branch protection, signed releases, ...). Results go to the code-scanning
 # tab as SARIF and are published to the public Scorecard API, which backs
 # the badge in the README. Scorecard only evaluates the default branch (dev).
+#
+# It starts when "Gradle wrapper validation" (android-gradle-wrapper.yml)
+# completes on dev, not on the push itself: Scorecard's Binary-Artifacts
+# check only discounts the two gradle-wrapper.jar files when that workflow
+# already has a successful run on the commit being scanned, and on push it
+# never had one yet (alerts 86/87). That workflow runs on every push to dev
+# and weekly, so this still runs for every dev commit and every week.
 on:
   branch_protection_rule:
-  schedule:
-    - cron: '27 5 * * 1' # Mondays 05:27 UTC
-  push:
+  workflow_run:
+    workflows: ['Gradle wrapper validation']
+    types: [completed]
     branches: [dev]
   workflow_dispatch:
 
@@ -18,6 +25,10 @@ permissions: read-all
 jobs:
   analysis:
     name: Scorecard analysis
+    # A pull request from the dev branch (the dev -> main sync) that touches
+    # the wrappers also completes that workflow with head branch dev; only
+    # scan after the push and scheduled runs.
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.event != 'pull_request'
     runs-on: ubuntu-latest
     permissions:
       security-events: write   # upload the SARIF to code scanning

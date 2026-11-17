@@ -362,6 +362,10 @@ describe('Realm export/import, format 2 (e2e)', () => {
     await p.identityProvider.create({
       data: {
         ...(generated('IdentityProvider') as any),
+        // Import keeps only types the broker supports; 'oauth2' is one, and
+        // not the column's default, so the round trip still proves it is
+        // exported.
+        providerType: 'oauth2',
         clientSecret: 'idp-secret',
         realmId,
       },

@@ -89,7 +89,8 @@ Creates a new realm. Requires `super-admin` role.
 | `accessTokenLifespan` | integer | No | Access token lifetime in seconds (default `300`) |
 | `refreshTokenLifespan` | integer | No | Refresh token lifetime in seconds (default `1800`) |
 | `offlineTokenLifespan` | integer | No | Lifetime of an offline session and its `offline_access` refresh tokens, counted from sign-in (default `2592000`, 30 days). There is no separate offline idle timeout. |
-| `maxSessionsPerUser` | integer | No | Concurrent sessions per user (default `10`) |
+| `maxSessionsPerUser` | integer | No | Concurrent sessions per user (default `10`, `0` = no limit). The oldest is ended when a new one would go over. Offline sessions don't count and are never ended by it. |
+| `ssoSessionIdleTimeout` | integer | No | Idle timeout in seconds (default `0`, off). A browser SSO session not used for this long ends, and a normal refresh token not used for this long expires; offline tokens are not affected. `0` or at least `60`; make it longer than `accessTokenLifespan`. See [Idle timeout](../configuration/options.md#idle-timeout). |
 | `bruteForceEnabled` | boolean | No | Temporary lockout after repeated failed sign-ins. Defaults to `true` for a new realm. |
 | `maxLoginFailures` | integer | No | Failures within `failureResetTime` that lock the account (default `10`) |
 | `lockoutDuration` | integer | No | Lockout length in seconds (default `300`) |
@@ -521,7 +522,22 @@ curl -X POST "http://localhost:3000/admin/realms/partner-portal/email/test" \
 }
 ```
 
-A missing `to` or a realm without e-mail settings also returns HTTP 200, with `{"success": false, "error": "..."}`. `POST /admin/realms/:realmName/smtp/test` sends a test message to the realm's own sender address.
+HTTP 200 means the provider accepted the message. When it was not sent the response is an error with the reason in `message`:
+
+| Status | When |
+|--------|------|
+| `400` | `to` is missing or not an email address, or the realm has no usable email settings |
+| `404` | The realm does not exist |
+| `502` | The email provider refused the message or could not be reached. The message names the likely cause (credentials, connection, a refused address) without the provider's own error text, which goes to the server log. |
+
+```json
+{
+  "statusCode": 502,
+  "message": "The test email could not be sent: could not connect to the mail server. Check the host, port and TLS setting."
+}
+```
+
+`POST /admin/realms/:realmName/smtp/test` sends a test message to the realm's own sender address, answers `{"success": true}`, and fails the same way.
 
 ## Realm Object Schema
 
@@ -543,6 +559,7 @@ A missing `to` or a realm without e-mail settings also returns HTTP 200, with `{
   "refreshTokenLifespan": "integer (seconds)",
   "offlineTokenLifespan": "integer (seconds)",
   "maxSessionsPerUser": "integer",
+  "ssoSessionIdleTimeout": "integer (seconds, 0 = off)",
   "bruteForceEnabled": "boolean",
   "maxLoginFailures": "integer",
   "lockoutDuration": "integer (seconds)",

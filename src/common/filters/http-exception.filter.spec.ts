@@ -4,6 +4,7 @@ import {
   prismaClientError,
 } from './http-exception.filter.js';
 import { CertificateBindingError } from '../../mtls/certificate-binding.js';
+import { EmailDeliveryException } from '../../email/email-delivery.exception.js';
 
 describe('GlobalExceptionFilter', () => {
   let filter: GlobalExceptionFilter;
@@ -178,6 +179,32 @@ describe('GlobalExceptionFilter', () => {
       const jsonArg = mockResponse.json.mock.calls[0][0];
       expect(jsonArg.message).toBe('Internal server error');
       expect(JSON.stringify(jsonArg)).not.toContain('DB_FAIL');
+    });
+
+    it('keeps the message of a 5xx that marks it safe to show (EmailDeliveryException)', () => {
+      filter.catch(
+        new EmailDeliveryException('The test email could not be sent: x'),
+        mockHost,
+      );
+
+      expect(mockResponse.status).toHaveBeenCalledWith(502);
+      expect(mockResponse.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          statusCode: 502,
+          message: 'The test email could not be sent: x',
+        }),
+      );
+    });
+
+    it('still hides the message of an ordinary 502', () => {
+      filter.catch(
+        new HttpException('upstream said: secret', HttpStatus.BAD_GATEWAY),
+        mockHost,
+      );
+
+      expect(mockResponse.json).toHaveBeenCalledWith(
+        expect.objectContaining({ message: 'Internal server error' }),
+      );
     });
 
     it('should still expose specific messages for 4xx errors in production', () => {

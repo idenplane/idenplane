@@ -12,8 +12,10 @@ import {
   HttpStatus,
   UseGuards,
   Req,
+  BadRequestException,
 } from '@nestjs/common';
 import type { Request } from 'express';
+import { isEmail } from 'class-validator';
 import {
   ApiTags,
   ApiOperation,
@@ -248,10 +250,25 @@ export class RealmsController {
 
   @Post(':realmName/smtp/test')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Test SMTP configuration' })
-  @ApiResponse({ status: 200, description: 'SMTP test result' })
+  @ApiOperation({
+    summary: 'Test the email configuration',
+    description:
+      "Sends a test message to the realm's own sender address through the " +
+      'configured email provider.',
+  })
+  @ApiResponse({ status: 200, description: 'The test message was sent' })
+  @ApiResponse({
+    status: 400,
+    description: 'Email is not configured for this realm',
+  })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Realm not found' })
+  @ApiResponse({
+    status: 502,
+    description:
+      'The email provider refused the message or could not be reached. ' +
+      'The message names the likely cause; details are in the server log.',
+  })
   async testSmtp(@Param('realmName') realmName: string) {
     return this.emailService.sendTestEmail(realmName);
   }
@@ -259,24 +276,32 @@ export class RealmsController {
   @Post(':realmName/email/test')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Send a test email' })
-  @ApiResponse({ status: 200, description: 'Test email result' })
+  @ApiResponse({ status: 200, description: 'The test email was sent' })
+  @ApiResponse({
+    status: 400,
+    description:
+      'Missing or invalid "to", or email is not configured for this realm',
+  })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Realm not found' })
+  @ApiResponse({
+    status: 502,
+    description:
+      'The email provider refused the message or could not be reached. ' +
+      'The message names the likely cause; details are in the server log.',
+  })
   async sendTestEmail(
     @Param('realmName') realmName: string,
-    @Body('to') to: string,
+    @Body('to') to: unknown,
   ) {
-    if (!to) {
-      return { success: false, error: 'Missing "to" email address' };
-    }
-    const configured = await this.emailService.isConfigured(realmName);
-    if (!configured) {
-      return { success: false, error: 'SMTP is not configured for this realm' };
+    // No TLD required: dev mail catchers (Mailpit, MailHog) take admin@localhost.
+    if (typeof to !== 'string' || !isEmail(to, { require_tld: false })) {
+      throw new BadRequestException('"to" must be an email address');
     }
     const realm = await this.realmsService.findByName(realmName);
     const subject = this.themeEmail.getSubject(realm, 'testEmailSubject');
     const html = this.themeEmail.renderEmail(realm, 'test-email', {});
-    await this.emailService.sendEmail(realmName, to, subject, html);
+    await this.emailService.sendTestMessage(realmName, to, subject, html);
     return { success: true, message: 'Test email sent successfully' };
   }
 }

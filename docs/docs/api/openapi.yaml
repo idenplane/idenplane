@@ -18,7 +18,7 @@ info:
     ## Rate Limiting
 
     Some endpoints are rate-limited. See specific endpoint documentation for details.
-  version: 0.11.1
+  version: 0.12.0
   contact:
     name: Idenplane Project
     url: https://github.com/idenplane/idenplane/blob/main/SUPPORT.md
@@ -321,11 +321,16 @@ paths:
                     type: string
                     example: Test email sent successfully
         '400':
-          description: Missing recipient or SMTP not configured
+          description: Missing or invalid recipient, or email not configured for the realm
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
+        '502':
+          description: >-
+            The email provider refused the message or could not be reached.
+            `message` names the likely cause; the provider's error is only
+            logged.
 
   /admin/realms/import:
     post:

@@ -22,6 +22,7 @@ import {
 import { LoginService } from '../login/login.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { CryptoService } from '../crypto/crypto.service.js';
+import { PasswordVerificationService } from '../crypto/password-verification.service.js';
 import { PasswordPolicyService } from '../password-policy/password-policy.service.js';
 import { MfaService, MFA_ENROLLMENT_COOKIE } from '../mfa/mfa.service.js';
 import {
@@ -40,6 +41,7 @@ import { EmailService } from '../email/email.service.js';
 import { escapeHtml } from '../common/utils/html-escape.util.js';
 import { resolveClientIp } from '../common/utils/proxy-ip.util.js';
 import { SESSION_COOKIE } from '../authn-core/cookies.js';
+import { SessionsService } from '../sessions/sessions.service.js';
 
 @ApiExcludeController()
 @Controller('realms/:realmName/account')
@@ -52,6 +54,7 @@ export class AccountController {
     private readonly loginService: LoginService,
     private readonly prisma: PrismaService,
     private readonly crypto: CryptoService,
+    private readonly passwords: PasswordVerificationService,
     private readonly passwordPolicyService: PasswordPolicyService,
     private readonly mfaService: MfaService,
     private readonly themeRender: ThemeRenderService,
@@ -61,6 +64,7 @@ export class AccountController {
     private readonly csrfService: CsrfService,
     private readonly emailService: EmailService,
     private readonly smsOtp: SmsOtpService,
+    private readonly sessions: SessionsService,
   ) {}
 
   /** Set a fresh CSRF cookie and return the token for embedding in the form. */
@@ -311,8 +315,8 @@ export class AccountController {
       );
     }
 
-    const valid = await this.crypto.verifyPassword(
-      user.passwordHash,
+    const valid = await this.passwords.verifyUserPassword(
+      user,
       currentPassword,
     );
     if (!valid) {
@@ -349,6 +353,18 @@ export class AccountController {
       passwordHash,
       realm.passwordHistoryCount,
     );
+
+    // Sign out everywhere else: whoever knew the old password may hold a
+    // session opened with it. Every other SSO session, every OAuth session
+    // (offline ones included) and every proxy session ends; this browser's
+    // SSO session is kept, so the user stays signed in here and their apps
+    // can sign them in again silently through it.
+    const currentSession = req.cookies?.[SESSION_COOKIE] as string | undefined;
+    await this.sessions.revokeAllUserSessions(realm, user.id, {
+      keepLoginSessionTokenHash: currentSession
+        ? this.crypto.sha256(currentSession)
+        : undefined,
+    });
 
     void this.sendPasswordChangedEmail(realm.name, user, req);
 
@@ -688,8 +704,8 @@ export class AccountController {
         if (user.passwordHash) {
           const valid =
             !!body['currentPassword'] &&
-            (await this.crypto.verifyPassword(
-              user.passwordHash,
+            (await this.passwords.verifyUserPassword(
+              user,
               body['currentPassword'],
             ));
           if (!valid) {
@@ -880,10 +896,7 @@ export class AccountController {
     }
     const valid =
       !!body['currentPassword'] &&
-      (await this.crypto.verifyPassword(
-        user.passwordHash,
-        body['currentPassword'],
-      ));
+      (await this.passwords.verifyUserPassword(user, body['currentPassword']));
     if (!valid) return accountError('Password is incorrect.');
 
     await this.mfaService.disableSms(user.id);
@@ -931,8 +944,8 @@ export class AccountController {
       );
     }
 
-    const valid = await this.crypto.verifyPassword(
-      user.passwordHash,
+    const valid = await this.passwords.verifyUserPassword(
+      user,
       currentPassword,
     );
     if (!valid) {
@@ -1035,8 +1048,8 @@ export class AccountController {
       );
     }
 
-    const valid = await this.crypto.verifyPassword(
-      user.passwordHash,
+    const valid = await this.passwords.verifyUserPassword(
+      user,
       currentPassword,
     );
     if (!valid) {
@@ -1087,8 +1100,8 @@ export class AccountController {
       );
     }
 
-    const valid = await this.crypto.verifyPassword(
-      user.passwordHash,
+    const valid = await this.passwords.verifyUserPassword(
+      user,
       currentPassword,
     );
     if (!valid) {

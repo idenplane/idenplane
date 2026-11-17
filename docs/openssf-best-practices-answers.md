@@ -1,16 +1,16 @@
 # OpenSSF Best Practices badge: answer sheet (passing level)
 
-This file is for filling in the questionnaire at <https://www.bestpractices.dev/en/projects/new>. The form needs a maintainer's GitHub login, so a maintainer has to submit it. Copy each answer and its evidence link into the form.
+The project holds the **passing** badge since 2026-11-17: <https://www.bestpractices.dev/projects/16845>. This file records the answers given, so they can be reviewed and kept current. Edit the entry at <https://www.bestpractices.dev/en/projects/16845/passing/edit> (anyone with commit access to the repository can).
 
 - **Project URL:** `https://github.com/idenplane/idenplane`
 - **Home page:** `https://idenplane.com`
 - **Evidence links:** links to files point at `dev`, the default branch.
-- **Items marked "Maintainer to confirm":** they depend on facts that only the maintainer can state, such as response times. Check each one before you answer.
+- **Facts behind the answers were checked on 2026-11-17:** all 181 issues opened by people other than the maintainer in the previous 12 months had been answered and closed, there were no open Dependabot or medium-or-higher CodeQL alerts, and secret scanning with push protection was on.
 
-After the badge is granted, add it to the README next to the Scorecard badge:
+The badge, as shown in the README next to the Scorecard badge:
 
 ```html
-<a href="https://www.bestpractices.dev/projects/<ID>"><img src="https://www.bestpractices.dev/projects/<ID>/badge" alt="OpenSSF Best Practices" /></a>
+<a href="https://www.bestpractices.dev/projects/16845"><img src="https://www.bestpractices.dev/projects/16845/badge" alt="OpenSSF Best Practices" /></a>
 ```
 
 Abbreviations: **M** = Met, **N/A** = not applicable, **SUGGESTED** = the criterion is a suggestion at this level.
@@ -33,7 +33,7 @@ Abbreviations: **M** = Met, **N/A** = not applicable, **SUGGESTED** = the criter
 | `sites_https` | M | The project site, the repository, downloads (GitHub releases, Docker Hub, npm) and the docs all use HTTPS. |
 | `discussion` | M | GitHub issues and pull requests are public, searchable and linkable. |
 | `english` | M | All documentation, issues and code are in English. |
-| `maintained` | M | Active: releases 0.7.0 to 0.9.1 shipped in November 2026. [Releases](https://github.com/idenplane/idenplane/releases) |
+| `maintained` | M | Active: releases 0.7.0 to 0.11.1 shipped in November 2026. [Releases](https://github.com/idenplane/idenplane/releases) |
 
 ## Change control
 
@@ -55,12 +55,12 @@ Abbreviations: **M** = Met, **N/A** = not applicable, **SUGGESTED** = the criter
 |---|---|---|
 | `report_process` | M | Bugs go to GitHub issues, with a [bug report template](https://github.com/idenplane/idenplane/blob/dev/.github/ISSUE_TEMPLATE/bug_report.yml). |
 | `report_tracker` (SUGGESTED) | M | GitHub issues. |
-| `report_responses` | M. **Maintainer to confirm.** | The majority of bug reports from the last 2 to 12 months were acknowledged. Check the [closed issues](https://github.com/idenplane/idenplane/issues?q=is%3Aissue+is%3Aclosed). |
-| `enhancement_responses` | M. **Maintainer to confirm.** | The majority of enhancement requests from the last 2 to 12 months got a response. |
+| `report_responses` | M | All 181 issues opened by people other than the maintainer in the last 12 months were answered and closed. [Closed issues](https://github.com/idenplane/idenplane/issues?q=is%3Aissue+is%3Aclosed). |
+| `enhancement_responses` | M | The majority of enhancement requests from the last 2 to 12 months got a response. |
 | `report_archive` | M | Issues and pull requests are public and searchable on GitHub. |
 | `vulnerability_report_process` | M | [SECURITY.md](https://github.com/idenplane/idenplane/blob/dev/SECURITY.md) |
 | `vulnerability_report_private` | M | Reports go to security@idenplane.com or a private GitHub Security Advisory. [SECURITY.md](https://github.com/idenplane/idenplane/blob/dev/SECURITY.md) |
-| `vulnerability_report_response` | M. **Maintainer to confirm.** | SECURITY.md promises a first response within 48 hours, and the criterion requires 14 days or less. For example, GHSA-2463-97f9-hw7j and GHSA-jfx3-gv42-6qwv (reported by EQSTLab) were fixed in 0.8.1. |
+| `vulnerability_report_response` | M | SECURITY.md promises a first response within 48 hours, and the criterion requires 14 days or less. For example, GHSA-2463-97f9-hw7j and GHSA-jfx3-gv42-6qwv (reported by EQSTLab) were fixed in 0.8.1. |
 
 ## Quality
 
@@ -74,7 +74,7 @@ Abbreviations: **M** = Met, **N/A** = not applicable, **SUGGESTED** = the criter
 | `test_most` (SUGGESTED) | M | The unit suite runs with coverage in CI (the `coverage-report` artifact of `ci.yml`), and roughly 800 e2e tests cover the protocol flows. |
 | `test_continuous_integration` (SUGGESTED) | M | Every PR and every push to `dev`/`main` runs CI. [ci.yml](https://github.com/idenplane/idenplane/blob/dev/.github/workflows/ci.yml) |
 | `test_policy` | M | New functionality needs tests: [CONTRIBUTING.md § Testing](https://github.com/idenplane/idenplane/blob/dev/CONTRIBUTING.md#testing) and the PR template. |
-| `tests_are_added` | M. **Maintainer to confirm.** | Recent feature PRs add tests. For example, the admin RBAC release added `test/admin-rbac.e2e-spec.ts`, and the DAST fixes added `test/dast-regressions.e2e-spec.ts`. |
+| `tests_are_added` | M | Recent feature PRs add tests. For example, the admin RBAC release added `test/admin-rbac.e2e-spec.ts`, and the DAST fixes added `test/dast-regressions.e2e-spec.ts`. |
 | `tests_documented_added` (SUGGESTED) | M | [PR template](https://github.com/idenplane/idenplane/blob/dev/.github/pull_request_template.md), [CONTRIBUTING.md](https://github.com/idenplane/idenplane/blob/dev/CONTRIBUTING.md) |
 | `warnings` | M | ESLint (typescript-eslint, prettier) and the TypeScript compiler run in CI, and any error fails the build. `lint:cycles` fails on import cycles. [eslint.config.mjs](https://github.com/idenplane/idenplane/blob/dev/eslint.config.mjs) |
 | `warnings_fixed` | M | CI is green on `dev`, and the lint job fails on findings. |
@@ -84,8 +84,8 @@ Abbreviations: **M** = Met, **N/A** = not applicable, **SUGGESTED** = the criter
 
 | Criterion | Answer | Justification and evidence |
 |---|---|---|
-| `know_secure_design` | M. **Maintainer to confirm.** | The secure-design decisions are recorded in [DECISIONS.md](https://github.com/idenplane/idenplane/blob/dev/DECISIONS.md) and the ADRs in [docs/docs/contributing/adrs.mdx](https://github.com/idenplane/idenplane/blob/dev/docs/docs/contributing/adrs.mdx). |
-| `know_common_errors` | M. **Maintainer to confirm.** | The code addresses the OWASP Top 10 classes: CSRF tokens on hosted forms, nonce-based CSP, SSRF-safe webhook URLs (`src/common/security`), rate limiting and brute-force lockout. It is also checked by CodeQL and OWASP ZAP. |
+| `know_secure_design` | M | The secure-design decisions are recorded in [DECISIONS.md](https://github.com/idenplane/idenplane/blob/dev/DECISIONS.md) and the ADRs in [docs/docs/contributing/adrs.mdx](https://github.com/idenplane/idenplane/blob/dev/docs/docs/contributing/adrs.mdx). |
+| `know_common_errors` | M | The code addresses the OWASP Top 10 classes: CSRF tokens on hosted forms, nonce-based CSP, SSRF-safe webhook URLs (`src/common/security`), rate limiting and brute-force lockout. It is also checked by CodeQL and OWASP ZAP. |
 | `crypto_published` | M | Only published algorithms: RS256/ES256 JWT signatures (`jose`), AES-256-GCM for secrets at rest, argon2id for passwords, HMAC for TOTP (RFC 6238). |
 | `crypto_call` | M | No primitives are implemented in the project. It uses Node's `crypto`, `jose`, `argon2` and `xml-crypto`. [src/crypto](https://github.com/idenplane/idenplane/tree/dev/src/crypto) |
 | `crypto_floss` | M | Every cryptographic library is FLOSS. |
@@ -97,8 +97,8 @@ Abbreviations: **M** = Met, **N/A** = not applicable, **SUGGESTED** = the criter
 | `crypto_random` | M | `crypto.randomBytes` / `randomUUID` for every token, secret, nonce and key. |
 | `delivery_mitm` | M | Releases are delivered over HTTPS (GitHub, Docker Hub, npm). From 0.10.0 every image is cosign-signed (keyless, logged in Rekor), with an SBOM and SLSA provenance. [Verifying releases](https://github.com/idenplane/idenplane/blob/dev/docs/docs/security/verify-releases.md) |
 | `delivery_unsigned` | M | No hash is fetched over HTTP. Release checksums (`SHA256SUMS`) are themselves cosign-signed. |
-| `vulnerabilities_fixed_60_days` | M. **Maintainer to confirm.** | Every published advisory was fixed in a release within days. Check that no medium-or-higher vulnerability has been public and unfixed for more than 60 days, under [Security → Advisories](https://github.com/idenplane/idenplane/security/advisories) and Dependabot alerts. |
-| `vulnerabilities_critical_fixed` (SUGGESTED) | M. **Maintainer to confirm.** | As above. |
+| `vulnerabilities_fixed_60_days` | M | Every published advisory was fixed in a release within days. No medium-or-higher vulnerability has been public and unfixed for more than 60 days: [Security → Advisories](https://github.com/idenplane/idenplane/security/advisories) and Dependabot alerts. |
+| `vulnerabilities_critical_fixed` (SUGGESTED) | M | As above. |
 | `no_leaked_credentials` | M | The PR hygiene workflow scans every diff for secrets ([pr-hygiene.yml](https://github.com/idenplane/idenplane/blob/dev/.github/workflows/pr-hygiene.yml)), and test values are marked `dummy`/`example`. Enable GitHub secret scanning and push protection in the repository settings if they are not on already. |
 
 ## Analysis
@@ -107,7 +107,7 @@ Abbreviations: **M** = Met, **N/A** = not applicable, **SUGGESTED** = the criter
 |---|---|---|
 | `static_analysis` | M | CodeQL default setup (JavaScript/TypeScript, Go, Python, Actions) runs on every PR and weekly, and ESLint runs on every PR. The OpenSSF Scorecard runs weekly. [scorecard.yml](https://github.com/idenplane/idenplane/blob/dev/.github/workflows/scorecard.yml) |
 | `static_analysis_common_vulnerabilities` (SUGGESTED) | M | CodeQL's security queries (injection, XSS, SSRF, path traversal, ...). |
-| `static_analysis_fixed` | M. **Maintainer to confirm.** | No open medium-or-higher CodeQL alerts. Check the code scanning tab. |
+| `static_analysis_fixed` | M | No open medium-or-higher CodeQL alerts in the code scanning tab. |
 | `static_analysis_often` (SUGGESTED) | M | Every PR. |
 | `dynamic_analysis` (SUGGESTED) | M | OWASP ZAP baseline and API scans run weekly, on releases and on PRs that change `src/**` ([dast-zap.yml](https://github.com/idenplane/idenplane/blob/dev/.github/workflows/dast-zap.yml)). The OpenID Foundation conformance suite runs weekly ([conformance.yml](https://github.com/idenplane/idenplane/blob/dev/.github/workflows/conformance.yml)), and so do a backup/restore drill and an upgrade test ([restore-drill.yml](https://github.com/idenplane/idenplane/blob/dev/.github/workflows/restore-drill.yml)). |
 | `dynamic_analysis_unsafe` (SUGGESTED) | N/A | TypeScript on Node.js is memory-safe, and the project ships no C/C++. |

@@ -647,7 +647,9 @@ Realms can enforce maximum concurrent sessions per user:
 | `maxSessionsPerUser: 0` | Unlimited sessions |
 | `maxSessionsPerUser: 10` | Maximum 10 active sessions (the default) |
 
-When a user exceeds the limit, the oldest sessions are automatically evicted (FIFO).
+When a user exceeds the limit, the oldest sessions are automatically evicted (FIFO). The limit applies separately to OAuth sessions (refresh tokens) and to browser SSO sessions.
+
+Offline sessions (created with the `offline_access` scope) are outside the limit: they don't count toward it, a new sign-in never evicts one, and creating one evicts nothing. Since 0.12.0; before, a user's offline sessions counted, and enough sign-ins evicted them.
 
 ### Session Cookies
 
@@ -852,7 +854,7 @@ Idenplane can delegate authentication to an external provider, so users sign in 
 
 ### What this covers
 
-These endpoints handle **OpenID Connect** providers — Okta, Auth0, Microsoft Entra, Google, another Keycloak or Idenplane, anything that speaks OIDC. `providerType` defaults to `oidc` and is the only type this module has behaviour for.
+These endpoints handle **OpenID Connect** providers — Okta, Auth0, Microsoft Entra, Google, another Keycloak or Idenplane, anything that speaks OIDC. `providerType` is `oidc` (the default) or `oauth2` (a plain OAuth 2.0 provider such as GitHub); the broker treats both the same way. Any other value, `saml` included, is refused with `400`.
 
 Two neighbouring features are managed separately:
 
