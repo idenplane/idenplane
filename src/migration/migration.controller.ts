@@ -5,11 +5,21 @@ import {
   ApiOperation,
   ApiResponse,
 } from '@nestjs/swagger';
-import { IsBoolean, IsObject, IsOptional, IsString } from 'class-validator';
+import {
+  IsBoolean,
+  IsObject,
+  IsOptional,
+  IsString,
+  Validate,
+  ValidatorConstraint,
+  type ValidatorConstraintInterface,
+  type ValidationArguments,
+} from 'class-validator';
 import { KeycloakImporterService } from './keycloak-importer.service.js';
 import { Auth0ImporterService } from './auth0-importer.service.js';
 import { ZitadelImporterService } from './zitadel-importer.service.js';
 import { AuthentikImporterService } from './authentik-importer.service.js';
+import { authentikExportProblems } from './authentik-export.js';
 import type { MigrationReport } from './migration-report.js';
 import type { KeycloakRealmExport } from './keycloak-types.js';
 import { AdminApiKeyGuard } from '../common/guards/admin-api-key.guard.js';
@@ -52,8 +62,25 @@ class ZitadelImportDto {
   targetRealm!: string;
 }
 
-class AuthentikImportDto {
+/**
+ * Each section of an Authentik import file must be a list of objects, or
+ * an Authentik paginated response with such a list in `results`; anything
+ * else is a 400 naming the section, never a 500 from the importer.
+ */
+@ValidatorConstraint({ name: 'authentikExport' })
+class AuthentikExportConstraint implements ValidatorConstraintInterface {
+  validate(value: unknown): boolean {
+    return authentikExportProblems(value).length === 0;
+  }
+
+  defaultMessage(args: ValidationArguments): string {
+    return authentikExportProblems(args.value).join('; ');
+  }
+}
+
+export class AuthentikImportDto {
   @IsObject()
+  @Validate(AuthentikExportConstraint)
   data!: Record<string, unknown>;
 
   @IsOptional()
@@ -96,12 +123,14 @@ class AuthentikImportDto {
 //    SAML apps, and non-OIDC IdPs are skipped with a warning per entity.
 //
 // 5. Authentik also has no single export endpoint — the input to
-//    POST /admin/migration/authentik is hand-assembled from the REST API's
-//    /core/users/, /core/groups/, /providers/oauth2/, and /sources/oauth/
-//    responses (see authentik-types.ts). Passwords hashed with Django's
-//    default PBKDF2 or Argon2 hashers are translated into a form Idenplane
-//    can verify; any other hasher is imported without a password (reset
-//    required on first login). Only generic OIDC sources are imported.
+//    POST /admin/migration/authentik is the REST API's /core/users/,
+//    /core/groups/, /providers/oauth2/ and /sources/oauth/ responses side by
+//    side, each either the `results` list or the whole paginated response
+//    (see authentik-types.ts and authentik-export.ts), with password hashes
+//    merged in from Authentik's database. Django's PBKDF2, Argon2 and bcrypt
+//    hashes are translated into a form Idenplane can verify; any other
+//    hasher is imported without a password (reset required on first login).
+//    Only generic OIDC sources are imported.
 
 @ApiTags('Migration')
 @ApiSecurity('admin-api-key')

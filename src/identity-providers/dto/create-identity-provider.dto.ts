@@ -8,10 +8,13 @@ import {
 import { ApiProperty } from '@nestjs/swagger';
 import { SUPPORTED_IDP_PROVIDER_TYPES } from '../idp-provider-types.js';
 
+/** The alias rule: it is a path segment of the broker's callback URL. */
+export const IDP_ALIAS_PATTERN = /^[a-z0-9-]+$/;
+
 export class CreateIdentityProviderDto {
   @ApiProperty()
   @IsString()
-  @Matches(/^[a-z0-9-]+$/, {
+  @Matches(IDP_ALIAS_PATTERN, {
     message: 'alias must be lowercase alphanumeric with hyphens',
   })
   alias!: string;
