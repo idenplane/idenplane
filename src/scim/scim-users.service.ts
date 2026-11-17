@@ -386,6 +386,7 @@ export class ScimUsersService {
     realm: ScimRealmRef,
     existing: DbUserWithGroups & {
       passwordHash?: string | null;
+      passwordAlgorithm?: string | null;
       federationLink?: string | null;
     },
     next: ScimUserState,
@@ -442,11 +443,19 @@ export class ScimUsersService {
     }
     if (password) {
       await this.bruteForce.resetFailures(realm.id, existing.id);
+      // The replaced hash joins the history if it was not in it yet (an
+      // imported password, say), as for the admin API's reset-password.
       await this.passwordPolicy.recordHistory(
         existing.id,
         realm.id,
         password.hash,
         password.historyCount,
+        existing.passwordHash
+          ? {
+              passwordHash: existing.passwordHash,
+              passwordAlgorithm: existing.passwordAlgorithm ?? null,
+            }
+          : null,
       );
     }
   }
@@ -474,6 +483,7 @@ export class ScimUsersService {
     user: {
       id: string;
       passwordHash?: string | null;
+      passwordAlgorithm?: string | null;
       federationLink?: string | null;
     } | null,
     password: string,
@@ -486,7 +496,10 @@ export class ScimUsersService {
 
     if (user?.passwordHash) {
       const { valid } = await this.passwords.check(
-        { passwordHash: user.passwordHash, passwordAlgorithm: null },
+        {
+          passwordHash: user.passwordHash,
+          passwordAlgorithm: user.passwordAlgorithm ?? null,
+        },
         password,
       );
       if (valid) return undefined;

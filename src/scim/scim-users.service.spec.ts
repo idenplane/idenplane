@@ -74,10 +74,16 @@ function setup(
     },
     passwordHistory: {
       findMany: jest.fn(() => Promise.resolve([...history])),
-      create: jest.fn(({ data }: { data: { passwordHash: string } }) => {
-        history.unshift({ passwordHash: data.passwordHash });
-        return Promise.resolve(data);
-      }),
+      findFirst: jest.fn(() => Promise.resolve(history[0] ?? null)),
+      createMany: jest.fn(
+        ({ data }: { data: Array<{ passwordHash: string }> }) => {
+          // Rows come oldest first; the newest ends up at the front.
+          for (const row of data) {
+            history.unshift({ passwordHash: row.passwordHash });
+          }
+          return Promise.resolve({ count: data.length });
+        },
+      ),
       deleteMany: jest.fn(() => Promise.resolve({ count: 0 })),
     },
   };
@@ -276,7 +282,11 @@ describe('ScimUsersService', () => {
         'user-1',
       );
       expect(bruteForce.resetFailures).toHaveBeenCalledWith(realm.id, 'user-1');
-      expect(history).toEqual([{ passwordHash: hash('N3w-password') }]);
+      // The replaced password joins the history too, so it stays refused.
+      expect(history).toEqual([
+        { passwordHash: hash('N3w-password') },
+        { passwordHash: hash('Current-passw0rd') },
+      ]);
       // Write-only: never in a response.
       expect(JSON.stringify(user)).not.toContain('N3w-password');
       expect(user).not.toHaveProperty('password');
