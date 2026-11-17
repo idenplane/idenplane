@@ -67,6 +67,11 @@ describe('AccountController', () => {
   let mockReqWithSession: any;
   let mockReqNoSession: any;
   let sessions: { revokeAllUserSessions: jest.Mock };
+  let bruteForce: {
+    checkLocked: jest.Mock;
+    recordFailure: jest.Mock;
+    resetFailures: jest.Mock;
+  };
 
   beforeEach(() => {
     loginService = {
@@ -106,6 +111,12 @@ describe('AccountController', () => {
       cookieName: jest.fn().mockReturnValue('XSRF-TOKEN-test'),
     };
 
+    bruteForce = {
+      checkLocked: jest.fn().mockReturnValue({ locked: false }),
+      recordFailure: jest.fn().mockResolvedValue(undefined),
+      resetFailures: jest.fn().mockResolvedValue(undefined),
+    };
+
     smsOtp = {
       getEnrolledPhone: jest.fn().mockResolvedValue(null),
       getEnrollment: jest.fn().mockResolvedValue(null),
@@ -135,6 +146,7 @@ describe('AccountController', () => {
       (sessions = {
         revokeAllUserSessions: jest.fn().mockResolvedValue(undefined),
       }) as any,
+      bruteForce as any,
     );
 
     mockRes = {
@@ -1217,6 +1229,7 @@ describe('AccountController', () => {
         {
           revokeAllUserSessions: jest.fn().mockResolvedValue(undefined),
         } as any,
+        bruteForce as any,
       );
     });
 
@@ -1344,6 +1357,85 @@ describe('AccountController', () => {
           );
         },
       );
+    });
+
+    // ─── the account lock ──────────────────────────────
+    //
+    // A stolen session must not turn these forms into a password oracle
+    // limited only per IP: each check counts like a sign-in.
+
+    describe('the current password counts toward the account lock', () => {
+      beforeEach(() => {
+        loginService.validateLoginSession.mockResolvedValue({
+          ...sessionUser,
+          passwordHash: bcryptHash(),
+          passwordAlgorithm: 'bcrypt',
+          lockedUntil: null,
+        });
+      });
+
+      it.each(actions)(
+        '%s: a wrong password is recorded as a login failure',
+        async (_action, run, effect) => {
+          await run(WRONG);
+
+          expect(effect()).not.toHaveBeenCalled();
+          expect(bruteForce.recordFailure).toHaveBeenCalledTimes(1);
+          expect(bruteForce.recordFailure).toHaveBeenCalledWith(
+            expect.objectContaining({ id: 'realm-1' }),
+            'user-1',
+            '127.0.0.1',
+          );
+          expect(bruteForce.resetFailures).not.toHaveBeenCalled();
+        },
+      );
+
+      it.each(actions)(
+        '%s: the right password clears the failures, as a sign-in does',
+        async (_action, run, effect) => {
+          await run(PASSWORD);
+
+          expect(effect()).toHaveBeenCalled();
+          expect(bruteForce.recordFailure).not.toHaveBeenCalled();
+          expect(bruteForce.resetFailures).toHaveBeenCalledWith(
+            'realm-1',
+            'user-1',
+          );
+        },
+      );
+
+      it.each(actions)(
+        '%s: a locked account is refused without checking the password',
+        async (_action, run, effect) => {
+          bruteForce.checkLocked.mockReturnValue({
+            locked: true,
+            lockedUntil: new Date(Date.now() + 60_000),
+          });
+
+          await run(PASSWORD);
+
+          expect(effect()).not.toHaveBeenCalled();
+          // Not checked: the right password is not even rehashed.
+          expect(updateMany).not.toHaveBeenCalled();
+          expect(bruteForce.recordFailure).not.toHaveBeenCalled();
+          expect(bruteForce.resetFailures).not.toHaveBeenCalled();
+          expect(mockRes.redirect).toHaveBeenCalledWith(
+            expect.stringContaining(encodeURIComponent('temporarily locked')),
+          );
+        },
+      );
+
+      it('an empty password field is not counted as a guess', async () => {
+        await real.handleSmsDisable(
+          smsRealm,
+          { currentPassword: '' },
+          mockReqWithSession,
+          mockRes as any,
+        );
+
+        expect(bruteForce.recordFailure).not.toHaveBeenCalled();
+        expect((mfaService as any).disableSms).not.toHaveBeenCalled();
+      });
     });
 
     it('a malformed stored hash is a wrong password, never a match', async () => {

@@ -9,6 +9,9 @@ For full per-commit detail, see the [GitHub Releases](https://github.com/idenpla
 
 ## [Unreleased]
 
+### Security
+- **Wrong current passwords in the account console now count toward the account lock.** The account console asks for the current password before changing the password, adding or removing an SMS phone, turning off the authenticator app, and requesting or cancelling account deletion. Those checks were only rate-limited per IP, so someone holding a user's session (a shared computer, a stolen cookie) could keep guessing the password from several addresses without ever locking the account. A wrong password there is now a login failure, with the same limits as the sign-in page (`maxLoginFailures` within `failureResetTime` locks the account for `lockoutDuration`, and `permanentLockoutAfter` applies); while the account is locked these forms are refused without checking the password; the right password clears the failures, as a sign-in does. An empty password field is not counted.
+
 ## [0.12.0] - 2026-11-17
 
 Session security and making advertised features real. A password or second-factor change now ends the user's other sessions, realms can set an SSO session idle timeout, and response time no longer reveals which usernames exist. Users imported with bcrypt or PBKDF2 hashes can now confirm their password everywhere, not only at sign-in.
