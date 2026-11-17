@@ -88,6 +88,17 @@ function listParam(value: string | undefined): string[] | undefined {
     .filter(Boolean);
 }
 
+/** `attributes` and `excludedAttributes` query parameters (RFC 7644 §3.9). */
+function projectionOf(
+  attributes: string | undefined,
+  excludedAttributes: string | undefined,
+): { attributes?: string[]; excludedAttributes?: string[] } {
+  return {
+    attributes: listParam(attributes),
+    excludedAttributes: listParam(excludedAttributes),
+  };
+}
+
 /** RFC 7644 §4: `/Schemas` and `/ResourceTypes` answer with a ListResponse. */
 function listOf<T>(items: T[]): ScimListResponse<T> {
   return {
@@ -132,15 +143,18 @@ export class ScimController {
   @Get('Schemas')
   @ApiOperation({ summary: 'Get all SCIM schemas' })
   @ApiResponse({ status: 200, description: 'List of all schemas' })
-  getSchemas(): ScimListResponse<ScimSchema> {
-    return listOf(this.configService.getSchemas().map(withSchemaUrn));
+  getSchemas(realmName?: string): ScimListResponse<ScimSchema> {
+    return listOf(this.configService.getSchemas(realmName).map(withSchemaUrn));
   }
 
   @Get('Schemas/:schemaId')
   @ApiOperation({ summary: 'Get a specific schema' })
   @ApiResponse({ status: 200, description: 'Schema details' })
-  getSchemaById(@Param('schemaId') schemaId: string): ScimSchema {
-    const schema = this.configService.getSchemaById(schemaId);
+  getSchemaById(
+    @Param('schemaId') schemaId: string,
+    realmName?: string,
+  ): ScimSchema {
+    const schema = this.configService.getSchemaById(schemaId, realmName);
     if (!schema) {
       throw new NotFoundException(`Schema '${schemaId}' not found`);
     }
@@ -150,8 +164,8 @@ export class ScimController {
   @Get('ResourceTypes')
   @ApiOperation({ summary: 'Get all SCIM resource types' })
   @ApiResponse({ status: 200, description: 'List of all resource types' })
-  getResourceTypes(): ScimListResponse<ScimResourceType> {
-    return listOf(this.configService.getResourceTypes());
+  getResourceTypes(realmName?: string): ScimListResponse<ScimResourceType> {
+    return listOf(this.configService.getResourceTypes(realmName));
   }
 
   @Get('ResourceTypes/:resourceTypeId')
@@ -159,8 +173,12 @@ export class ScimController {
   @ApiResponse({ status: 200, description: 'Resource type details' })
   getResourceTypeById(
     @Param('resourceTypeId') resourceTypeId: string,
+    realmName?: string,
   ): ScimResourceType {
-    const rt = this.configService.getResourceTypeByName(resourceTypeId);
+    const rt = this.configService.getResourceTypeByName(
+      resourceTypeId,
+      realmName,
+    );
     if (!rt) {
       throw new NotFoundException(
         `Resource type '${resourceTypeId}' not found`,
@@ -171,34 +189,44 @@ export class ScimController {
 
   @Get(':realmName/ServiceProviderConfig')
   @ApiOperation({ summary: 'Service Provider Configuration (realm base URL)' })
-  getRealmServiceProviderConfig(): ScimServiceProviderConfig {
-    return this.getServiceProviderConfig();
+  getRealmServiceProviderConfig(
+    @Param('realmName') realmName: string,
+  ): ScimServiceProviderConfig {
+    return this.configService.getConfig(realmName);
   }
 
   @Get(':realmName/Schemas')
   @ApiOperation({ summary: 'All SCIM schemas (realm base URL)' })
-  getRealmSchemas(): ScimListResponse<ScimSchema> {
-    return this.getSchemas();
+  getRealmSchemas(
+    @Param('realmName') realmName: string,
+  ): ScimListResponse<ScimSchema> {
+    return this.getSchemas(realmName);
   }
 
   @Get(':realmName/Schemas/:schemaId')
   @ApiOperation({ summary: 'A specific schema (realm base URL)' })
-  getRealmSchemaById(@Param('schemaId') schemaId: string): ScimSchema {
-    return this.getSchemaById(schemaId);
+  getRealmSchemaById(
+    @Param('realmName') realmName: string,
+    @Param('schemaId') schemaId: string,
+  ): ScimSchema {
+    return this.getSchemaById(schemaId, realmName);
   }
 
   @Get(':realmName/ResourceTypes')
   @ApiOperation({ summary: 'All SCIM resource types (realm base URL)' })
-  getRealmResourceTypes(): ScimListResponse<ScimResourceType> {
-    return this.getResourceTypes();
+  getRealmResourceTypes(
+    @Param('realmName') realmName: string,
+  ): ScimListResponse<ScimResourceType> {
+    return this.getResourceTypes(realmName);
   }
 
   @Get(':realmName/ResourceTypes/:resourceTypeId')
   @ApiOperation({ summary: 'A specific resource type (realm base URL)' })
   getRealmResourceTypeById(
+    @Param('realmName') realmName: string,
     @Param('resourceTypeId') resourceTypeId: string,
   ): ScimResourceType {
-    return this.getResourceTypeById(resourceTypeId);
+    return this.getResourceTypeById(resourceTypeId, realmName);
   }
 
   // ══════════════════════════════════════════════════════════════
@@ -249,12 +277,13 @@ export class ScimController {
   async getUserById(
     @Param('id') id: string,
     @Query('attributes') attributes?: string,
+    @Query('excludedAttributes') excludedAttributes?: string,
     @Req() req?: ScimRequest,
   ): Promise<ScimUser> {
     return this.usersService.findById(
       scimRealm(req),
       id,
-      listParam(attributes),
+      projectionOf(attributes, excludedAttributes),
     );
   }
 
@@ -265,9 +294,16 @@ export class ScimController {
   async updateUser(
     @Param('id') id: string,
     @Body() scimUser: ScimUser,
+    @Query('attributes') attributes?: string,
+    @Query('excludedAttributes') excludedAttributes?: string,
     @Req() req?: ScimRequest,
   ): Promise<ScimUser> {
-    return this.usersService.update(scimRealm(req), id, scimUser);
+    return this.usersService.update(
+      scimRealm(req),
+      id,
+      scimUser,
+      projectionOf(attributes, excludedAttributes),
+    );
   }
 
   @Patch(':realmName/Users/:id')
@@ -277,12 +313,15 @@ export class ScimController {
   async patchUser(
     @Param('id') id: string,
     @Body() patchRequest: ScimPatchRequest,
+    @Query('attributes') attributes?: string,
+    @Query('excludedAttributes') excludedAttributes?: string,
     @Req() req?: ScimRequest,
   ): Promise<ScimUser> {
     return this.usersService.patch(
       scimRealm(req),
       id,
       getPatchOperations(patchRequest),
+      projectionOf(attributes, excludedAttributes),
     );
   }
 
@@ -363,13 +402,14 @@ export class ScimController {
   @ApiSecurity('bearer')
   async getGroupById(
     @Param('id') id: string,
+    @Query('attributes') attributes?: string,
     @Query('excludedAttributes') excludedAttributes?: string,
     @Req() req?: ScimRequest,
   ): Promise<ScimGroup> {
     return this.groupsService.findById(
       scimRealm(req),
       id,
-      listParam(excludedAttributes),
+      projectionOf(attributes, excludedAttributes),
     );
   }
 
@@ -380,25 +420,49 @@ export class ScimController {
   async updateGroup(
     @Param('id') id: string,
     @Body() scimGroup: ScimGroup,
+    @Query('attributes') attributes?: string,
+    @Query('excludedAttributes') excludedAttributes?: string,
     @Req() req?: ScimRequest,
   ): Promise<ScimGroup> {
-    return this.groupsService.update(scimRealm(req), id, scimGroup);
+    return this.groupsService.update(
+      scimRealm(req),
+      id,
+      scimGroup,
+      projectionOf(attributes, excludedAttributes),
+    );
   }
 
   @Patch(':realmName/Groups/:id')
   @UseGuards(ScimAuthGuard)
-  @ApiOperation({ summary: 'Patch a group (partial update)' })
+  @ApiOperation({
+    summary: 'Patch a group (partial update)',
+    description:
+      'Answers 204 No Content, or 200 with the group when the request has an "attributes" or "excludedAttributes" query parameter (RFC 7644 section 3.5.2).',
+  })
   @ApiSecurity('bearer')
   async patchGroup(
     @Param('id') id: string,
     @Body() patchRequest: ScimPatchRequest,
+    @Res({ passthrough: true }) res: Response,
+    @Query('attributes') attributes?: string,
+    @Query('excludedAttributes') excludedAttributes?: string,
     @Req() req?: ScimRequest,
-  ): Promise<ScimGroup> {
-    return this.groupsService.patch(
+  ): Promise<ScimGroup | undefined> {
+    const projection =
+      attributes !== undefined || excludedAttributes !== undefined
+        ? projectionOf(attributes, excludedAttributes)
+        : undefined;
+    const group = await this.groupsService.patch(
       scimRealm(req),
       id,
       getPatchOperations(patchRequest),
+      projection,
     );
+    if (!group) {
+      res.status(HttpStatus.NO_CONTENT);
+      return undefined;
+    }
+    return group;
   }
 
   @Delete(':realmName/Groups/:id')

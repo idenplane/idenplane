@@ -1,589 +1,262 @@
 /**
- * SCIM 2.0 Schema Definitions
- * RFC 7643 - SCIM Schema Specification
+ * SCIM 2.0 discovery: the schemas (RFC 7643 §7), resource types (§6) and
+ * service provider configuration (§5) this server publishes.
+ *
+ * They describe what the server does, not the whole of RFC 7643: an
+ * attribute is listed only when it is stored and returned, and a feature is
+ * `supported` only when it works. ims, photos, entitlements, roles and
+ * x509Certificates are not stored, so they are not listed (a client that
+ * sends them anyway is not refused; the values are dropped).
  */
 
 import type {
   ScimSchema,
+  ScimSchemaAttribute,
   ScimResourceType,
   ScimServiceProviderConfig,
 } from '../types/scim.types.js';
+import { SCIM_SCHEMAS } from '../types/scim.types.js';
+import { SCIM_JSON_BODY_LIMIT } from '../../common/http/body-parsers.js';
+
+/** The SCIM JSON body limit, in bytes (the body parser enforces it). */
+export const SCIM_MAX_PAYLOAD_BYTES = SCIM_JSON_BODY_LIMIT;
+/** Most operations in one Bulk request. */
+export const SCIM_BULK_MAX_OPERATIONS = 1000;
+
+const DOCS_URI = 'https://idenplane.com/guides/scim';
+
+type AttributeOptions = Partial<Omit<ScimSchemaAttribute, 'name' | 'type'>>;
+
+/**
+ * An attribute with every characteristic RFC 7643 §7 lists, defaulted as
+ * §2.2 defaults them.
+ */
+function attr(
+  name: string,
+  type: string,
+  description: string,
+  options: AttributeOptions = {},
+): ScimSchemaAttribute {
+  const attribute: ScimSchemaAttribute = {
+    name,
+    type,
+    multiValued: false,
+    description,
+    required: false,
+    caseExact: false,
+    mutability: 'readWrite',
+    returned: 'default',
+    uniqueness: 'none',
+    ...options,
+  };
+  if (type === 'complex' || type === 'boolean') {
+    delete attribute.caseExact;
+    delete attribute.uniqueness;
+  }
+  return attribute;
+}
+
+const str = (name: string, description: string, options?: AttributeOptions) =>
+  attr(name, 'string', description, options);
+
+const typeAttr = (canonicalValues: string[]) =>
+  str('type', 'A label for the value, e.g. "work".', { canonicalValues });
+
+const primaryAttr = attr(
+  'primary',
+  'boolean',
+  'Whether this is the preferred value.',
+);
 
 // User Schema - RFC 7643 Section 4.1
 export const USER_SCHEMA: ScimSchema = {
-  id: 'urn:ietf:params:scim:schemas:core:2.0:User',
+  id: SCIM_SCHEMAS.USER,
   name: 'User',
   description: 'User Account',
   attributes: [
-    {
-      name: 'userName',
-      type: 'string',
+    str('userName', 'Unique identifier for the user; unique in the realm.', {
       required: true,
-      caseExact: false,
-      mutability: 'readWrite',
       returned: 'always',
       uniqueness: 'server',
-    },
-    {
-      name: 'name',
-      type: 'complex',
-      required: false,
-      multiValued: false,
-      mutability: 'readWrite',
-      returned: 'always',
+    }),
+    attr('name', 'complex', "The components of the user's name.", {
       subAttributes: [
-        {
-          name: 'formatted',
-          type: 'string',
-          mutability: 'readWrite',
-          returned: 'always',
-        },
-        {
-          name: 'familyName',
-          type: 'string',
-          mutability: 'readWrite',
-          returned: 'always',
-        },
-        {
-          name: 'givenName',
-          type: 'string',
-          mutability: 'readWrite',
-          returned: 'always',
-        },
-        {
-          name: 'middleName',
-          type: 'string',
-          mutability: 'readWrite',
-          returned: 'never',
-        },
-        {
-          name: 'honorificPrefix',
-          type: 'string',
-          mutability: 'readWrite',
-          returned: 'never',
-        },
-        {
-          name: 'honorificSuffix',
-          type: 'string',
-          mutability: 'readWrite',
-          returned: 'never',
-        },
+        str('formatted', 'The full name, formatted for display.'),
+        str('familyName', 'The family name (last name).'),
+        str('givenName', 'The given name (first name).'),
+        str('middleName', 'The middle name(s).'),
+        str('honorificPrefix', 'The honorific prefix, e.g. "Ms.".'),
+        str('honorificSuffix', 'The honorific suffix, e.g. "III".'),
       ],
-    },
-    {
-      name: 'displayName',
-      type: 'string',
-      required: false,
-      caseExact: false,
-      mutability: 'readWrite',
-      returned: 'always',
-    },
-    {
-      name: 'emails',
-      type: 'complex',
-      required: false,
+    }),
+    str(
+      'displayName',
+      'The name to display. When none was set, "givenName familyName".',
+    ),
+    str('nickName', 'The casual name of the user.'),
+    attr('profileUrl', 'reference', "A URI of the user's online profile.", {
+      referenceTypes: ['external'],
+    }),
+    str('title', 'The user\'s title, e.g. "Vice President".'),
+    str('userType', 'The relationship to the organisation, e.g. "Employee".'),
+    str('preferredLanguage', 'The preferred language (RFC 7231 tag).'),
+    str('locale', 'The default location, e.g. "en-US".'),
+    str('timezone', 'The time zone, in IANA format, e.g. "Europe/Paris".'),
+    attr('active', 'boolean', 'Whether the user may sign in.'),
+    str(
+      'password',
+      "The user's cleartext password. Write-only: checked against the realm's password policy, stored hashed, never returned.",
+      { mutability: 'writeOnly', returned: 'never', caseExact: true },
+    ),
+    attr(
+      'emails',
+      'complex',
+      'The user\'s email. One is stored: the primary (or first) one, returned with type "work".',
+      {
+        multiValued: true,
+        subAttributes: [
+          str('value', 'The email address.'),
+          str('display', 'A label for display.', { mutability: 'readOnly' }),
+          typeAttr(['work', 'home', 'other']),
+          primaryAttr,
+        ],
+      },
+    ),
+    attr('phoneNumbers', 'complex', "The user's phone numbers.", {
       multiValued: true,
-      mutability: 'readWrite',
-      returned: 'always',
-      uniqueness: 'none',
       subAttributes: [
-        {
-          name: 'value',
-          type: 'string',
-          mutability: 'readWrite',
-          returned: 'always',
-        },
-        {
-          name: 'type',
-          type: 'string',
-          mutability: 'readWrite',
-          returned: 'always',
-        },
-        {
-          name: 'primary',
-          type: 'boolean',
-          mutability: 'readWrite',
-          returned: 'never',
-        },
-        {
-          name: 'display',
-          type: 'string',
-          mutability: 'readOnly',
-          returned: 'always',
-        },
+        str('value', 'The phone number.'),
+        str('display', 'A label for display.'),
+        typeAttr(['work', 'home', 'mobile', 'fax', 'pager', 'other']),
+        primaryAttr,
       ],
-    },
-    {
-      name: 'phoneNumbers',
-      type: 'complex',
-      required: false,
+    }),
+    attr('addresses', 'complex', "The user's physical addresses.", {
       multiValued: true,
-      mutability: 'readWrite',
-      returned: 'always',
-      uniqueness: 'none',
       subAttributes: [
-        {
-          name: 'value',
-          type: 'string',
-          mutability: 'readWrite',
-          returned: 'always',
-        },
-        {
-          name: 'type',
-          type: 'string',
-          mutability: 'readWrite',
-          returned: 'always',
-        },
-        {
-          name: 'primary',
-          type: 'boolean',
-          mutability: 'readWrite',
-          returned: 'never',
-        },
+        str('formatted', 'The full address, formatted for display.'),
+        str('streetAddress', 'The street address.'),
+        str('locality', 'The city or locality.'),
+        str('region', 'The state or region.'),
+        str('postalCode', 'The postal code.'),
+        str('country', 'The country (ISO 3166-1 alpha-2).'),
+        typeAttr(['work', 'home', 'other']),
+        primaryAttr,
       ],
-    },
-    {
-      name: 'addresses',
-      type: 'complex',
-      required: false,
-      multiValued: true,
-      mutability: 'readWrite',
-      returned: 'always',
-      uniqueness: 'none',
-      subAttributes: [
-        {
-          name: 'formatted',
-          type: 'string',
-          mutability: 'readWrite',
-          returned: 'always',
-        },
-        {
-          name: 'streetAddress',
-          type: 'string',
-          mutability: 'readWrite',
-          returned: 'always',
-        },
-        {
-          name: 'locality',
-          type: 'string',
-          mutability: 'readWrite',
-          returned: 'always',
-        },
-        {
-          name: 'region',
-          type: 'string',
-          mutability: 'readWrite',
-          returned: 'always',
-        },
-        {
-          name: 'postalCode',
-          type: 'string',
-          mutability: 'readWrite',
-          returned: 'always',
-        },
-        {
-          name: 'country',
-          type: 'string',
-          mutability: 'readWrite',
-          returned: 'always',
-        },
-        {
-          name: 'type',
-          type: 'string',
-          mutability: 'readWrite',
-          returned: 'always',
-        },
-        {
-          name: 'primary',
-          type: 'boolean',
-          mutability: 'readWrite',
-          returned: 'never',
-        },
-      ],
-    },
-    {
-      name: 'active',
-      type: 'boolean',
-      required: false,
-      mutability: 'readWrite',
-      returned: 'always',
-    },
-    {
-      name: 'title',
-      type: 'string',
-      required: false,
-      caseExact: false,
-      mutability: 'readWrite',
-      returned: 'never',
-    },
-    {
-      name: 'userType',
-      type: 'string',
-      required: false,
-      caseExact: false,
-      mutability: 'readWrite',
-      returned: 'never',
-    },
-    {
-      name: 'preferredLanguage',
-      type: 'string',
-      required: false,
-      caseExact: false,
-      mutability: 'readWrite',
-      returned: 'never',
-    },
-    {
-      name: 'locale',
-      type: 'string',
-      required: false,
-      caseExact: false,
-      mutability: 'readWrite',
-      returned: 'never',
-    },
-    {
-      name: 'timezone',
-      type: 'string',
-      required: false,
-      caseExact: false,
-      mutability: 'readWrite',
-      returned: 'never',
-    },
-    {
-      name: 'groups',
-      type: 'complex',
-      required: false,
-      multiValued: true,
-      mutability: 'readOnly',
-      returned: 'never',
-      uniqueness: 'none',
-      subAttributes: [
-        {
-          name: 'value',
-          type: 'string',
-          mutability: 'readOnly',
-          returned: 'never',
-        },
-        {
-          name: 'display',
-          type: 'string',
-          mutability: 'readOnly',
-          returned: 'never',
-        },
-        {
-          name: 'type',
-          type: 'string',
-          mutability: 'readOnly',
-          returned: 'never',
-        },
-      ],
-    },
-    {
-      name: 'entitlements',
-      type: 'string',
-      required: false,
-      multiValued: true,
-      caseExact: false,
-      mutability: 'readWrite',
-      returned: 'never',
-    },
-    {
-      name: 'roles',
-      type: 'string',
-      required: false,
-      multiValued: true,
-      caseExact: false,
-      mutability: 'readWrite',
-      returned: 'never',
-    },
-    {
-      name: 'x509Certificates',
-      type: 'complex',
-      required: false,
-      multiValued: true,
-      mutability: 'readOnly',
-      returned: 'never',
-      uniqueness: 'none',
-      subAttributes: [
-        {
-          name: 'value',
-          type: 'string',
-          mutability: 'readOnly',
-          returned: 'never',
-        },
-        {
-          name: 'type',
-          type: 'string',
-          mutability: 'readWrite',
-          returned: 'never',
-        },
-      ],
-    },
-    {
-      name: 'externalId',
-      type: 'string',
-      required: false,
-      caseExact: false,
-      mutability: 'readWrite',
-      returned: 'always',
-      uniqueness: 'none',
-    },
-    {
-      name: 'meta',
-      type: 'complex',
-      required: false,
-      multiValued: false,
-      mutability: 'readOnly',
-      returned: 'never',
-      subAttributes: [
-        {
-          name: 'resourceType',
-          type: 'string',
-          mutability: 'readOnly',
-          returned: 'never',
-        },
-        {
-          name: 'created',
-          type: 'dateTime',
-          mutability: 'readOnly',
-          returned: 'never',
-        },
-        {
-          name: 'lastModified',
-          type: 'dateTime',
-          mutability: 'readOnly',
-          returned: 'never',
-        },
-        {
-          name: 'version',
-          type: 'string',
-          mutability: 'readOnly',
-          returned: 'never',
-        },
-        {
-          name: 'location',
-          type: 'string',
-          mutability: 'readOnly',
-          returned: 'never',
-        },
-      ],
-    },
+    }),
+    attr(
+      'groups',
+      'complex',
+      'The groups the user belongs to. Read-only: change membership through the Group.',
+      {
+        multiValued: true,
+        mutability: 'readOnly',
+        subAttributes: [
+          str('value', 'The id of the group.', { mutability: 'readOnly' }),
+          attr('$ref', 'reference', 'The URI of the group.', {
+            mutability: 'readOnly',
+            referenceTypes: ['Group'],
+          }),
+          str('display', 'The name of the group.', {
+            mutability: 'readOnly',
+          }),
+          str('type', 'How the user belongs to the group.', {
+            mutability: 'readOnly',
+            canonicalValues: ['direct', 'indirect'],
+          }),
+        ],
+      },
+    ),
+    str('externalId', "The provisioning client's identifier for the user.", {
+      caseExact: true,
+    }),
   ],
-  type: 'resource',
 };
 
 // Group Schema - RFC 7643 Section 4.2
 export const GROUP_SCHEMA: ScimSchema = {
-  id: 'urn:ietf:params:scim:schemas:core:2.0:Group',
+  id: SCIM_SCHEMAS.GROUP,
   name: 'Group',
   description: 'Group',
   attributes: [
-    {
-      name: 'displayName',
-      type: 'string',
+    str('displayName', 'The name of the group; unique in the realm.', {
       required: true,
-      caseExact: false,
-      mutability: 'readWrite',
       returned: 'always',
       uniqueness: 'server',
-    },
-    {
-      name: 'members',
-      type: 'complex',
-      required: false,
+    }),
+    attr('members', 'complex', 'The users in the group.', {
       multiValued: true,
-      mutability: 'readWrite',
-      returned: 'always',
-      uniqueness: 'none',
       subAttributes: [
-        {
-          name: 'value',
-          type: 'string',
+        str('value', 'The id of the user.', { mutability: 'immutable' }),
+        attr('$ref', 'reference', 'The URI of the user.', {
+          mutability: 'immutable',
+          referenceTypes: ['User'],
+        }),
+        str('display', 'The userName of the user.', {
           mutability: 'readOnly',
-          returned: 'never',
-        },
-        {
-          name: 'display',
-          type: 'string',
-          mutability: 'readOnly',
-          returned: 'never',
-        },
-        {
-          name: 'type',
-          type: 'string',
-          mutability: 'readOnly',
-          returned: 'never',
-          referenceTypes: ['User', 'Group'],
-        },
-        {
-          name: '$ref',
-          type: 'string',
-          mutability: 'readOnly',
-          returned: 'never',
-        },
+        }),
+        str('type', 'The type of member. Only users can be members.', {
+          mutability: 'immutable',
+          canonicalValues: ['User'],
+        }),
       ],
-    },
-    {
-      name: 'externalId',
-      type: 'string',
-      required: false,
-      caseExact: false,
-      mutability: 'readWrite',
-      returned: 'always',
-      uniqueness: 'none',
-    },
-    {
-      name: 'meta',
-      type: 'complex',
-      required: false,
-      multiValued: false,
-      mutability: 'readOnly',
-      returned: 'never',
-      subAttributes: [
-        {
-          name: 'resourceType',
-          type: 'string',
-          mutability: 'readOnly',
-          returned: 'never',
-        },
-        {
-          name: 'created',
-          type: 'dateTime',
-          mutability: 'readOnly',
-          returned: 'never',
-        },
-        {
-          name: 'lastModified',
-          type: 'dateTime',
-          mutability: 'readOnly',
-          returned: 'never',
-        },
-        {
-          name: 'version',
-          type: 'string',
-          mutability: 'readOnly',
-          returned: 'never',
-        },
-        {
-          name: 'location',
-          type: 'string',
-          mutability: 'readOnly',
-          returned: 'never',
-        },
-      ],
-    },
+    }),
+    str('externalId', "The provisioning client's identifier for the group.", {
+      caseExact: true,
+    }),
   ],
-  type: 'resource',
 };
 
 // Enterprise User Schema Extension - RFC 7643 Section 4.3
 export const ENTERPRISE_USER_SCHEMA: ScimSchema = {
-  id: 'urn:ietf:params:scim:schemas:extension:enterprise:2.0:User',
+  id: SCIM_SCHEMAS.ENTERPRISE_USER,
   name: 'EnterpriseUser',
-  description: 'Enterprise User Extension',
+  description: 'Enterprise User',
   attributes: [
-    {
-      name: 'employeeNumber',
-      type: 'string',
-      required: false,
-      caseExact: false,
-      mutability: 'readWrite',
-      returned: 'never',
-    },
-    {
-      name: 'costCenter',
-      type: 'string',
-      required: false,
-      caseExact: false,
-      mutability: 'readWrite',
-      returned: 'never',
-    },
-    {
-      name: 'organization',
-      type: 'string',
-      required: false,
-      caseExact: false,
-      mutability: 'readWrite',
-      returned: 'never',
-    },
-    {
-      name: 'division',
-      type: 'string',
-      required: false,
-      caseExact: false,
-      mutability: 'readWrite',
-      returned: 'never',
-    },
-    {
-      name: 'department',
-      type: 'string',
-      required: false,
-      caseExact: false,
-      mutability: 'readWrite',
-      returned: 'never',
-    },
-    {
-      name: 'manager',
-      type: 'complex',
-      required: false,
-      multiValued: false,
-      mutability: 'readWrite',
-      returned: 'never',
+    str('employeeNumber', 'The employee number.'),
+    str('costCenter', 'The cost center.'),
+    str('organization', 'The organisation.'),
+    str('division', 'The division.'),
+    str('department', 'The department.'),
+    attr('manager', 'complex', "The user's manager.", {
       subAttributes: [
-        {
-          name: 'value',
-          type: 'string',
-          mutability: 'readWrite',
-          returned: 'never',
-          referenceTypes: ['User'],
-        },
-        {
-          name: 'displayName',
-          type: 'string',
-          mutability: 'readOnly',
-          returned: 'never',
-        },
+        str('value', 'The id of the manager (as the client knows it).'),
       ],
-    },
+    }),
   ],
-  type: 'schema',
 };
 
 // User Resource Type
 export const USER_RESOURCE_TYPE: ScimResourceType = {
-  schemas: ['urn:ietf:params:scim:schemas:core:2.0:ResourceType'],
+  schemas: [SCIM_SCHEMAS.RESOURCE_TYPE],
   id: 'User',
   name: 'User',
   description: 'User Account',
   endpoint: '/Users',
-  schema: 'urn:ietf:params:scim:schemas:core:2.0:User',
-  schemaExtensions: [
-    {
-      schema: 'urn:ietf:params:scim:schemas:extension:enterprise:2.0:User',
-      required: false,
-    },
-  ],
+  schema: SCIM_SCHEMAS.USER,
+  schemaExtensions: [{ schema: SCIM_SCHEMAS.ENTERPRISE_USER, required: false }],
 };
 
 // Group Resource Type
 export const GROUP_RESOURCE_TYPE: ScimResourceType = {
-  schemas: ['urn:ietf:params:scim:schemas:core:2.0:ResourceType'],
+  schemas: [SCIM_SCHEMAS.RESOURCE_TYPE],
   id: 'Group',
   name: 'Group',
   description: 'Group',
   endpoint: '/Groups',
-  schema: 'urn:ietf:params:scim:schemas:core:2.0:Group',
+  schema: SCIM_SCHEMAS.GROUP,
   schemaExtensions: [],
 };
 
-// Service Provider Configuration - RFC 7644 Section 4
+// Service Provider Configuration - RFC 7643 Section 5
 export const SERVICE_PROVIDER_CONFIG: ScimServiceProviderConfig = {
-  schemas: ['urn:ietf:params:scim:schemas:core:2.0:ServiceProviderConfig'],
-  documentationUri: 'https://idenplane.example.com/docs/scim',
+  schemas: [SCIM_SCHEMAS.SERVICE_PROVIDER_CONFIG],
+  documentationUri: DOCS_URI,
   patch: { supported: true },
   bulk: {
     supported: true,
-    maxOperations: 1000,
-    maxPayloadSize: 10485760, // 10MB
+    maxOperations: SCIM_BULK_MAX_OPERATIONS,
+    maxPayloadSize: SCIM_MAX_PAYLOAD_BYTES,
   },
   filter: {
     supported: true,
@@ -601,26 +274,18 @@ export const SERVICE_PROVIDER_CONFIG: ScimServiceProviderConfig = {
       'pr',
     ],
   },
-  changePassword: { supported: false },
+  changePassword: { supported: true },
   sort: { supported: false },
   etag: { supported: false },
   authenticationSchemes: [
     {
       name: 'OAuth Bearer Token',
       description:
-        'Authentication scheme using the OAuth Bearer Token Standard',
+        'A SCIM token created for the realm, sent as "Authorization: Bearer <token>"',
       specUri: 'https://www.rfc-editor.org/rfc/rfc6750',
-      documentationUri: 'https://idenplane.example.com/docs/scim/auth',
+      documentationUri: DOCS_URI,
       type: 'oauthbearertoken',
       primary: true,
-    },
-    {
-      name: 'API Key',
-      description: 'Authentication scheme using an API key',
-      specUri: 'https://idenplane.example.com/docs/scim/auth',
-      documentationUri: 'https://idenplane.example.com/docs/scim/auth',
-      type: 'apiKey',
-      primary: false,
     },
   ],
 };
@@ -637,31 +302,3 @@ export const ALL_RESOURCE_TYPES: ScimResourceType[] = [
   USER_RESOURCE_TYPE,
   GROUP_RESOURCE_TYPE,
 ];
-
-// Map Idenplane attributes to SCIM attributes
-export const DEFAULT_USER_ATTRIBUTE_MAPPING: Record<string, string> = {
-  username: 'userName',
-  email: 'emails[primary=true].value',
-  firstName: 'name.givenName',
-  lastName: 'name.familyName',
-  displayName: 'displayName',
-  enabled: 'active',
-  title: 'title',
-  preferredLanguage: 'preferredLanguage',
-  locale: 'locale',
-  timezone: 'timezone',
-};
-
-// Map SCIM attributes to Idenplane attributes
-export const DEFAULT_SCIM_TO_IDENPLANE_MAPPING: Record<string, string> = {
-  userName: 'username',
-  'name.givenName': 'firstName',
-  'name.familyName': 'lastName',
-  displayName: 'displayName',
-  'emails[primary=true].value': 'email',
-  active: 'enabled',
-  title: 'title',
-  preferredLanguage: 'preferredLanguage',
-  locale: 'locale',
-  timezone: 'timezone',
-};
