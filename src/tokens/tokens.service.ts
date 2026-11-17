@@ -452,16 +452,15 @@ export class TokensService {
     userId?: string | null,
     ip?: string,
   ) {
+    // The clients to tell, read while the session's refresh tokens (which
+    // name them) still exist.
+    const ended = await this.backchannelLogout.endedSessions([sessionId]);
+
     // Revoke all non-offline refresh tokens in this session
     await this.prisma.refreshToken.updateMany({
       where: { sessionId, isOffline: false },
       data: { revoked: true },
     });
-
-    // Send backchannel logout notifications
-    if (userId) {
-      this.backchannelLogout.sendLogoutTokens(realm, userId, sessionId);
-    }
 
     // Record logout event before deleting session
     void this.eventsService.recordLoginEvent({
@@ -472,14 +471,20 @@ export class TokensService {
       ipAddress: ip,
     });
 
-    // Delete the session
-    await this.prisma.session
+    // Delete the session. It may already be deleted, by whatever ended it
+    // first, which has told its clients.
+    const deleted = await this.prisma.session
       .delete({
         where: { id: sessionId },
       })
-      .catch(() => {
-        // Session may already be deleted
-      });
+      .then(
+        () => true,
+        () => false,
+      );
+
+    // Back-channel logout to the clients this session was used with, now
+    // that it is gone.
+    if (deleted) this.backchannelLogout.notifySessionsEnded(realm, ended);
   }
 
   /**

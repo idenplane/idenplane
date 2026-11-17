@@ -43,6 +43,10 @@ describe('TokensService', () => {
     getClaimsForScopes: jest.Mock;
   };
   let certificateResolvers: { bindingActive: jest.Mock };
+  let backchannelLogoutService: {
+    endedSessions: jest.Mock;
+    notifySessionsEnded: jest.Mock;
+  };
 
   const mockRealm: Realm = {
     id: 'realm-1',
@@ -86,8 +90,9 @@ describe('TokensService', () => {
       isBlacklisted: jest.fn().mockReturnValue(false),
       blacklistToken: jest.fn(),
     };
-    const backchannelLogoutService = {
-      sendLogoutTokens: jest.fn(),
+    backchannelLogoutService = {
+      endedSessions: jest.fn().mockResolvedValue([]),
+      notifySessionsEnded: jest.fn(),
     };
     const eventsService = {
       recordLoginEvent: jest.fn().mockResolvedValue(undefined),
@@ -663,6 +668,10 @@ describe('TokensService', () => {
       });
       prisma.refreshToken.updateMany.mockResolvedValue({ count: 2 });
       prisma.session.delete.mockResolvedValue({});
+      const ended = [
+        { id: 'session-1', userId: 'user-1', clientIds: ['my-app'] },
+      ];
+      backchannelLogoutService.endedSessions.mockResolvedValue(ended);
 
       await service.logout(mockRealm, '127.0.0.1', 'refresh-token-value');
 
@@ -678,6 +687,36 @@ describe('TokensService', () => {
       expect(prisma.session.delete).toHaveBeenCalledWith({
         where: { id: 'session-1' },
       });
+      // Only the clients this session was used with are told, once it is gone.
+      expect(backchannelLogoutService.endedSessions).toHaveBeenCalledWith([
+        'session-1',
+      ]);
+      expect(backchannelLogoutService.notifySessionsEnded).toHaveBeenCalledWith(
+        mockRealm,
+        ended,
+      );
+      expect(
+        backchannelLogoutService.notifySessionsEnded.mock
+          .invocationCallOrder[0],
+      ).toBeGreaterThan(prisma.session.delete.mock.invocationCallOrder[0]);
+    });
+
+    it('does not announce a session another logout already deleted', async () => {
+      cryptoService.sha256.mockReturnValue('hashed-refresh');
+      prisma.refreshToken.findUnique.mockResolvedValue({
+        id: 'rt-1',
+        sessionId: 'session-1',
+        revoked: false,
+        session: { id: 'session-1', userId: 'user-1' },
+      });
+      prisma.refreshToken.updateMany.mockResolvedValue({ count: 0 });
+      prisma.session.delete.mockRejectedValue(new Error('P2025'));
+
+      await service.logout(mockRealm, '127.0.0.1', 'refresh-token-value');
+
+      expect(
+        backchannelLogoutService.notifySessionsEnded,
+      ).not.toHaveBeenCalled();
     });
 
     it('should throw UnauthorizedException when refresh token is not found', async () => {

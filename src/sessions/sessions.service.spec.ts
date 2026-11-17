@@ -8,6 +8,7 @@ import type { Realm } from '@prisma/client';
 describe('SessionsService', () => {
   let service: SessionsService;
   let prisma: MockPrismaService;
+  let backchannel: { endedSessions: jest.Mock; notifySessionsEnded: jest.Mock };
 
   const mockRealm: Realm = {
     id: 'realm-1',
@@ -22,7 +23,11 @@ describe('SessionsService', () => {
     prisma.loginSession.deleteMany = jest.fn();
     prisma.session.findUnique = jest.fn();
 
-    service = new SessionsService(prisma as any);
+    backchannel = {
+      endedSessions: jest.fn().mockResolvedValue([]),
+      notifySessionsEnded: jest.fn(),
+    };
+    service = new SessionsService(prisma as any, backchannel as any);
   });
 
   // ─── getRealmSessions ───────────────────────────────────────
@@ -168,7 +173,7 @@ describe('SessionsService', () => {
     it('should revoke refresh tokens then delete session for oauth type', async () => {
       prisma.session.findUnique.mockResolvedValue({
         userId: 'user-1',
-        user: { realmId: 'realm-1' },
+        user: { realmId: 'realm-1', realm: { name: 'test-realm' } },
       });
       prisma.refreshToken.updateMany.mockResolvedValue({ count: 2 });
       prisma.session.delete.mockResolvedValue({});
@@ -184,6 +189,48 @@ describe('SessionsService', () => {
       });
     });
 
+    it("tells the session's clients, read before it is deleted, once it is gone", async () => {
+      prisma.session.findUnique.mockResolvedValue({
+        userId: 'user-1',
+        user: { realmId: 'realm-1', realm: { name: 'test-realm' } },
+      });
+      const ended = [
+        { id: 'session-1', userId: 'user-1', clientIds: ['app-1'] },
+      ];
+      backchannel.endedSessions.mockResolvedValue(ended);
+      prisma.refreshToken.updateMany.mockResolvedValue({ count: 1 });
+      prisma.session.delete.mockResolvedValue({});
+
+      // The admin API passes the realm; continuous verification passes null.
+      await service.revokeSession(null, 'session-1', 'oauth');
+
+      expect(backchannel.endedSessions).toHaveBeenCalledWith(['session-1']);
+      expect(
+        backchannel.endedSessions.mock.invocationCallOrder[0],
+      ).toBeLessThan(prisma.session.delete.mock.invocationCallOrder[0]);
+      expect(backchannel.notifySessionsEnded).toHaveBeenCalledWith(
+        { id: 'realm-1', name: 'test-realm' },
+        ended,
+      );
+      expect(
+        backchannel.notifySessionsEnded.mock.invocationCallOrder[0],
+      ).toBeGreaterThan(prisma.session.delete.mock.invocationCallOrder[0]);
+    });
+
+    it('sends nothing when the delete fails', async () => {
+      prisma.session.findUnique.mockResolvedValue({
+        userId: 'user-1',
+        user: { realmId: 'realm-1', realm: { name: 'test-realm' } },
+      });
+      prisma.refreshToken.updateMany.mockResolvedValue({ count: 1 });
+      prisma.session.delete.mockRejectedValue(new Error('db down'));
+
+      await expect(
+        service.revokeSession(realm, 'session-1', 'oauth'),
+      ).rejects.toThrow('db down');
+      expect(backchannel.notifySessionsEnded).not.toHaveBeenCalled();
+    });
+
     it('should delete login session for sso type', async () => {
       prisma.loginSession.findUnique.mockResolvedValue({ realmId: 'realm-1' });
       prisma.loginSession.delete.mockResolvedValue({});
@@ -193,6 +240,8 @@ describe('SessionsService', () => {
       expect(prisma.loginSession.delete).toHaveBeenCalledWith({
         where: { id: 'sso-session-1' },
       });
+      // A browser SSO session is not tied to any client's session.
+      expect(backchannel.notifySessionsEnded).not.toHaveBeenCalled();
       expect(prisma.refreshToken.updateMany).not.toHaveBeenCalled();
       expect(prisma.session.delete).not.toHaveBeenCalled();
     });
@@ -223,9 +272,9 @@ describe('SessionsService', () => {
 
   describe('revokeAllUserSessions', () => {
     beforeEach(() => {
-      prisma.$transaction.mockResolvedValue([]);
+      prisma.$transaction.mockResolvedValue([{ count: 0 }, []]);
       prisma.refreshToken.updateMany.mockReturnValue('revoke-tokens');
-      prisma.session.deleteMany.mockReturnValue('delete-sessions');
+      prisma.$queryRaw.mockReturnValue('delete-sessions');
       prisma.loginSession.deleteMany.mockReturnValue('delete-sso');
       prisma.proxySession.deleteMany = jest
         .fn()
@@ -243,9 +292,14 @@ describe('SessionsService', () => {
         where: { session: ofUser },
         data: { revoked: true },
       });
-      expect(prisma.session.deleteMany).toHaveBeenCalledWith({
-        where: ofUser,
-      });
+      // One DELETE ... RETURNING, scoped to the user and the realm.
+      const [sql, ...params] = prisma.$queryRaw.mock.calls[0];
+      const text = (sql as string[]).join('?');
+      expect(text).toContain('DELETE FROM "sessions"');
+      expect(text).toContain('u."realm_id" = ?');
+      expect(text).toContain('s."user_id" = ?');
+      expect(text).toContain('RETURNING');
+      expect(params).toEqual(['realm-1', 'user-1']);
       expect(prisma.loginSession.deleteMany).toHaveBeenCalledWith({
         where: { userId: 'user-1', realmId: 'realm-1' },
       });
@@ -275,9 +329,34 @@ describe('SessionsService', () => {
         },
       });
       // OAuth sessions (offline ones included) all end.
-      expect(prisma.session.deleteMany).toHaveBeenCalledWith({
-        where: { userId: 'user-1', user: { realmId: 'realm-1' } },
-      });
+      expect(prisma.$queryRaw).toHaveBeenCalledTimes(1);
+    });
+
+    it('announces exactly the sessions the transaction deleted, after it committed', async () => {
+      const ended = [
+        { id: 's-1', userId: 'user-1', clientIds: ['app-1'] },
+        { id: 's-offline', userId: 'user-1', clientIds: ['app-2'] },
+      ];
+      prisma.$transaction.mockResolvedValue([{ count: 2 }, ended, {}, {}]);
+
+      await service.revokeAllUserSessions(mockRealm, 'user-1');
+
+      expect(backchannel.notifySessionsEnded).toHaveBeenCalledWith(
+        mockRealm,
+        ended,
+      );
+      expect(
+        backchannel.notifySessionsEnded.mock.invocationCallOrder[0],
+      ).toBeGreaterThan(prisma.$transaction.mock.invocationCallOrder[0]);
+    });
+
+    it('announces nothing when the transaction fails', async () => {
+      prisma.$transaction.mockRejectedValue(new Error('serialization'));
+
+      await expect(
+        service.revokeAllUserSessions(mockRealm, 'user-1'),
+      ).rejects.toThrow('serialization');
+      expect(backchannel.notifySessionsEnded).not.toHaveBeenCalled();
     });
 
     it("ends a master realm user's admin console tokens too", async () => {

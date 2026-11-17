@@ -66,6 +66,43 @@ describe('JwkService', () => {
         service.verifyJwt(token, keyPair2.publicKeyPem),
       ).rejects.toThrow();
     });
+
+    it('types a token JWT by default, or as asked (a logout token is logout+jwt)', async () => {
+      const keyPair = await service.generateRsaKeyPair();
+      const header = (token: string) =>
+        JSON.parse(
+          Buffer.from(token.split('.')[0], 'base64url').toString('utf8'),
+        ) as Record<string, unknown>;
+
+      const plain = await service.signJwt(
+        { sub: 'user-1' },
+        keyPair.privateKeyPem,
+        keyPair.kid,
+        300,
+      );
+      const logout = await service.signJwt(
+        { sub: 'user-1' },
+        keyPair.privateKeyPem,
+        keyPair.kid,
+        120,
+        'logout+jwt',
+      );
+
+      expect(header(plain)).toEqual({
+        alg: 'RS256',
+        kid: keyPair.kid,
+        typ: 'JWT',
+      });
+      expect(header(logout)).toEqual({
+        alg: 'RS256',
+        kid: keyPair.kid,
+        typ: 'logout+jwt',
+      });
+      // iat and jti are always set.
+      const claims = await service.verifyJwt(logout, keyPair.publicKeyPem);
+      expect(typeof claims.iat).toBe('number');
+      expect(typeof claims.jti).toBe('string');
+    });
   });
 
   describe('parsed key reuse', () => {
