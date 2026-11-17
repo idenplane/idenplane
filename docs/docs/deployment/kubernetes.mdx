@@ -376,52 +376,53 @@ securityContext:
 
 ### Network Policies
 
-Add a NetworkPolicy to restrict traffic:
+The chart can render a `NetworkPolicy` for the Idenplane pods. It is off by default; turn it on with `networkPolicy.enabled: true`. Your cluster's CNI plugin must enforce NetworkPolicy (Calico, Cilium and most managed offerings do); without one the object is accepted and has no effect.
+
+When enabled, the policy:
+
+- **Ingress:** allows only the application port (the container port named `http`, set by `env.PORT`), from the sources in `networkPolicy.ingress.from`. With an empty list any source may reach that port, and every other port is closed. Pods of the same release (the `helm test` pod) are always allowed.
+- **Egress:** allows DNS (UDP and TCP 53), PostgreSQL, the bundled Redis when `redis.enabled` is true, and the rules in `networkPolicy.egress.extraRules`. Everything else is denied. Set `networkPolicy.egress.enabled: false` to restrict only ingress.
+
+PostgreSQL is handled for you: with the bundled database the policy selects its pod. With an external database (`postgresql.enabled: false`), traffic to `networkPolicy.egress.postgresql.port` (5432) is allowed to the peers in `networkPolicy.egress.postgresql.to`, or to any destination if that list is empty.
 
 ```yaml
-# network-policy.yaml
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: idenplane-network-policy
-  namespace: idenplane
-spec:
-  podSelector:
-    matchLabels:
-      app.kubernetes.io/name: idenplane
-  policyTypes:
-    - Ingress
-    - Egress
+networkPolicy:
+  enabled: true
   ingress:
-    - from:
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: ingress-nginx
-      ports:
-        - protocol: TCP
-          port: 3000
+    # Only the ingress controller may reach Idenplane
+    from:
+      - namespaceSelector:
+          matchLabels:
+            kubernetes.io/metadata.name: ingress-nginx
   egress:
-    # The bundled PostgreSQL (add a rule for Redis on 6379 if you use it)
-    - to:
-        - podSelector:
-            matchLabels:
-              app.kubernetes.io/component: postgresql
-      ports:
-        - protocol: TCP
-          port: 5432
-    # DNS, or the app cannot resolve the database service
-    - to:
+    dns:
+      to:
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: kube-system
-      ports:
-        - protocol: UDP
-          port: 53
-        - protocol: TCP
-          port: 53
+    # External database (postgresql.enabled: false)
+    postgresql:
+      port: 5432
+      to:
+        - ipBlock:
+            cidr: 10.20.0.15/32
+    extraRules:
+      # HTTPS to external identity providers, webhook targets, CAPTCHA and SMS
+      # providers
+      - ports:
+          - protocol: TCP
+            port: 443
+        to:
+          - ipBlock:
+              cidr: 0.0.0.0/0
+              except: [10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16]
+      # SMTP submission
+      - ports:
+          - protocol: TCP
+            port: 587
 ```
 
-Add egress rules for anything else the server calls: SMTP, external identity providers, webhook targets, CAPTCHA and SMS providers. The chart's `networkPolicy` value is not rendered by any template, so write the policy yourself as above.
+Add an egress rule for everything else the server calls: SMTP, external identity providers (their token, userinfo and JWKS endpoints), webhook targets, CAPTCHA and SMS providers, and an external Redis. If your cluster runs DNS somewhere other than `kube-system` (NodeLocal DNSCache, OpenShift's `openshift-dns`), change `networkPolicy.egress.dns.to`, or set it to `[]` to allow port 53 to any destination. The policy covers only the Idenplane pods, not the bundled PostgreSQL and Redis.
 
 ---
 

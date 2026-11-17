@@ -9,6 +9,9 @@ For full per-commit detail, see the [GitHub Releases](https://github.com/idenpla
 
 ## [Unreleased]
 
+### Added
+- **Helm: `networkPolicy` now renders a NetworkPolicy.** The chart had a `networkPolicy` value but no template, so setting it did nothing. With `networkPolicy.enabled: true` (off by default) the Idenplane pods accept traffic only on the application port, from the sources in `networkPolicy.ingress.from` (any source when empty), and reach out only to DNS, PostgreSQL (the bundled pod, or `networkPolicy.egress.postgresql.port`/`.to` for an external database), the bundled Redis when enabled, and the rules in `networkPolicy.egress.extraRules`. `networkPolicy.egress.enabled: false` restricts ingress only. The value's shape changed (`ingress.rules`/`egress.rules` are replaced by `from`, `dns`, `postgresql` and `extraRules`, and the schema rejects the old keys); the old keys never had an effect. See the chart README and the Kubernetes guide.
+
 ### Changed
 - **OpenSSF Scorecard sees the Gradle wrapper validation.** The two `gradle-wrapper.jar` files were already checked against Gradle's checksums in CI, but Scorecard only counts that when the validating workflow has already succeeded on the commit it scans, and it scanned on push, before CI finished. A dedicated, seconds-long `Gradle wrapper validation` workflow now runs on every push to dev and weekly, and Scorecard starts when it completes.
 
