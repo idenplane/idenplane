@@ -341,9 +341,13 @@ describe('Rate Limiting (e2e)', () => {
         clientSecret: secondSecret,
       };
 
-      await ctx.prisma.realm.update({
-        where: { name: REALM_NAME },
-        data: {
+      // Through applyRealmLimits, like the other blocks: the guard reads the
+      // realm from its cache, so a test that starts before the new settings
+      // arrive is checked against the old ones (unlimited per client here),
+      // and the (N+1)th request got 200. The per-client bucket is the
+      // smallest, so the limit header reports it.
+      await applyRealmLimits(
+        {
           rateLimitEnabled: true,
           // Per-IP raised so the per-client limit is what trips first.
           ipRateLimitPerMinute: 10_000,
@@ -351,7 +355,8 @@ describe('Rate Limiting (e2e)', () => {
           clientRateLimitPerMinute: PER_CLIENT_LIMIT,
           clientRateLimitPerHour: 1_000,
         },
-      });
+        PER_CLIENT_LIMIT,
+      );
     });
 
     afterAll(async () => {
