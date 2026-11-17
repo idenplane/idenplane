@@ -22,6 +22,10 @@ For full per-commit detail, see the [GitHub Releases](https://github.com/idenpla
 ### Added
 - **Upgrade health check 12, `identity_provider_types`.** `GET /admin/upgrade/health` warns about identity providers stored before 0.12.0 with a type the broker does not sign in with, each as `realm/alias (type, enabled|disabled)`. SAML rows (`saml`, `samlp`, `adfs`) are listed as needing configuration review, since they were saved before 0.12.0, when Idenplane had no SAML broker; any other type is listed as unsupported. An enabled one shows a login button that cannot complete a sign-in. A warning only, it never blocks an upgrade.
 
+### Changed
+- **npm packages are published with trusted publishing.** The publish workflows for `idenplane-sdk`, `idenplane-angular`, `idenplane-nextjs`, `idenplane-vue`, `idenplane-mcp` and the new `idenplane-cli` workflow authenticate to npm with the job's GitHub OIDC token (npm trusted publishing) and attach provenance, so no long-lived npm token is needed once each package names its workflow as a trusted publisher. `NPM_TOKEN` remains a fallback. `idenplane-mcp` now publishes with provenance too.
+- **`idenplane-cli` is published from CI.** A new `publish-cli.yml` publishes `packages/idenplane-cli` on `cli-v*` tags, after a typecheck, tests and a tag/version check. `idenplane-cli` 1.1.0 adds `idenplane plugins hash`.
+
 ### Fixed
 - **Identity provider types stored in another case are normalized.** Since 0.12.0 the admin API stores `providerType` as lower-case `oidc` or `oauth2`, but rows saved earlier could read `OIDC` or `OAuth2`, which the console showed as an unsupported type that had to be changed before saving. A migration rewrites them to the canonical value.
 - **A password reset by email now applies the password history.** `passwordHistoryCount` was enforced in the account console, on the expired-password page and for admins, but the reset-by-email page accepted any password, the current one included. It now refuses a recent password with "Password was used recently" before the reset link is used up, so the user can choose another password with the same link.
