@@ -4,9 +4,20 @@ import {
   IsBoolean,
   IsUrl,
   Matches,
+  ValidateIf,
 } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { SUPPORTED_IDP_PROVIDER_TYPES } from '../idp-provider-types.js';
+import { IsSamlConfig, SamlConfigDto } from './saml-config.dto.js';
+
+/** Whether a request names the `saml` type (case-insensitive). */
+export const namesSaml = (o: { providerType?: unknown }): boolean =>
+  typeof o.providerType === 'string' &&
+  o.providerType.trim().toLowerCase() === 'saml';
+
+/** OAuth fields are required for `oidc`/`oauth2` only (and checked when sent). */
+const oauthField = (o: CreateIdentityProviderDto, value: unknown): boolean =>
+  !namesSaml(o) || value !== undefined;
 
 export class CreateIdentityProviderDto {
   @ApiProperty()
@@ -31,8 +42,8 @@ export class CreateIdentityProviderDto {
     default: 'oidc',
     enum: SUPPORTED_IDP_PROVIDER_TYPES,
     description:
-      'The broker signs users in over OpenID Connect or OAuth 2.0 only; ' +
-      'SAML identity providers are not supported. Case-insensitive.',
+      'OpenID Connect, OAuth 2.0 or SAML 2.0 (Idenplane as a SAML service ' +
+      'provider; settings in samlConfig). Case-insensitive.',
   })
   @IsOptional()
   @IsString()
@@ -41,22 +52,28 @@ export class CreateIdentityProviderDto {
   })
   providerType?: string;
 
-  @ApiProperty()
+  @ApiProperty({ description: 'Required for oidc/oauth2; unused for saml' })
+  @ValidateIf((o: CreateIdentityProviderDto) => oauthField(o, o.clientId))
   @IsString()
   clientId!: string;
 
   @ApiProperty({
     description:
-      'Stored encrypted and returned as "••••••"; sending that value back on update keeps the stored secret.',
+      'Required for oidc/oauth2; unused for saml. Stored encrypted and returned as "••••••"; sending that value back on update keeps the stored secret.',
   })
+  @ValidateIf((o: CreateIdentityProviderDto) => oauthField(o, o.clientSecret))
   @IsString()
   clientSecret!: string;
 
-  @ApiProperty()
+  @ApiProperty({ description: 'Required for oidc/oauth2; unused for saml' })
+  @ValidateIf((o: CreateIdentityProviderDto) =>
+    oauthField(o, o.authorizationUrl),
+  )
   @IsUrl({ require_tld: false })
   authorizationUrl!: string;
 
-  @ApiProperty()
+  @ApiProperty({ description: 'Required for oidc/oauth2; unused for saml' })
+  @ValidateIf((o: CreateIdentityProviderDto) => oauthField(o, o.tokenUrl))
   @IsUrl({ require_tld: false })
   tokenUrl!: string;
 
@@ -94,4 +111,17 @@ export class CreateIdentityProviderDto {
   @IsOptional()
   @IsBoolean()
   syncUserProfile?: boolean;
+
+  @ApiProperty({
+    required: false,
+    type: SamlConfigDto,
+    description:
+      "Required for providerType 'saml'. Fill it from IdP metadata with POST …/identity-providers/saml-metadata.",
+  })
+  @ValidateIf(
+    (o: CreateIdentityProviderDto) =>
+      namesSaml(o) || o.samlConfig !== undefined,
+  )
+  @IsSamlConfig()
+  samlConfig?: Record<string, unknown>;
 }

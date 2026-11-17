@@ -9,6 +9,7 @@ describe('IdentityProvidersController', () => {
     findByAlias: jest.Mock;
     update: jest.Mock;
     remove: jest.Mock;
+    withSpEndpoints: jest.Mock;
   };
 
   const realm = { id: 'realm-1', name: 'test-realm' } as Realm;
@@ -20,6 +21,7 @@ describe('IdentityProvidersController', () => {
       findByAlias: jest.fn(),
       update: jest.fn(),
       remove: jest.fn(),
+      withSpEndpoints: jest.fn((_realm: unknown, idp: unknown) => idp),
     };
     controller = new IdentityProvidersController(idpService as any);
   });
