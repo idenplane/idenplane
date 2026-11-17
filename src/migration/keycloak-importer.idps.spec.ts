@@ -204,6 +204,82 @@ describe('KeycloakImporterService identity providers', () => {
     ).toBe(true);
   });
 
+  describe('SAML subject and mapper by FriendlyName', () => {
+    const samlProvider = async (config: Record<string, string>) => {
+      const idp = await makeFakeIdp('https://sso.corp.example/idp');
+      return {
+        ...fixture,
+        identityProviders: [
+          {
+            alias: 'kc-saml',
+            providerId: 'saml',
+            enabled: true,
+            config: {
+              idpEntityId: 'https://sso.corp.example/idp',
+              singleSignOnServiceUrl: 'https://sso.corp.example/sso',
+              signingCertificate: idp.certificatePem.replace(
+                /-----[A-Z ]+-----|\s/g,
+                '',
+              ),
+              ...config,
+            },
+          },
+        ],
+      } as KeycloakRealmExport;
+    };
+
+    it('skips a provider that identifies users by an attribute FriendlyName, never falling back to the NameID', async () => {
+      const report = await service.importRealm(
+        await samlProvider({
+          principalType: 'FRIENDLY_ATTRIBUTE',
+          principalAttribute: 'uid',
+        }),
+        { dryRun: false },
+      );
+      expect(created().has('kc-saml')).toBe(false);
+      expect(warningFor(report, 'kc-saml')).toMatch(
+        /was not imported: Keycloak identifies its users by the FriendlyName of an attribute \('uid'\)/,
+      );
+      expect(report.summary.identityProviders.skipped).toBe(1);
+    });
+
+    it('skips principalType ATTRIBUTE without an attribute', async () => {
+      const report = await service.importRealm(
+        await samlProvider({ principalType: 'ATTRIBUTE' }),
+        { dryRun: false },
+      );
+      expect(created().has('kc-saml')).toBe(false);
+      expect(warningFor(report, 'kc-saml')).toMatch(/names none/);
+    });
+
+    it('imports with the NameID for principalType SUBJECT, and reports a mapper that reads a FriendlyName', async () => {
+      const realm = await samlProvider({ principalType: 'SUBJECT' });
+      realm.identityProviderMappers = [
+        {
+          name: 'friendly-mail',
+          identityProviderAlias: 'kc-saml',
+          identityProviderMapper: 'saml-user-attribute-idp-mapper',
+          config: {
+            'attribute.friendly.name': 'mail',
+            'user.attribute': 'email',
+          },
+        },
+      ];
+      const report = await service.importRealm(realm, { dryRun: false });
+      expect(created().get('kc-saml').samlConfig).toMatchObject({
+        subjectAttribute: null,
+        attributes: {},
+      });
+      expect(
+        report.warnings.some((w: { message: string }) =>
+          /mapper 'friendly-mail' reads the attribute by FriendlyName \('mail'\)/.test(
+            w.message,
+          ),
+        ),
+      ).toBe(true);
+    });
+  });
+
   it('skips a provider type it cannot broker instead of storing it as OIDC', async () => {
     const report = await service.importRealm(fixture, { dryRun: false });
 

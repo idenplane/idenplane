@@ -11,7 +11,12 @@ import { createEmptyReport, type MigrationReport } from './migration-report.js';
 import { keycloakPassword } from './password-import.js';
 import type { Prisma } from '@prisma/client';
 import { idpSecrets } from '../identity-providers/idp-secrets.js';
-import { idpCreateData, planIdpImport, reportIdpPlan } from './idp-import.js';
+import {
+  idpCreateData,
+  planIdpImport,
+  reportIdpPlan,
+  type IdpImportPlan,
+} from './idp-import.js';
 import { REALM_BRUTE_FORCE_DEFAULTS } from '../realms/realm-security-defaults.js';
 import { wildcardRedirectUris } from '../common/redirect-uri.utils.js';
 
@@ -497,32 +502,41 @@ export class KeycloakImporterService {
     for (const idp of data.identityProviders ?? []) {
       const config = idp.config ?? {};
       const mapped = this.mapKeycloakProviderType(idp.providerId);
-      const plan = planIdpImport({
-        alias: idp.alias,
-        providerType: mapped?.providerType ?? idp.providerId,
-        wellKnown: mapped?.wellKnown,
-        enabled: idp.enabled ?? true,
-        saml:
-          mapped?.providerType === 'saml'
-            ? keycloakSamlConfig(
-                config,
-                (data.identityProviderMappers ?? []).filter(
-                  (m) => m.identityProviderAlias === idp.alias,
-                ),
-              )
-            : undefined,
-        fields: {
-          clientId: config['clientId'],
-          clientSecret: config['clientSecret'],
-          authorizationUrl: config['authorizationUrl'],
-          tokenUrl: config['tokenUrl'],
-          userinfoUrl: config['userInfoUrl'],
-          jwksUrl: config['jwksUrl'],
-          issuer: config['issuer'],
-          defaultScopes: config['defaultScope'],
-        },
-      });
+      const kcSaml =
+        mapped?.providerType === 'saml'
+          ? keycloakSamlConfig(
+              config,
+              (data.identityProviderMappers ?? []).filter(
+                (m) => m.identityProviderAlias === idp.alias,
+              ),
+            )
+          : undefined;
+      const plan: IdpImportPlan = kcSaml?.unsupported
+        ? { skip: true, reason: kcSaml.unsupported }
+        : planIdpImport({
+            alias: idp.alias,
+            providerType: mapped?.providerType ?? idp.providerId,
+            wellKnown: mapped?.wellKnown,
+            enabled: idp.enabled ?? true,
+            saml: kcSaml?.saml,
+            fields: {
+              clientId: config['clientId'],
+              clientSecret: config['clientSecret'],
+              authorizationUrl: config['authorizationUrl'],
+              tokenUrl: config['tokenUrl'],
+              userinfoUrl: config['userInfoUrl'],
+              jwksUrl: config['jwksUrl'],
+              issuer: config['issuer'],
+              defaultScopes: config['defaultScope'],
+            },
+          });
       if (!reportIdpPlan(report, idp.alias, plan)) continue;
+      for (const note of kcSaml?.notes ?? []) {
+        report.warnings.push({
+          entity: 'identity_provider',
+          message: `Identity provider '${idp.alias}': ${note}`,
+        });
+      }
       if (
         plan.providerType === 'saml' &&
         config['wantAssertionsEncrypted'] === 'true'
@@ -613,27 +627,48 @@ export class KeycloakImporterService {
   }
 }
 
-/** Keycloak's user attributes the broker maps, by its mapper's target. */
+/**
+ * The user attributes a Keycloak `saml-user-attribute-idp-mapper` fills that
+ * the broker maps (Keycloak treats only these three specially; any other
+ * `user.attribute` is a custom attribute, which the broker does not import).
+ */
 const KEYCLOAK_ATTRIBUTE_TARGETS: Record<
   string,
-  'email' | 'firstName' | 'lastName' | 'username'
+  'email' | 'firstName' | 'lastName'
 > = {
   email: 'email',
   firstName: 'firstName',
   lastName: 'lastName',
-  username: 'username',
 };
 
+/** A Keycloak SAML provider in samlConfig terms, see keycloakSamlConfig. */
+export interface KeycloakSamlImport {
+  /** Raw samlConfig, for validateSamlConfig. */
+  saml: Record<string, unknown>;
+  /** Set when the provider cannot be imported faithfully: skip it. */
+  unsupported?: string;
+  /** Mappers not carried over, for the report. */
+  notes: string[];
+}
+
 /**
- * A Keycloak SAML identity provider's config as a raw samlConfig. Keycloak
- * stores everything as strings; what is missing or unusable is left for
- * validateSamlConfig to name. `entityId` in Keycloak is its own (SP) entity
- * ID, not the IdP's: the IdP's is `idpEntityId`.
+ * A Keycloak SAML identity provider's config as a raw samlConfig, from the
+ * keys of Keycloak's SAMLIdentityProviderConfig (and IdentityProviderModel's
+ * `allowedClockSkew`, in seconds) and its `saml-user-attribute-idp-mapper`
+ * mappers. Keycloak stores everything as strings; what is missing or
+ * unusable is left for validateSamlConfig to name. `entityId` in Keycloak is
+ * its own (SP) entity ID, not the IdP's: the IdP's is `idpEntityId`.
+ *
+ * The broker matches attributes by `Name` only. A provider that identifies
+ * users by an attribute's FriendlyName (`principalType:
+ * FRIENDLY_ATTRIBUTE`), or by an attribute it does not name, is not
+ * imported: falling back to the NameID would link every user to a
+ * different identity than Keycloak did.
  */
 export function keycloakSamlConfig(
   config: Record<string, string>,
   mappers: KeycloakIdentityProviderMapper[],
-): Record<string, unknown> {
+): KeycloakSamlImport {
   const str = (key: string) => {
     const v = config[key];
     return typeof v === 'string' && v.trim() ? v.trim() : undefined;
@@ -645,18 +680,38 @@ export function keycloakSamlConfig(
     .map((c) => c.trim())
     .filter(Boolean);
   const skew = Number(str('allowedClockSkew'));
+  const notes: string[] = [];
   const attributes: Record<string, string> = {};
   for (const mapper of mappers) {
     if (mapper.identityProviderMapper !== 'saml-user-attribute-idp-mapper') {
       continue;
     }
-    const target =
-      KEYCLOAK_ATTRIBUTE_TARGETS[mapper.config?.['user.attribute'] ?? ''];
+    const userAttribute = mapper.config?.['user.attribute'] ?? '';
+    const target = KEYCLOAK_ATTRIBUTE_TARGETS[userAttribute];
+    if (!target) continue;
     const name = mapper.config?.['attribute.name'];
-    if (target && name) attributes[target] = name;
+    const friendly = mapper.config?.['attribute.friendly.name'];
+    if (name) {
+      attributes[target] = name;
+    } else if (friendly) {
+      notes.push(
+        `its mapper '${mapper.name ?? userAttribute}' reads the attribute by FriendlyName ('${friendly}'), which Idenplane does not match; ${target} uses the usual attribute names until you set the attribute's Name in the admin console.`,
+      );
+    }
   }
-  const principalType = str('principalType');
+  const principalType = str('principalType') ?? 'SUBJECT';
   const principalAttribute = str('principalAttribute');
+  let unsupported: string | undefined;
+  if (principalType === 'FRIENDLY_ATTRIBUTE') {
+    unsupported =
+      `Keycloak identifies its users by the FriendlyName of an attribute ('${principalAttribute ?? ''}'), and Idenplane matches attributes by Name. ` +
+      `Importing it with the NameID would link every user to a different identity. Add it in the admin console with that attribute's Name as the subject attribute.`;
+  } else if (principalType === 'ATTRIBUTE' && !principalAttribute) {
+    unsupported =
+      'Keycloak identifies its users by an attribute (principalType ATTRIBUTE) but the export names none; add it in the admin console with the subject attribute set.';
+  } else if (principalType !== 'SUBJECT' && principalType !== 'ATTRIBUTE') {
+    unsupported = `Keycloak principalType '${principalType}' is not supported.`;
+  }
   const saml: Record<string, unknown> = {
     entityId: str('idpEntityId'),
     ssoUrl: str('singleSignOnServiceUrl'),
@@ -670,14 +725,11 @@ export function keycloakSamlConfig(
     clockSkewSeconds:
       Number.isInteger(skew) && skew >= 0 ? Math.min(skew, 600) : undefined,
     subjectAttribute:
-      principalType === 'ATTRIBUTE' && principalAttribute
-        ? principalAttribute
-        : undefined,
+      principalType === 'ATTRIBUTE' ? principalAttribute : undefined,
     attributes,
   };
-  if (attributes['username']) saml['usernameSource'] = 'attribute';
   for (const key of Object.keys(saml)) {
     if (saml[key] === undefined) delete saml[key];
   }
-  return saml;
+  return { saml, unsupported, notes };
 }
