@@ -259,8 +259,10 @@ Idenplane supports five email providers per realm: SMTP, Resend, SendGrid, Mailg
 
 Two dedicated endpoints exist:
 
-- `POST /admin/realms/{realm}/smtp/test` — sends a fixed test message using the realm's configured provider and returns `{ success, error? }` with the raw provider error on failure.
+- `POST /admin/realms/{realm}/smtp/test` — sends a fixed test message to the realm's sender address using the configured provider.
 - `POST /admin/realms/{realm}/email/test` with body `{ "to": "user@example.com" }` — renders the realm's actual `test-email` theme template and sends it to the given address.
+
+Both return `200` only when the provider accepted the message. A realm without usable email settings gets `400`; a provider that refuses the message or cannot be reached gets `502` with a short reason (the credentials were rejected, the server could not be reached, an address was refused). The provider's own error is not returned; it is in the server log, on the line starting `Test email for realm "<realm>" failed`.
 
 ### Common SMTP misconfigurations
 

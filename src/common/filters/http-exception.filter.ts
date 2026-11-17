@@ -142,8 +142,13 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       );
     }
 
-    // In production, never leak internal details for 5xx responses.
-    if (isProduction && isServerError) {
+    // In production, never leak internal details for 5xx responses, unless
+    // the exception says its message was written to be shown (e.g. an
+    // EmailDeliveryException: a 502 naming the cause without provider text).
+    const exposeMessage =
+      exception instanceof HttpException &&
+      (exception as { exposeMessage?: unknown }).exposeMessage === true;
+    if (isProduction && isServerError && !exposeMessage) {
       response.status(status).json({
         statusCode: status,
         message: 'Internal server error',
