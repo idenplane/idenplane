@@ -3,7 +3,7 @@ import chalk from 'chalk';
 import { readFileSync } from 'fs';
 import { loadConfig } from '../config.js';
 import { createHttpClient, handleApiError } from '../http.js';
-import type { MigrationReport } from '../types.js';
+import type { CliConfig, MigrationReport } from '../types.js';
 
 function printReport(report: MigrationReport): void {
   console.log(chalk.bold(`\nMigration Report (${report.source})`));
@@ -42,13 +42,68 @@ function printReport(report: MigrationReport): void {
   console.log(chalk.bold(`\nTotal: ${chalk.green(totalCreated + ' created')}, ${chalk.red(totalFailed + ' failed')}`));
 }
 
+/** What the migrate subcommands need from outside; replaced in tests. */
+export interface MigrateDeps {
+  loadConfig: () => CliConfig | null;
+  post: (config: CliConfig, path: string, body: unknown) => Promise<MigrationReport>;
+}
+
+const defaultDeps: MigrateDeps = {
+  loadConfig,
+  post: (config, path, body) => createHttpClient(config).post<MigrationReport>(path, body),
+};
+
+type Source = 'keycloak' | 'auth0' | 'zitadel' | 'authentik';
+
+interface MigrateOptions {
+  file: string;
+  realm?: string;
+  dryRun: boolean;
+  json: boolean;
+}
+
+/** Reads the export, posts it to `/admin/migration/<source>` and prints the report. */
+async function runMigration(
+  source: Source,
+  opts: MigrateOptions,
+  describe: (data: any) => string,
+  deps: MigrateDeps,
+): Promise<void> {
+  const config = deps.loadConfig();
+  if (!config) { console.error(chalk.red('Not configured. Run: idenplane init')); process.exit(1); }
+
+  let data: any;
+  try {
+    data = JSON.parse(readFileSync(opts.file, 'utf-8'));
+  } catch (e: any) {
+    console.error(chalk.red(`Failed to read file: ${e.message}`));
+    process.exit(1);
+  }
+
+  console.log(chalk.blue(`${describe(data)}${opts.dryRun ? ' (dry run)' : ''}...`));
+
+  try {
+    const report = await deps.post(config, `/admin/migration/${source}`, {
+      data, dryRun: opts.dryRun, targetRealm: opts.realm,
+    });
+    if (opts.json) {
+      console.log(JSON.stringify(report, null, 2));
+    } else {
+      printReport(report);
+    }
+  } catch (error) {
+    handleApiError(error);
+  }
+}
+
 /**
- * Registers `idenplane migrate keycloak|auth0|zitadel` subcommands for
- * importing users and configuration from a Keycloak realm export, an Auth0
- * Management API export, or a hand-assembled Zitadel Management API export,
- * printing a formatted (or `--json`) migration report.
+ * Registers `idenplane migrate keycloak|auth0|zitadel|authentik`
+ * subcommands for importing users and configuration from a Keycloak realm
+ * export, an Auth0 Management API export, a hand-assembled Zitadel
+ * Management API export, or Authentik REST API responses, printing a
+ * formatted (or `--json`) migration report.
  */
-export function registerMigrateCommand(program: Command): void {
+export function registerMigrateCommand(program: Command, deps: MigrateDeps = defaultDeps): void {
   const migrate = program.command('migrate').description('Migrate from other IAM providers');
 
   migrate
@@ -58,34 +113,9 @@ export function registerMigrateCommand(program: Command): void {
     .option('--dry-run', 'Preview import without making changes', false)
     .option('--realm <name>', 'Target realm name (defaults to realm name in export)')
     .option('--json', 'Output as JSON', false)
-    .action(async (opts) => {
-      const config = loadConfig();
-      if (!config) { console.error(chalk.red('Not configured. Run: idenplane init')); process.exit(1); }
-
-      let data: any;
-      try {
-        data = JSON.parse(readFileSync(opts.file, 'utf-8'));
-      } catch (e: any) {
-        console.error(chalk.red(`Failed to read file: ${e.message}`));
-        process.exit(1);
-      }
-
-      console.log(chalk.blue(`Importing Keycloak realm '${data.realm ?? 'unknown'}'${opts.dryRun ? ' (dry run)' : ''}...`));
-
-      try {
-        const http = createHttpClient(config);
-        const report = await http.post<MigrationReport>('/admin/migration/keycloak', {
-          data, dryRun: opts.dryRun, targetRealm: opts.realm,
-        });
-        if (opts.json) {
-          console.log(JSON.stringify(report, null, 2));
-        } else {
-          printReport(report);
-        }
-      } catch (error) {
-        handleApiError(error);
-      }
-    });
+    .action((opts: MigrateOptions) =>
+      runMigration('keycloak', opts, (data) => `Importing Keycloak realm '${data.realm ?? 'unknown'}'`, deps),
+    );
 
   migrate
     .command('auth0')
@@ -94,34 +124,9 @@ export function registerMigrateCommand(program: Command): void {
     .requiredOption('--realm <name>', 'Target realm name')
     .option('--dry-run', 'Preview import without making changes', false)
     .option('--json', 'Output as JSON', false)
-    .action(async (opts) => {
-      const config = loadConfig();
-      if (!config) { console.error(chalk.red('Not configured. Run: idenplane init')); process.exit(1); }
-
-      let data: any;
-      try {
-        data = JSON.parse(readFileSync(opts.file, 'utf-8'));
-      } catch (e: any) {
-        console.error(chalk.red(`Failed to read file: ${e.message}`));
-        process.exit(1);
-      }
-
-      console.log(chalk.blue(`Importing Auth0 data into realm '${opts.realm}'${opts.dryRun ? ' (dry run)' : ''}...`));
-
-      try {
-        const http = createHttpClient(config);
-        const report = await http.post<MigrationReport>('/admin/migration/auth0', {
-          data, dryRun: opts.dryRun, targetRealm: opts.realm,
-        });
-        if (opts.json) {
-          console.log(JSON.stringify(report, null, 2));
-        } else {
-          printReport(report);
-        }
-      } catch (error) {
-        handleApiError(error);
-      }
-    });
+    .action((opts: MigrateOptions) =>
+      runMigration('auth0', opts, () => `Importing Auth0 data into realm '${opts.realm}'`, deps),
+    );
 
   migrate
     .command('zitadel')
@@ -130,32 +135,18 @@ export function registerMigrateCommand(program: Command): void {
     .requiredOption('--realm <name>', 'Target realm name')
     .option('--dry-run', 'Preview import without making changes', false)
     .option('--json', 'Output as JSON', false)
-    .action(async (opts) => {
-      const config = loadConfig();
-      if (!config) { console.error(chalk.red('Not configured. Run: idenplane init')); process.exit(1); }
+    .action((opts: MigrateOptions) =>
+      runMigration('zitadel', opts, () => `Importing Zitadel data into realm '${opts.realm}'`, deps),
+    );
 
-      let data: any;
-      try {
-        data = JSON.parse(readFileSync(opts.file, 'utf-8'));
-      } catch (e: any) {
-        console.error(chalk.red(`Failed to read file: ${e.message}`));
-        process.exit(1);
-      }
-
-      console.log(chalk.blue(`Importing Zitadel data into realm '${opts.realm}'${opts.dryRun ? ' (dry run)' : ''}...`));
-
-      try {
-        const http = createHttpClient(config);
-        const report = await http.post<MigrationReport>('/admin/migration/zitadel', {
-          data, dryRun: opts.dryRun, targetRealm: opts.realm,
-        });
-        if (opts.json) {
-          console.log(JSON.stringify(report, null, 2));
-        } else {
-          printReport(report);
-        }
-      } catch (error) {
-        handleApiError(error);
-      }
-    });
+  migrate
+    .command('authentik')
+    .description('Import from Authentik REST API responses: users, groups, OAuth2 providers, OAuth sources (see docs)')
+    .requiredOption('--file <path>', 'Path to the Authentik import JSON file')
+    .requiredOption('--realm <name>', 'Target realm name (must exist)')
+    .option('--dry-run', 'Preview import without making changes', false)
+    .option('--json', 'Output as JSON', false)
+    .action((opts: MigrateOptions) =>
+      runMigration('authentik', opts, () => `Importing Authentik data into realm '${opts.realm}'`, deps),
+    );
 }
