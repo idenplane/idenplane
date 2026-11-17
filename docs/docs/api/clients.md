@@ -88,7 +88,7 @@ Creates a new OAuth client application.
 | `webOrigins` | string[] | No | Allowed CORS origins (`*` is refused) |
 | `grantTypes` | string[] | No | Allowed grants: `authorization_code` (default), `refresh_token`, `client_credentials`, `password`, `urn:ietf:params:oauth:grant-type:device_code` |
 | `requireConsent` | boolean | No | Require user consent (default: false) |
-| `backchannelLogoutUri` | string | No | OIDC back-channel logout URL: receives a logout token when a session this client holds ends (sign-out, admin sign-out, credential change, idle timeout). See [Back-Channel Logout](../guides/authentication.mdx#back-channel-logout) |
+| `backchannelLogoutUri` | string | No | OIDC back-channel logout URL: receives a logout token when a session this client holds ends (sign-out, admin sign-out, credential change, idle timeout, session-limit eviction, refresh token reuse). See [Back-Channel Logout](../guides/authentication.mdx#back-channel-logout) |
 | `backchannelLogoutSessionRequired` | boolean | No | The client needs `sid` in logout tokens (default `true`). When `false`, signing a user out everywhere sends it one `sub`-only token per user instead of one per session |
 | `requiredAcr` | string | No | Minimum ACR for this client (step-up) |
 | `stepUpCacheDuration` | integer | No | Seconds a step-up stays valid |
