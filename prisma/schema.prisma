@@ -318,6 +318,14 @@ model User {
   passwordChangedAt DateTime? @map("password_changed_at")
   lockedUntil       DateTime? @map("locked_until")
 
+  /// SCIM `externalId`: the provisioning client's own id for the user
+  /// (RFC 7643 §3.1). Set and read only by SCIM; caseExact.
+  scimExternalId String? @map("scim_external_id")
+  /// SCIM User attributes with no column of their own (displayName, title,
+  /// phoneNumbers, addresses, the enterprise extension, ...), as SCIM
+  /// returns them. Written only by SCIM; never read for sign-in or MFA.
+  scimProfile    Json?   @map("scim_profile")
+
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
@@ -351,6 +359,7 @@ model User {
   @@unique([realmId, username])
   @@unique([realmId, email])
   @@index([realmId])
+  @@index([realmId, scimExternalId])
   @@map("users")
 }
 
@@ -718,6 +727,9 @@ model Group {
   description String?
   parentId    String? @map("parent_id")
 
+  /// SCIM `externalId` (RFC 7643 §3.1), set and read only by SCIM.
+  scimExternalId String? @map("scim_external_id")
+
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
@@ -728,6 +740,7 @@ model Group {
   groupRoles GroupRole[]
 
   @@unique([realmId, name])
+  @@index([realmId, scimExternalId])
   @@map("groups")
 }
 

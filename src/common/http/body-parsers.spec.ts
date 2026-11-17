@@ -1,7 +1,9 @@
 import {
   IMPORT_JSON_BODY_LIMIT,
   JSON_BODY_LIMIT,
+  SCIM_JSON_BODY_LIMIT,
   isImportRequest,
+  isScimRequest,
 } from './body-parsers.js';
 
 describe('isImportRequest', () => {
@@ -34,5 +36,26 @@ describe('isImportRequest', () => {
   it('the limits are the documented ones', () => {
     expect(JSON_BODY_LIMIT).toBe('100kb');
     expect(IMPORT_JSON_BODY_LIMIT).toBe('10mb');
+  });
+});
+
+describe('isScimRequest', () => {
+  it.each([
+    '/scim/v2/acme/Groups/g-1',
+    '/scim/v2/acme/Bulk',
+    '/SCIM/v2/acme/Users?x=1',
+  ])('%s gets the SCIM limit', (url) => {
+    expect(isScimRequest({ url })).toBe(true);
+  });
+
+  it.each(['/scim', '/admin/realms/acme/scim/tokens', '/x/scim/v2/acme/Users'])(
+    '%s keeps the default limit',
+    (url) => {
+      expect(isScimRequest({ url })).toBe(false);
+    },
+  );
+
+  it('is 1 MiB, the Bulk maxPayloadSize', () => {
+    expect(SCIM_JSON_BODY_LIMIT).toBe(1024 * 1024);
   });
 });

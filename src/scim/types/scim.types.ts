@@ -98,6 +98,8 @@ export interface ScimUser extends ScimResource {
   userName: string;
   name?: ScimName;
   displayName?: string;
+  nickName?: string;
+  profileUrl?: string;
   emails?: ScimEmail[];
   phoneNumbers?: ScimPhoneNumber[];
   addresses?: ScimAddress[];
@@ -111,7 +113,7 @@ export interface ScimUser extends ScimResource {
   entitlements?: string[];
   roles?: string[];
   x509Certificates?: ScimX509Certificate[];
-  extensionEnterpriseUser?: ScimEnterpriseUser;
+  'urn:ietf:params:scim:schemas:extension:enterprise:2.0:User'?: ScimEnterpriseUser;
   password?: string; // Write-only, never returned
 }
 
@@ -167,6 +169,7 @@ export interface ScimGroupMembership {
   value: string; // Group id
   display?: string;
   type?: string;
+  $ref?: string;
 }
 
 /**
@@ -233,6 +236,7 @@ export interface ScimServiceProviderConfig {
   sort?: ScimCapability;
   etag?: ScimCapability;
   authenticationSchemes?: ScimAuthenticationScheme[];
+  meta?: ScimMeta;
 }
 
 /**
@@ -280,7 +284,7 @@ export interface ScimSchema {
   name: string;
   description?: string;
   attributes: ScimSchemaAttribute[];
-  type: string;
+  meta?: ScimMeta;
 }
 
 /**
@@ -297,6 +301,7 @@ export interface ScimSchemaAttribute {
   returned?: string;
   uniqueness?: string;
   referenceTypes?: string[];
+  canonicalValues?: string[];
   subAttributes?: ScimSchemaAttribute[];
 }
 
@@ -312,6 +317,7 @@ export interface ScimResourceType {
   endpoint: string;
   schema: string;
   schemaExtensions: ScimSchemaExtension[];
+  meta?: ScimMeta;
 }
 
 /**

@@ -13,6 +13,14 @@ export interface UserDataExport {
     lastName: string | null;
     enabled: boolean;
     federationLink: string | null;
+    /** The provisioning client's id for the user (SCIM externalId). */
+    scimExternalId: string | null;
+    /**
+     * What a SCIM client provisioned about the user beyond the fields
+     * above (displayName, title, phone numbers, addresses, enterprise
+     * attributes), as it sent them.
+     */
+    scimProfile: unknown;
     createdAt: string;
     updatedAt: string;
   };
@@ -162,6 +170,8 @@ export class DataExportService {
         lastName: user.lastName,
         enabled: user.enabled,
         federationLink: user.federationLink,
+        scimExternalId: user.scimExternalId ?? null,
+        scimProfile: user.scimProfile ?? null,
         createdAt: user.createdAt.toISOString(),
         updatedAt: user.updatedAt.toISOString(),
       },

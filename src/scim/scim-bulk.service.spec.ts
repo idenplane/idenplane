@@ -67,7 +67,13 @@ describe('ScimBulkService', () => {
     const res = await service.processBulk(realm, {
       operations: [{ method: 'DELETE', path: '/Users/u-1' }],
     });
-    expect(res.Operations).toEqual([{ method: 'DELETE', status: '204' }]);
+    expect(res.Operations).toEqual([
+      {
+        method: 'DELETE',
+        status: '204',
+        location: 'http://localhost:3000/scim/v2/acme/Users/u-1',
+      },
+    ]);
     expect(users.delete).toHaveBeenCalledWith(realm, 'u-1');
   });
 
@@ -105,6 +111,128 @@ describe('ScimBulkService', () => {
     });
     expect(res.Operations).toHaveLength(1);
     expect(users.delete).not.toHaveBeenCalled();
+  });
+
+  describe('bulkId references (RFC 7644 §3.7.2)', () => {
+    it('resolves "bulkId:<id>" in data and in the path to the created id', async () => {
+      const { service, groups } = setup();
+      const res = await service.processBulk(realm, {
+        Operations: [
+          {
+            method: 'POST',
+            path: '/Users',
+            bulkId: 'qwerty',
+            data: { userName: 'alice' },
+          },
+          {
+            method: 'POST',
+            path: '/Groups',
+            bulkId: 'ytrewq',
+            data: {
+              displayName: 'Tour Guides',
+              members: [{ type: 'User', value: 'bulkId:qwerty' }],
+            },
+          },
+          {
+            method: 'PATCH',
+            path: '/Groups/bulkId:ytrewq',
+            data: {
+              Operations: [
+                {
+                  op: 'add',
+                  path: 'members',
+                  value: [{ value: 'bulkId:qwerty' }],
+                },
+              ],
+            },
+          },
+        ],
+      });
+      expect(groups.create).toHaveBeenCalledWith(realm, {
+        displayName: 'Tour Guides',
+        members: [{ type: 'User', value: 'u-new' }],
+      });
+      expect(groups.patch).toHaveBeenCalledWith(realm, 'g-new', [
+        { op: 'add', path: 'members', value: [{ value: 'u-new' }] },
+      ]);
+      expect(res.Operations.map((o) => o.status)).toEqual([
+        '201',
+        '201',
+        '204',
+      ]);
+    });
+
+    it('runs an operation after the one it refers to, whatever their order', async () => {
+      const { service, users, groups } = setup();
+      const res = await service.processBulk(realm, {
+        Operations: [
+          {
+            method: 'POST',
+            path: '/Groups',
+            bulkId: 'g',
+            data: { displayName: 'G', members: [{ value: 'bulkId:u' }] },
+          },
+          { method: 'POST', path: '/Users', bulkId: 'u', data: {} },
+        ],
+      });
+      expect(users.create.mock.invocationCallOrder[0]).toBeLessThan(
+        groups.create.mock.invocationCallOrder[0],
+      );
+      expect(groups.create).toHaveBeenCalledWith(realm, {
+        displayName: 'G',
+        members: [{ value: 'u-new' }],
+      });
+      expect(res.Operations.map((o) => o.bulkId)).toEqual(['u', 'g']);
+    });
+
+    it('fails an unknown, failed or circular reference with 409', async () => {
+      const { service, users, groups } = setup();
+      users.create.mockRejectedValueOnce(
+        new ScimException(409, 'uniqueness', 'taken'),
+      );
+      const res = await service.processBulk(realm, {
+        Operations: [
+          { method: 'POST', path: '/Users', bulkId: 'dup', data: {} },
+          {
+            method: 'PATCH',
+            path: '/Users/bulkId:dup',
+            data: {
+              Operations: [{ op: 'replace', path: 'title', value: 'x' }],
+            },
+          },
+          {
+            method: 'POST',
+            path: '/Groups',
+            data: { displayName: 'X', members: [{ value: 'bulkId:nope' }] },
+          },
+          {
+            method: 'POST',
+            path: '/Groups',
+            bulkId: 'a',
+            data: { displayName: 'A', members: [{ value: 'bulkId:b' }] },
+          },
+          {
+            method: 'POST',
+            path: '/Groups',
+            bulkId: 'b',
+            data: { displayName: 'B', members: [{ value: 'bulkId:a' }] },
+          },
+        ],
+      });
+      expect(res.Operations.map((o) => o.status)).toEqual([
+        '409',
+        '409',
+        '409',
+        '409',
+        '409',
+      ]);
+      expect(res.Operations[2].response).toMatchObject({
+        scimType: 'invalidValue',
+        detail: expect.stringContaining('bulkId:nope') as string,
+      });
+      expect(users.patch).not.toHaveBeenCalled();
+      expect(groups.create).not.toHaveBeenCalled();
+    });
   });
 
   it('refuses a request without an operations list', async () => {

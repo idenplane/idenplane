@@ -1,6 +1,12 @@
 import { getPatchOperations } from './patch-request';
 import { ScimException } from './scim-errors';
-import { applyUserPatch, type ScimUserState } from './user-patch';
+import {
+  applyUserPatch,
+  userStateFromResource,
+  type ScimUserState,
+} from './user-patch';
+
+const ENTERPRISE = 'urn:ietf:params:scim:schemas:extension:enterprise:2.0:User';
 
 const base: ScimUserState = {
   username: 'jdoe',
@@ -8,6 +14,8 @@ const base: ScimUserState = {
   firstName: 'Jane',
   lastName: 'Doe',
   enabled: true,
+  externalId: null,
+  profile: {},
 };
 
 /** Apply a PATCH body as a client would send it. */
@@ -151,7 +159,7 @@ describe('applyUserPatch', () => {
       });
     });
 
-    it('reads a core schema URN key and ignores the enterprise extension', () => {
+    it('reads a core schema URN key and an enterprise extension object', () => {
       expect(
         patch([
           {
@@ -160,13 +168,38 @@ describe('applyUserPatch', () => {
               'urn:ietf:params:scim:schemas:core:2.0:User': {
                 name: { familyName: 'Core' },
               },
-              'urn:ietf:params:scim:schemas:extension:enterprise:2.0:User': {
-                department: 'Sales',
-              },
+              [ENTERPRISE]: { department: 'Sales' },
             },
           },
         ]),
-      ).toEqual({ ...base, lastName: 'Core' });
+      ).toEqual({
+        ...base,
+        lastName: 'Core',
+        profile: { enterprise: { department: 'Sales' } },
+      });
+    });
+
+    it("reads Entra ID's dotted and URN-prefixed keys in one value", () => {
+      expect(
+        patch([
+          {
+            op: 'Replace',
+            value: {
+              'name.givenName': 'Ada',
+              displayName: 'Ada L.',
+              [`${ENTERPRISE}:employeeNumber`]: '1815',
+              [`${ENTERPRISE}:manager`]: 'mgr-1',
+            },
+          },
+        ]),
+      ).toEqual({
+        ...base,
+        firstName: 'Ada',
+        profile: {
+          displayName: 'Ada L.',
+          enterprise: { employeeNumber: '1815', manager: 'mgr-1' },
+        },
+      });
     });
 
     it('needs an object value', () => {
@@ -277,23 +310,289 @@ describe('applyUserPatch', () => {
     });
   });
 
-  describe('attributes with no column', () => {
+  describe('profile attributes', () => {
     it.each([
-      'displayName',
-      'title',
-      'preferredLanguage',
-      'locale',
-      'timezone',
-      'externalId',
-      'phoneNumbers[type eq "mobile"].value',
-      'addresses[type eq "work"].locality',
-      'name.formatted',
-      'urn:ietf:params:scim:schemas:extension:enterprise:2.0:User:department',
-      'urn:ietf:params:scim:schemas:extension:enterprise:2.0:User:manager',
-    ])('accepts %s and changes nothing', (path) => {
-      expect(patch([{ op: 'Replace', path, value: 'x' }])).toEqual(base);
-      expect(patch([{ op: 'Remove', path }])).toEqual(base);
+      ['displayName', 'displayName'],
+      ['title', 'title'],
+      ['preferredLanguage', 'preferredLanguage'],
+      ['locale', 'locale'],
+      ['timezone', 'timezone'],
+      ['nickName', 'nickName'],
+      ['userType', 'userType'],
+      ['profileUrl', 'profileUrl'],
+    ])('stores and removes %s', (path, key) => {
+      const set = patch([{ op: 'Replace', path, value: 'x' }]);
+      expect(set.profile).toEqual({ [key]: 'x' });
+      expect(patch([{ op: 'Remove', path }], set).profile).toEqual({});
     });
+
+    it('stores externalId and clears it with remove or an empty string', () => {
+      const set = patch([
+        { op: 'Replace', path: 'externalId', value: 'obj-1' },
+      ]);
+      expect(set.externalId).toBe('obj-1');
+      expect(
+        patch([{ op: 'remove', path: 'externalId' }], set).externalId,
+      ).toBeNull();
+      expect(
+        patch([{ op: 'replace', path: 'externalId', value: '' }], set)
+          .externalId,
+      ).toBeNull();
+    });
+
+    it('stores the name parts with no column', () => {
+      const set = patch([
+        { op: 'add', path: 'name.formatted', value: 'Dr Jane Doe' },
+        { op: 'add', path: 'name.honorificPrefix', value: 'Dr' },
+      ]);
+      expect(set.profile).toEqual({
+        name: { formatted: 'Dr Jane Doe', honorificPrefix: 'Dr' },
+      });
+      expect(patch([{ op: 'remove', path: 'name' }], set)).toEqual({
+        ...base,
+        firstName: null,
+        lastName: null,
+      });
+    });
+
+    it('refuses a non-string or over-long value', () => {
+      expect(
+        scimError(() => patch([{ op: 'replace', path: 'title', value: 7 }])),
+      ).toEqual({ status: 400, scimType: 'invalidValue' });
+      expect(
+        scimError(() =>
+          patch([{ op: 'replace', path: 'title', value: 'x'.repeat(2049) }]),
+        ).scimType,
+      ).toBe('invalidValue');
+    });
+  });
+
+  describe('enterprise extension', () => {
+    it('stores department and employeeNumber by URN path', () => {
+      expect(
+        patch([
+          { op: 'Add', path: `${ENTERPRISE}:department`, value: 'Research' },
+          { op: 'Add', path: `${ENTERPRISE}:employeeNumber`, value: '42' },
+        ]).profile,
+      ).toEqual({
+        enterprise: { department: 'Research', employeeNumber: '42' },
+      });
+    });
+
+    it("reads manager as Entra ID's bare id, as {value}, or as manager.value", () => {
+      for (const operation of [
+        { op: 'Add', path: `${ENTERPRISE}:manager`, value: 'm-1' },
+        {
+          op: 'replace',
+          path: `${ENTERPRISE}:manager`,
+          value: { value: 'm-1' },
+        },
+        { op: 'replace', path: `${ENTERPRISE}:manager.value`, value: 'm-1' },
+      ]) {
+        expect(patch([operation]).profile).toEqual({
+          enterprise: { manager: 'm-1' },
+        });
+      }
+    });
+
+    it('clears manager with remove or an empty value', () => {
+      const set = patch([
+        { op: 'add', path: `${ENTERPRISE}:manager`, value: 'm-1' },
+      ]);
+      expect(
+        patch([{ op: 'remove', path: `${ENTERPRISE}:manager` }], set).profile,
+      ).toEqual({ enterprise: {} });
+      expect(
+        patch(
+          [
+            {
+              op: 'replace',
+              path: `${ENTERPRISE}:manager`,
+              value: { value: '' },
+            },
+          ],
+          set,
+        ).profile,
+      ).toEqual({ enterprise: {} });
+    });
+
+    it('takes the extension URN as the path with an object value', () => {
+      expect(
+        patch([{ op: 'add', path: ENTERPRISE, value: { costCenter: 'CC-1' } }])
+          .profile,
+      ).toEqual({ enterprise: { costCenter: 'CC-1' } });
+    });
+
+    it('refuses an unknown enterprise attribute in a PATCH', () => {
+      expect(
+        scimError(() =>
+          patch([{ op: 'add', path: `${ENTERPRISE}:shoeSize`, value: '9' }]),
+        ).scimType,
+      ).toBe('invalidPath');
+    });
+  });
+
+  describe('phoneNumbers and addresses', () => {
+    it('creates the typed value Entra ID writes with a filter path', () => {
+      const set = patch([
+        {
+          op: 'Add',
+          path: 'phoneNumbers[type eq "work"].value',
+          value: '+1 555 0100',
+        },
+        {
+          op: 'Add',
+          path: 'addresses[type eq "work"].locality',
+          value: 'Seattle',
+        },
+        {
+          op: 'Add',
+          path: 'addresses[type eq "work"].postalCode',
+          value: '98101',
+        },
+      ]);
+      expect(set.profile).toEqual({
+        phoneNumbers: [{ type: 'work', value: '+1 555 0100' }],
+        addresses: [{ type: 'work', locality: 'Seattle', postalCode: '98101' }],
+      });
+
+      const updated = patch(
+        [
+          {
+            op: 'Replace',
+            path: 'phoneNumbers[type eq "work"].value',
+            value: '+1 555 0199',
+          },
+          {
+            op: 'Add',
+            path: 'phoneNumbers[type eq "mobile"].value',
+            value: '+1 555 0111',
+          },
+        ],
+        set,
+      );
+      expect(updated.profile?.phoneNumbers).toEqual([
+        { type: 'work', value: '+1 555 0199' },
+        { type: 'mobile', value: '+1 555 0111' },
+      ]);
+
+      const removed = patch(
+        [{ op: 'Remove', path: 'phoneNumbers[type eq "work"]' }],
+        updated,
+      );
+      expect(removed.profile?.phoneNumbers).toEqual([
+        { type: 'mobile', value: '+1 555 0111' },
+      ]);
+    });
+
+    it('replaces the whole list, and add merges by type', () => {
+      const set = patch([
+        {
+          op: 'replace',
+          path: 'phoneNumbers',
+          value: [
+            { value: '1', type: 'work', primary: 'True' },
+            { value: '2', type: 'home' },
+          ],
+        },
+      ]);
+      expect(set.profile?.phoneNumbers).toEqual([
+        { value: '1', type: 'work', primary: true },
+        { value: '2', type: 'home' },
+      ]);
+      expect(
+        patch(
+          [
+            {
+              op: 'add',
+              path: 'phoneNumbers',
+              value: [{ value: '3', type: 'home' }],
+            },
+          ],
+          set,
+        ).profile?.phoneNumbers,
+      ).toEqual([
+        { value: '1', type: 'work', primary: true },
+        { value: '3', type: 'home' },
+      ]);
+      expect(
+        patch([{ op: 'remove', path: 'phoneNumbers' }], set).profile,
+      ).toEqual({});
+    });
+
+    it('drops a value left with nothing but its type', () => {
+      const set = patch([
+        { op: 'add', path: 'phoneNumbers[type eq "fax"].value', value: '9' },
+      ]);
+      expect(
+        patch(
+          [{ op: 'remove', path: 'phoneNumbers[type eq "fax"].value' }],
+          set,
+        ).profile,
+      ).toEqual({});
+    });
+
+    it('refuses a replace whose filter matches nothing and is not an eq', () => {
+      expect(
+        scimError(() =>
+          patch([
+            {
+              op: 'replace',
+              path: 'phoneNumbers[value sw "+44"].type',
+              value: 'work',
+            },
+          ]),
+        ).scimType,
+      ).toBe('noTarget');
+    });
+  });
+
+  describe('password', () => {
+    it.each([
+      [{ op: 'replace', path: 'password', value: 'N3w-Passw0rd!' }],
+      [
+        {
+          op: 'replace',
+          path: 'urn:ietf:params:scim:schemas:core:2.0:User:password',
+          value: 'N3w-Passw0rd!',
+        },
+      ],
+      [{ op: 'replace', value: { password: 'N3w-Passw0rd!' } }],
+      [{ op: 'Add', path: 'password', value: 'N3w-Passw0rd!' }],
+    ])('sets the new password from %j', (operation) => {
+      expect(patch([operation]).password).toBe('N3w-Passw0rd!');
+    });
+
+    it('cannot be removed, emptied or set to a non-string', () => {
+      for (const operation of [
+        { op: 'remove', path: 'password' },
+        { op: 'replace', path: 'password', value: '' },
+        { op: 'replace', path: 'password', value: 12345678 },
+        { op: 'replace', path: 'password', value: 'x'.repeat(1025) },
+      ]) {
+        expect(scimError(() => patch([operation])).scimType).toBe(
+          'invalidValue',
+        );
+      }
+    });
+
+    it('is not set when the request does not send one', () => {
+      expect(
+        patch([{ op: 'replace', path: 'title', value: 'x' }]).password,
+      ).toBeUndefined();
+    });
+  });
+
+  describe('ignored attributes', () => {
+    it.each(['ims', 'photos', 'entitlements', 'roles', 'x509Certificates'])(
+      'accepts %s and changes nothing',
+      (path) => {
+        expect(
+          patch([{ op: 'Replace', path, value: [{ value: 'x' }] }]),
+        ).toEqual(base);
+        expect(patch([{ op: 'Remove', path }])).toEqual(base);
+      },
+    );
   });
 
   describe('invalid paths', () => {
@@ -338,5 +637,83 @@ describe('applyUserPatch', () => {
       ).toThrow(ScimException);
       expect(state).toEqual(base);
     });
+  });
+});
+
+describe('userStateFromResource (POST / PUT bodies)', () => {
+  const resource = (body: Record<string, unknown>, enabled = true) =>
+    userStateFromResource(body, {
+      username: String(body['userName']),
+      enabled,
+    });
+
+  it('reads a full Entra ID user', () => {
+    expect(
+      resource({
+        schemas: ['urn:ietf:params:scim:schemas:core:2.0:User', ENTERPRISE],
+        externalId: 'obj-1',
+        userName: 'ada@example.com',
+        active: 'True',
+        displayName: 'Ada Lovelace',
+        title: 'Engineer',
+        emails: [{ primary: true, type: 'work', value: 'ada@example.com' }],
+        name: {
+          formatted: 'Ada Lovelace',
+          givenName: 'Ada',
+          familyName: 'Lovelace',
+        },
+        phoneNumbers: [{ type: 'mobile', value: '+44 20 7946 0000' }],
+        password: 'S3cret-passw0rd',
+        [ENTERPRISE]: { department: 'Research', manager: { value: 'm-1' } },
+      }),
+    ).toEqual({
+      username: 'ada@example.com',
+      email: 'ada@example.com',
+      firstName: 'Ada',
+      lastName: 'Lovelace',
+      enabled: true,
+      externalId: 'obj-1',
+      password: 'S3cret-passw0rd',
+      profile: {
+        displayName: 'Ada Lovelace',
+        title: 'Engineer',
+        name: { formatted: 'Ada Lovelace' },
+        phoneNumbers: [{ type: 'mobile', value: '+44 20 7946 0000' }],
+        enterprise: { department: 'Research', manager: 'm-1' },
+      },
+    });
+  });
+
+  it('leaves out what the body leaves out, but keeps active', () => {
+    expect(resource({ userName: 'bare' }, false)).toEqual({
+      username: 'bare',
+      email: null,
+      firstName: null,
+      lastName: null,
+      enabled: false,
+      externalId: null,
+      profile: {},
+    });
+  });
+
+  it('ignores read-only and unknown attributes instead of refusing them', () => {
+    expect(
+      resource({
+        userName: 'u',
+        id: 'x',
+        meta: {},
+        groups: [{ value: 'g' }],
+        favouriteColour: 'blue',
+        'urn:example:custom:1.0:User': { a: 1 },
+        'not a name!': 1,
+      }),
+    ).toMatchObject({ username: 'u', profile: {} });
+  });
+
+  it('still refuses a known attribute with a wrong type', () => {
+    expect(
+      scimError(() => resource({ userName: 'u', emails: 'a@example.com' }))
+        .scimType,
+    ).toBe('invalidValue');
   });
 });
