@@ -43,6 +43,7 @@ import {
   ScimExceptionFilter,
 } from './scim-exception.filter.js';
 import { getPatchOperations } from './patch-request.js';
+import { scimBadRequest } from './scim-errors.js';
 import { SCIM_SCHEMAS } from './types/scim.types.js';
 import type {
   ScimServiceProviderConfig,
@@ -74,13 +75,33 @@ function scimRealm(req: ScimRequest | undefined): ScimRealmRef {
   return { id: realm.id, name: realm.name };
 }
 
-function intParam(value: string | undefined): number | undefined {
+/**
+ * A query parameter given once, as a string. Express turns `?filter=a&filter=b`
+ * (or `filter[]=…`) into an array or an object; RFC 7644 defines each of
+ * these parameters once, so anything but a single string is a 400, never a
+ * value passed on to code that expects a string.
+ */
+function singleParam(
+  name: string,
+  value: unknown,
+  scimType: 'invalidFilter' | 'invalidValue' = 'invalidValue',
+): string | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== 'string') {
+    throw scimBadRequest(scimType, `The ${name} parameter must be given once`);
+  }
+  return value;
+}
+
+function intParam(raw: unknown, name = 'startIndex'): number | undefined {
+  const value = singleParam(name, raw);
   if (value === undefined || value === '') return undefined;
   const n = Number.parseInt(value, 10);
   return Number.isFinite(n) ? n : undefined;
 }
 
-function listParam(value: string | undefined): string[] | undefined {
+function listParam(raw: unknown, name = 'attributes'): string[] | undefined {
+  const value = singleParam(name, raw);
   if (!value) return undefined;
   return value
     .split(',')
@@ -90,12 +111,12 @@ function listParam(value: string | undefined): string[] | undefined {
 
 /** `attributes` and `excludedAttributes` query parameters (RFC 7644 §3.9). */
 function projectionOf(
-  attributes: string | undefined,
-  excludedAttributes: string | undefined,
+  attributes: unknown,
+  excludedAttributes: unknown,
 ): { attributes?: string[]; excludedAttributes?: string[] } {
   return {
     attributes: listParam(attributes),
-    excludedAttributes: listParam(excludedAttributes),
+    excludedAttributes: listParam(excludedAttributes, 'excludedAttributes'),
   };
 }
 
@@ -241,17 +262,17 @@ export class ScimController {
   async getUsers(
     @Query('startIndex') startIndex?: string,
     @Query('count') count?: string,
-    @Query('filter') filter?: string,
+    @Query('filter') filter?: unknown,
     @Query('attributes') attributes?: string,
     @Query('excludedAttributes') excludedAttributes?: string,
     @Req() req?: ScimRequest,
   ): Promise<ScimListResponse<ScimUser>> {
     return this.usersService.findAll(scimRealm(req), {
       startIndex: intParam(startIndex),
-      count: intParam(count),
-      filter,
+      count: intParam(count, 'count'),
+      filter: singleParam('filter', filter, 'invalidFilter'),
       attributes: listParam(attributes),
-      excludedAttributes: listParam(excludedAttributes),
+      excludedAttributes: listParam(excludedAttributes, 'excludedAttributes'),
     });
   }
 
@@ -367,17 +388,17 @@ export class ScimController {
   async getGroups(
     @Query('startIndex') startIndex?: string,
     @Query('count') count?: string,
-    @Query('filter') filter?: string,
+    @Query('filter') filter?: unknown,
     @Query('attributes') attributes?: string,
     @Query('excludedAttributes') excludedAttributes?: string,
     @Req() req?: ScimRequest,
   ): Promise<ScimListResponse<ScimGroup>> {
     return this.groupsService.findAll(scimRealm(req), {
       startIndex: intParam(startIndex),
-      count: intParam(count),
-      filter,
+      count: intParam(count, 'count'),
+      filter: singleParam('filter', filter, 'invalidFilter'),
       attributes: listParam(attributes),
-      excludedAttributes: listParam(excludedAttributes),
+      excludedAttributes: listParam(excludedAttributes, 'excludedAttributes'),
     });
   }
 
