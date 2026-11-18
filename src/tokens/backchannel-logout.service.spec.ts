@@ -3,13 +3,13 @@ import { lookupsBackedBy } from '../cache/cached-lookups.mock.js';
 jest.mock('../crypto/jwk.service.js', () => ({
   JwkService: jest.fn(),
 }));
-// No DNS in unit tests: the link-local check is its own unit, mocked here.
+// The pinned transport is tested with real sockets in its own suite.
 jest.mock('../common/security/safe-http-client.js', () => ({
-  assertNotLinkLocalTarget: jest.fn().mockResolvedValue(undefined),
+  postBackchannelLogout: jest.fn(),
 }));
 
 import { Logger } from '@nestjs/common';
-import { assertNotLinkLocalTarget } from '../common/security/safe-http-client.js';
+import { postBackchannelLogout } from '../common/security/safe-http-client.js';
 import {
   BACKCHANNEL_LOGOUT_EVENT,
   BackchannelLogoutService,
@@ -29,7 +29,6 @@ describe('BackchannelLogoutService', () => {
   let service: BackchannelLogoutService;
   let prisma: MockPrismaService;
   let mockJwkService: { signJwt: jest.Mock };
-  let originalFetch: typeof global.fetch;
   let warn: jest.SpyInstance;
 
   const realm = { id: 'realm-1', name: 'test-realm' } as Realm;
@@ -69,16 +68,13 @@ describe('BackchannelLogoutService', () => {
     );
     prisma.realmSigningKey.findFirst.mockResolvedValue(mockSigningKey);
 
-    originalFetch = global.fetch;
-    global.fetch = jest.fn().mockResolvedValue({ ok: true, status: 200 });
     warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => {});
-    (assertNotLinkLocalTarget as jest.Mock)
+    (postBackchannelLogout as jest.Mock)
       .mockReset()
-      .mockResolvedValue(undefined);
+      .mockResolvedValue({ statusCode: 200, body: '' });
   });
 
   afterEach(() => {
-    global.fetch = originalFetch;
     warn.mockRestore();
   });
 
@@ -135,7 +131,7 @@ describe('BackchannelLogoutService', () => {
           backchannelLogoutSessionRequired: true,
         },
       });
-      expect(global.fetch).not.toHaveBeenCalled();
+      expect(postBackchannelLogout).not.toHaveBeenCalled();
     });
 
     it('builds a spec-compliant logout token: iss, aud, sub, sid, events, no nonce, typed', async () => {
@@ -166,15 +162,10 @@ describe('BackchannelLogoutService', () => {
 
       await service.dispatch(realm, [session('s-1', ['app-1'])]);
 
-      expect(global.fetch).toHaveBeenCalledWith(
+      expect(postBackchannelLogout).toHaveBeenCalledWith(
         'https://app-1.example.com/logout',
-        expect.objectContaining({
-          method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: 'logout_token=mock.jwt.token',
-          redirect: 'error',
-          signal: expect.any(AbortSignal),
-        }),
+        'logout_token=mock.jwt.token',
+        { timeoutMs: 10_000 },
       );
     });
 
@@ -193,7 +184,7 @@ describe('BackchannelLogoutService', () => {
 
       const sids = mockJwkService.signJwt.mock.calls.map((c) => c[0].sid);
       expect(sids.sort()).toEqual(['s-1', 's-2']);
-      expect(global.fetch).toHaveBeenCalledTimes(2);
+      expect(postBackchannelLogout).toHaveBeenCalledTimes(2);
     });
 
     it('still names the session to a client that does not require sid when only some sessions ended', async () => {
@@ -231,7 +222,7 @@ describe('BackchannelLogoutService', () => {
       await service.dispatch(realm, [session('s-1', ['app-1'])]);
 
       expect(mockJwkService.signJwt).not.toHaveBeenCalled();
-      expect(global.fetch).not.toHaveBeenCalled();
+      expect(postBackchannelLogout).not.toHaveBeenCalled();
       expect(warn).toHaveBeenCalledWith(
         expect.stringContaining('No active signing key'),
       );
@@ -243,21 +234,21 @@ describe('BackchannelLogoutService', () => {
         client('refuses', true),
         client('fine', true),
       ]);
-      (global.fetch as jest.Mock).mockImplementation((url: string) => {
+      (postBackchannelLogout as jest.Mock).mockImplementation((url: string) => {
         if (url.includes('down')) {
           return Promise.reject(new Error('connect ECONNREFUSED'));
         }
         if (url.includes('refuses')) {
-          return Promise.resolve({ ok: false, status: 500 });
+          return Promise.resolve({ statusCode: 500, body: '' });
         }
-        return Promise.resolve({ ok: true, status: 200 });
+        return Promise.resolve({ statusCode: 200, body: '' });
       });
 
       await expect(
         service.dispatch(realm, [session('s-1', ['down', 'refuses', 'fine'])]),
       ).resolves.toBeUndefined();
 
-      expect(global.fetch).toHaveBeenCalledTimes(3);
+      expect(postBackchannelLogout).toHaveBeenCalledTimes(3);
       expect(warn).toHaveBeenCalledWith(
         'Back-channel logout to down in realm test-realm failed: connect ECONNREFUSED',
       );
@@ -273,12 +264,12 @@ describe('BackchannelLogoutService', () => {
       prisma.client.findMany.mockResolvedValue(clients);
       let inFlight = 0;
       let peak = 0;
-      (global.fetch as jest.Mock).mockImplementation(async () => {
+      (postBackchannelLogout as jest.Mock).mockImplementation(async () => {
         inFlight++;
         peak = Math.max(peak, inFlight);
         await new Promise((resolve) => setImmediate(resolve));
         inFlight--;
-        return { ok: true, status: 200 };
+        return { statusCode: 200, body: '' };
       });
 
       await service.dispatch(realm, [
@@ -288,7 +279,7 @@ describe('BackchannelLogoutService', () => {
         ),
       ]);
 
-      expect(global.fetch).toHaveBeenCalledTimes(20);
+      expect(postBackchannelLogout).toHaveBeenCalledTimes(20);
       expect(peak).toBe(8);
     });
   });
@@ -366,7 +357,7 @@ describe('BackchannelLogoutService', () => {
       prisma.client.findMany.mockResolvedValue([
         client('metadata', true, 'http://169.254.169.254/latest'),
       ]);
-      (assertNotLinkLocalTarget as jest.Mock).mockRejectedValue(
+      (postBackchannelLogout as jest.Mock).mockRejectedValue(
         new Error(
           'Delivery blocked: target is a link-local or cloud-metadata address',
         ),
@@ -374,23 +365,23 @@ describe('BackchannelLogoutService', () => {
 
       await service.dispatch(realm, [session('s-1', ['metadata'])]);
 
-      expect(assertNotLinkLocalTarget).toHaveBeenCalledWith(
+      expect(postBackchannelLogout).toHaveBeenCalledWith(
         'http://169.254.169.254/latest',
+        'logout_token=mock.jwt.token',
+        { timeoutMs: 10_000 },
       );
-      expect(global.fetch).not.toHaveBeenCalled();
       expect(warn).toHaveBeenCalledWith(
         'Back-channel logout to metadata in realm test-realm failed: Delivery blocked: target is a link-local or cloud-metadata address',
       );
     });
 
-    it('skips the check when BACKCHANNEL_LOGOUT_ALLOW_LINK_LOCAL=true', async () => {
+    it('still uses the pinned transport when BACKCHANNEL_LOGOUT_ALLOW_LINK_LOCAL=true', async () => {
       process.env['BACKCHANNEL_LOGOUT_ALLOW_LINK_LOCAL'] = 'true';
       prisma.client.findMany.mockResolvedValue([client('app-1', true)]);
 
       await service.dispatch(realm, [session('s-1', ['app-1'])]);
 
-      expect(assertNotLinkLocalTarget).not.toHaveBeenCalled();
-      expect(global.fetch).toHaveBeenCalledTimes(1);
+      expect(postBackchannelLogout).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -398,9 +389,9 @@ describe('BackchannelLogoutService', () => {
     it('returns at once and delivers in the background', async () => {
       prisma.client.findMany.mockResolvedValue([client('app-1', true)]);
       let release!: () => void;
-      (global.fetch as jest.Mock).mockReturnValue(
+      (postBackchannelLogout as jest.Mock).mockReturnValue(
         new Promise((resolve) => {
-          release = () => resolve({ ok: true, status: 200 });
+          release = () => resolve({ statusCode: 200, body: '' });
         }),
       );
 
@@ -410,7 +401,7 @@ describe('BackchannelLogoutService', () => {
 
       expect(result).toBeUndefined();
       await flushPromises();
-      expect(global.fetch).toHaveBeenCalledTimes(1);
+      expect(postBackchannelLogout).toHaveBeenCalledTimes(1);
       release();
       await flushPromises();
     });

@@ -3,7 +3,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { JwkService } from '../crypto/jwk.service.js';
 import { createConcurrencyLimiter } from '../common/utils/concurrency-limiter.util.js';
-import { assertNotLinkLocalTarget } from '../common/security/safe-http-client.js';
+import { postBackchannelLogout } from '../common/security/safe-http-client.js';
 import type { Realm } from '@prisma/client';
 
 /** The `events` member of a logout token (Back-Channel Logout 1.0 §2.4). */
@@ -267,13 +267,6 @@ export class BackchannelLogoutService {
     target: LogoutTarget,
   ): Promise<void> {
     try {
-      // Internal URIs are legitimate here (an RP on the operator's network),
-      // so this is not the full SSRF guard; but the cloud metadata service
-      // and other link-local addresses are refused unless explicitly allowed.
-      if (!linkLocalTargetsAllowed()) {
-        await assertNotLinkLocalTarget(target.uri);
-      }
-
       // §2.4: iss, aud, iat, jti (set by signJwt), events, and sub and/or
       // sid. Never a nonce, so a logout token cannot pass as an ID token.
       const payload: Record<string, unknown> = {
@@ -291,21 +284,15 @@ export class BackchannelLogoutService {
         LOGOUT_TOKEN_TYPE,
       );
 
-      const response = await fetch(target.uri, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({ logout_token: logoutToken }).toString(),
-        signal: AbortSignal.timeout(DELIVERY_TIMEOUT_MS),
-        // Never follow a redirect: the logout token goes to the registered
-        // URI only, not wherever that server points (ASVS 5.0 V15.3.2).
-        redirect: 'error',
-      });
-      // The body is not used; release the connection.
-      await response.body?.cancel().catch(() => undefined);
+      const response = await postBackchannelLogout(
+        target.uri,
+        new URLSearchParams({ logout_token: logoutToken }).toString(),
+        { timeoutMs: DELIVERY_TIMEOUT_MS },
+      );
 
-      if (!response.ok) {
+      if (response.statusCode < 200 || response.statusCode >= 300) {
         this.logger.warn(
-          `Back-channel logout to ${target.clientId} in realm ${realm.name} returned ${response.status}`,
+          `Back-channel logout to ${target.clientId} in realm ${realm.name} returned ${response.statusCode}`,
         );
       }
     } catch (err: unknown) {
@@ -356,15 +343,6 @@ function logoutTargets(
     }
   }
   return targets;
-}
-
-/**
- * `BACKCHANNEL_LOGOUT_ALLOW_LINK_LOCAL=true` lets logout tokens go to
- * link-local and cloud-metadata addresses. Read per call, so tests can
- * toggle it.
- */
-function linkLocalTargetsAllowed(): boolean {
-  return process.env['BACKCHANNEL_LOGOUT_ALLOW_LINK_LOCAL'] === 'true';
 }
 
 function errorMessage(err: unknown): string {

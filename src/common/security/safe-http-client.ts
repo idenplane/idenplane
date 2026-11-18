@@ -89,7 +89,7 @@ export class SsrfBlockedError extends Error {
 export interface SafeTarget {
   /** The parsed request URL (protocol/path/query all preserved as-is). */
   url: URL;
-  /** The validated, public-routable IP address the connection must use. */
+  /** The IP address validated under the caller's policy that the connection must use. */
   pinnedAddress: string;
   /** Address family of `pinnedAddress`. */
   family: 4 | 6;
@@ -357,8 +357,10 @@ function sendPinnedRequest(
   timeoutMs: number,
   method: 'GET' | 'POST' = 'POST',
   maxBytes = Infinity,
+  discardBody = false,
 ): Promise<PinnedRequestResult> {
   const { url, pinnedAddress, family } = target;
+  const hostname = url.hostname.replace(/^\[|\]$/g, '');
   const isHttps = url.protocol === 'https:';
   const requestFn = isHttps ? httpsRequest : httpRequest;
 
@@ -376,7 +378,7 @@ function sendPinnedRequest(
 
     const requestOptions: RequestOptions = {
       protocol: url.protocol,
-      hostname: url.hostname,
+      hostname,
       port: url.port !== '' ? Number(url.port) : isHttps ? 443 : 80,
       path: `${url.pathname}${url.search}`,
       method,
@@ -384,15 +386,19 @@ function sendPinnedRequest(
       lookup: pinnedLookup,
       family,
       signal: controller.signal,
+      // Logout delivery must use a fresh socket to the address just checked,
+      // rather than borrowing a pooled connection created under another policy.
+      ...(discardBody ? { agent: false as const } : {}),
       // Keep SNI/certificate validation and virtual-hosting tied to the
       // original hostname -- only the TCP connection target is pinned.
-      ...(isHttps ? { servername: url.hostname } : {}),
+      ...(isHttps && isIP(hostname) === 0 ? { servername: hostname } : {}),
     };
 
     const req = requestFn(requestOptions, (res: IncomingMessage) => {
       const chunks: Buffer[] = [];
       let received = 0;
       res.on('data', (chunk: Buffer) => {
+        if (discardBody) return;
         received += chunk.length;
         if (received > maxBytes) {
           clearTimeout(timer);
@@ -436,14 +442,17 @@ const LINK_LOCAL_BLOCKED_MESSAGE =
  * is, or resolves to, a link-local or cloud-metadata address
  * (`isLinkLocalOrMetadataIp`) is refused with `SsrfBlockedError`, as is any
  * scheme other than http(s). Every resolved address is checked, not only
- * the first, since the HTTP client may connect to any of them.
- *
- * It does not pin the connection: the caller's `fetch` resolves the name
- * again, so a name whose DNS answer flips between the two lookups (DNS
- * rebinding) can still get through. Closing that needs a pinned connection
- * (`safePost`), which would also refuse private addresses.
+ * the first. This check alone does not pin a caller's connection; logout
+ * delivery uses `postBackchannelLogout` to validate and pin in one operation.
  */
 export async function assertNotLinkLocalTarget(rawUrl: string): Promise<void> {
+  await resolveBackchannelLogoutTarget(rawUrl);
+}
+
+async function resolveBackchannelLogoutTarget(
+  rawUrl: string,
+  allowLinkLocal = false,
+): Promise<SafeTarget> {
   let url: URL;
   try {
     url = new URL(rawUrl);
@@ -455,9 +464,9 @@ export async function assertNotLinkLocalTarget(rawUrl: string): Promise<void> {
   }
   const hostname = url.hostname.replace(/^\[|\]$/g, '');
   if (isIP(hostname) !== 0) {
-    if (isLinkLocalOrMetadataIp(hostname))
+    if (!allowLinkLocal && isLinkLocalOrMetadataIp(hostname))
       throw new SsrfBlockedError(LINK_LOCAL_BLOCKED_MESSAGE);
-    return;
+    return { url, pinnedAddress: hostname, family: isIP(hostname) as 4 | 6 };
   }
   let records: LookupAddress[];
   try {
@@ -465,7 +474,66 @@ export async function assertNotLinkLocalTarget(rawUrl: string): Promise<void> {
   } catch {
     throw new Error('Delivery blocked: DNS resolution failed');
   }
-  if (records.some((record) => isLinkLocalOrMetadataIp(record.address))) {
+  if (!Array.isArray(records) || records.length === 0) {
+    throw new Error('Delivery blocked: DNS resolution returned no addresses');
+  }
+  if (
+    records.some(
+      (record) =>
+        isIP(record.address) === 0 ||
+        (!allowLinkLocal && isLinkLocalOrMetadataIp(record.address)),
+    )
+  ) {
     throw new SsrfBlockedError(LINK_LOCAL_BLOCKED_MESSAGE);
   }
+  const record = records[0];
+  return {
+    url,
+    pinnedAddress: record.address,
+    family: isIP(record.address) as 4 | 6,
+  };
+}
+
+/**
+ * POST a logout token to its registered URI with a DNS-pinned connection.
+ * Private/loopback RPs are allowed. Link-local and metadata addresses require
+ * the explicit BACKCHANNEL_LOGOUT_ALLOW_LINK_LOCAL override. Redirects are
+ * returned without following them; response bodies are drained, never stored.
+ */
+export async function postBackchannelLogout(
+  rawUrl: string,
+  body: string,
+  options: SafePostOptions = {},
+): Promise<SafePostResult> {
+  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const deadline = Date.now() + timeoutMs;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let target: SafeTarget;
+  try {
+    target = await Promise.race([
+      resolveBackchannelLogoutTarget(
+        rawUrl,
+        process.env['BACKCHANNEL_LOGOUT_ALLOW_LINK_LOCAL'] === 'true',
+      ),
+      new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(
+          () =>
+            reject(new Error('Back-channel logout DNS resolution timed out')),
+          timeoutMs,
+        );
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+  const response = await sendPinnedRequest(
+    target,
+    body,
+    { 'Content-Type': 'application/x-www-form-urlencoded' },
+    Math.max(1, deadline - Date.now()),
+    'POST',
+    0,
+    true,
+  );
+  return { statusCode: response.statusCode, body: '' };
 }
