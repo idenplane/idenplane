@@ -3,6 +3,7 @@ import {
   isBlockedIpv4,
   isBlockedIpv6,
   isBlockedHostnameLiteral,
+  isLinkLocalOrMetadataIp,
 } from './ip-range-guard.js';
 
 // ─── IPv4 ranges ────────────────────────────────────────────────────────────
@@ -465,5 +466,46 @@ describe('exact bypass strings called out in the spec', () => {
   it('https://example.com/webhook (legitimate public target) is NOT blocked', () => {
     const hostname = extractHost('https://example.com/webhook');
     expect(isBlockedHostnameLiteral(hostname)).toBe(false);
+  });
+});
+
+// ─── Link-local and cloud metadata (back-channel logout) ───────────────────
+
+describe('isLinkLocalOrMetadataIp', () => {
+  it.each([
+    ['169.254.169.254', 'AWS/GCP/Azure metadata'],
+    ['169.254.170.2', 'ECS task metadata'],
+    ['169.254.0.1', 'IPv4 link-local'],
+    ['169.254.255.255', 'end of IPv4 link-local'],
+    ['100.100.100.200', 'Alibaba Cloud metadata'],
+    ['192.0.0.192', 'Oracle Cloud metadata'],
+    ['fe80::1', 'IPv6 link-local'],
+    ['febf:ffff::1', 'end of IPv6 link-local'],
+    ['fd00:ec2::254', 'AWS metadata over IPv6'],
+    ['::ffff:169.254.169.254', 'IPv4-mapped metadata'],
+    ['::ffff:a9fe:a9fe', 'IPv4-mapped metadata, hex'],
+    ['64:ff9b::a9fe:a9fe', 'NAT64 metadata'],
+    ['2002:a9fe:a9fe::', '6to4 metadata'],
+    ['not-an-ip', 'not an IP (fails closed)'],
+  ])('refuses %s (%s)', (ip) => {
+    expect(isLinkLocalOrMetadataIp(ip)).toBe(true);
+  });
+
+  it.each([
+    ['10.0.0.5', 'RFC1918: an RP on the operator network'],
+    ['192.168.1.10', 'RFC1918'],
+    ['172.16.0.1', 'RFC1918'],
+    ['127.0.0.1', 'loopback'],
+    ['::1', 'IPv6 loopback'],
+    ['fd00:ec2::253', 'ULA next to the AWS metadata address'],
+    ['fd12:3456::1', 'ULA'],
+    ['169.253.255.255', 'just below link-local'],
+    ['169.255.0.0', 'just above link-local'],
+    ['100.100.100.201', 'next to Alibaba metadata'],
+    ['8.8.8.8', 'public'],
+    ['2606:4700::1111', 'public IPv6'],
+    ['::ffff:10.0.0.5', 'IPv4-mapped private'],
+  ])('allows %s (%s)', (ip) => {
+    expect(isLinkLocalOrMetadataIp(ip)).toBe(false);
   });
 });

@@ -506,3 +506,70 @@ export function isBlockedHostnameLiteral(hostname: string): boolean {
 
   return false;
 }
+
+/**
+ * Link-local and cloud instance-metadata addresses: a narrower class than
+ * `isBlockedIp`, for outbound calls to admin-configured URLs that may
+ * legitimately point at the operator's own network (back-channel logout),
+ * where private and loopback addresses must stay reachable but the metadata
+ * service, which hands out cloud credentials, must not.
+ *
+ *   169.254.0.0/16       IPv4 link-local: AWS, GCP, Azure, OpenStack,
+ *                        DigitalOcean metadata at 169.254.169.254, and
+ *                        ECS task metadata at 169.254.170.2
+ *   100.100.100.200/32   Alibaba Cloud metadata
+ *   192.0.0.192/32       Oracle Cloud metadata (legacy)
+ *   fe80::/10            IPv6 link-local
+ *   fd00:ec2::254/128    AWS metadata over IPv6
+ *
+ * IPv4 addresses embedded in IPv6 (IPv4-mapped, IPv4-compatible, 6to4 and
+ * the NAT64 well-known prefix) are unwrapped and checked too. Fails closed:
+ * anything that is not a valid IP literal counts as such an address.
+ */
+const IPV4_LINK_LOCAL_OR_METADATA: ReadonlyArray<readonly [string, number]> = [
+  ['169.254.0.0', 16],
+  ['100.100.100.200', 32],
+  ['192.0.0.192', 32],
+];
+
+const IPV6_LINK_LOCAL_OR_METADATA: ReadonlyArray<readonly [string, number]> = [
+  ['fe80::', 10],
+  ['fd00:ec2::254', 128],
+];
+
+function isLinkLocalOrMetadataIpv4(ip: string): boolean {
+  const value = ipv4ToInt(ip);
+  if (value === null) return true;
+  return IPV4_LINK_LOCAL_OR_METADATA.some(([network, prefixLength]) =>
+    ipv4IntInCidr(value, network, prefixLength),
+  );
+}
+
+export function isLinkLocalOrMetadataIp(ip: string): boolean {
+  const family = isIP(ip);
+  if (family === 4) return isLinkLocalOrMetadataIpv4(ip);
+  if (family !== 6) return true;
+
+  const value = ipv6ToBigInt(ip);
+  if (value === null) return true;
+  if (
+    IPV6_LINK_LOCAL_OR_METADATA.some(([network, prefixLength]) =>
+      ipv6InCidr(value, network, prefixLength),
+    )
+  ) {
+    return true;
+  }
+  const low32 = bigIntToIpv4(value & 0xffffffffn);
+  // IPv4-mapped (::ffff:0:0/96), IPv4-compatible (::/96) and NAT64
+  // (64:ff9b::/96) carry an IPv4 address in their low 32 bits.
+  for (const prefix of ['::ffff:0:0', '::', '64:ff9b::']) {
+    if (ipv6InCidr(value, prefix, 96)) return isLinkLocalOrMetadataIpv4(low32);
+  }
+  // 6to4 (2002::/16) carries it in bits 16-47.
+  if (ipv6InCidr(value, '2002::', 16)) {
+    return isLinkLocalOrMetadataIpv4(
+      bigIntToIpv4((value >> 80n) & 0xffffffffn),
+    );
+  }
+  return false;
+}

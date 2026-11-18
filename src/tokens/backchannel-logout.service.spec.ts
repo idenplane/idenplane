@@ -3,15 +3,25 @@ import { lookupsBackedBy } from '../cache/cached-lookups.mock.js';
 jest.mock('../crypto/jwk.service.js', () => ({
   JwkService: jest.fn(),
 }));
+// No DNS in unit tests: the link-local check is its own unit, mocked here.
+jest.mock('../common/security/safe-http-client.js', () => ({
+  assertNotLinkLocalTarget: jest.fn().mockResolvedValue(undefined),
+}));
 
-import { BackchannelLogoutService } from './backchannel-logout.service.js';
+import { Logger } from '@nestjs/common';
+import { assertNotLinkLocalTarget } from '../common/security/safe-http-client.js';
+import {
+  BACKCHANNEL_LOGOUT_EVENT,
+  BackchannelLogoutService,
+  type EndedSession,
+} from './backchannel-logout.service.js';
 import {
   createMockPrismaService,
   type MockPrismaService,
 } from '../prisma/prisma.mock.js';
 import type { Realm } from '@prisma/client';
 
-/** Drain the microtask / promise queue so fire-and-forget work completes. */
+/** Drain the promise queue so fire-and-forget work completes. */
 const flushPromises = () =>
   new Promise<void>((resolve) => setImmediate(resolve));
 
@@ -20,11 +30,9 @@ describe('BackchannelLogoutService', () => {
   let prisma: MockPrismaService;
   let mockJwkService: { signJwt: jest.Mock };
   let originalFetch: typeof global.fetch;
+  let warn: jest.SpyInstance;
 
-  const mockRealm: Realm = {
-    id: 'realm-1',
-    name: 'test-realm',
-  } as Realm;
+  const realm = { id: 'realm-1', name: 'test-realm' } as Realm;
 
   const mockSigningKey = {
     id: 'key-1',
@@ -35,6 +43,22 @@ describe('BackchannelLogoutService', () => {
     createdAt: new Date(),
   };
 
+  const client = (
+    clientId: string,
+    sessionRequired: boolean,
+    uri = `https://${clientId}.example.com/logout`,
+  ) => ({
+    clientId,
+    backchannelLogoutUri: uri,
+    backchannelLogoutSessionRequired: sessionRequired,
+  });
+
+  const session = (
+    id: string,
+    clientIds: (string | null)[],
+    userId = 'user-1',
+  ): EndedSession => ({ id, userId, clientIds });
+
   beforeEach(() => {
     prisma = createMockPrismaService();
     mockJwkService = { signJwt: jest.fn().mockResolvedValue('mock.jwt.token') };
@@ -43,206 +67,373 @@ describe('BackchannelLogoutService', () => {
       prisma as any,
       mockJwkService as any,
     );
+    prisma.realmSigningKey.findFirst.mockResolvedValue(mockSigningKey);
 
-    // Save original fetch and replace with mock
     originalFetch = global.fetch;
-    global.fetch = jest.fn();
+    global.fetch = jest.fn().mockResolvedValue({ ok: true, status: 200 });
+    warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => {});
+    (assertNotLinkLocalTarget as jest.Mock)
+      .mockReset()
+      .mockResolvedValue(undefined);
   });
 
   afterEach(() => {
     global.fetch = originalFetch;
+    warn.mockRestore();
   });
 
-  // ─── sendLogoutTokens ───────────────────────────────────────
+  describe('endedSessions', () => {
+    it('reads each session with the distinct clients of its refresh tokens', async () => {
+      prisma.session.findMany.mockResolvedValue([
+        {
+          id: 's-1',
+          userId: 'user-1',
+          refreshTokens: [{ clientId: 'app-1' }, { clientId: null }],
+        },
+      ]);
 
-  describe('sendLogoutTokens', () => {
-    it('should return early when no clients have a backchannelLogoutUri', async () => {
+      await expect(service.endedSessions(['s-1'])).resolves.toEqual([
+        { id: 's-1', userId: 'user-1', clientIds: ['app-1', null] },
+      ]);
+      expect(prisma.session.findMany).toHaveBeenCalledWith({
+        where: { id: { in: ['s-1'] } },
+        select: {
+          id: true,
+          userId: true,
+          refreshTokens: {
+            select: { clientId: true },
+            distinct: ['clientId'],
+          },
+        },
+      });
+    });
+
+    it('reads nothing for no sessions', async () => {
+      await expect(service.endedSessions([])).resolves.toEqual([]);
+      expect(prisma.session.findMany).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('dispatch', () => {
+    it('asks only for the clients the ended sessions were used with', async () => {
       prisma.client.findMany.mockResolvedValue([]);
 
-      service.sendLogoutTokens(mockRealm, 'user-1', 'session-1');
-      await flushPromises();
+      await service.dispatch(realm, [
+        session('s-1', ['app-1', 'app-2']),
+        session('s-2', ['app-1', null]),
+      ]);
 
       expect(prisma.client.findMany).toHaveBeenCalledWith({
         where: {
           realmId: 'realm-1',
+          clientId: { in: ['app-1', 'app-2'] },
           backchannelLogoutUri: { not: null },
         },
-      });
-      expect(prisma.realmSigningKey.findFirst).not.toHaveBeenCalled();
-      expect(global.fetch).not.toHaveBeenCalled();
-    });
-
-    it('should return early and log warning when no active signing key is found', async () => {
-      prisma.client.findMany.mockResolvedValue([
-        {
-          id: 'client-1',
-          clientId: 'my-app',
-          backchannelLogoutUri: 'https://example.com/logout',
-          backchannelLogoutSessionRequired: false,
-        },
-      ]);
-      prisma.realmSigningKey.findFirst.mockResolvedValue(null);
-
-      service.sendLogoutTokens(mockRealm, 'user-1', 'session-1');
-      await flushPromises();
-
-      expect(prisma.realmSigningKey.findFirst).toHaveBeenCalledWith({
-        where: { realmId: 'realm-1', active: true },
-        orderBy: { createdAt: 'desc' },
-      });
-      expect(mockJwkService.signJwt).not.toHaveBeenCalled();
-      expect(global.fetch).not.toHaveBeenCalled();
-    });
-
-    it('should send logout tokens to all clients with backchannelLogoutUri', async () => {
-      const clients = [
-        {
-          id: 'client-1',
-          clientId: 'app-1',
-          backchannelLogoutUri: 'https://app1.example.com/logout',
-          backchannelLogoutSessionRequired: false,
-        },
-        {
-          id: 'client-2',
-          clientId: 'app-2',
-          backchannelLogoutUri: 'https://app2.example.com/logout',
-          backchannelLogoutSessionRequired: false,
-        },
-      ];
-
-      prisma.client.findMany.mockResolvedValue(clients);
-      prisma.realmSigningKey.findFirst.mockResolvedValue(mockSigningKey);
-      (global.fetch as jest.Mock).mockResolvedValue({ ok: true });
-
-      service.sendLogoutTokens(mockRealm, 'user-1', 'session-1');
-      await flushPromises();
-
-      expect(mockJwkService.signJwt).toHaveBeenCalledTimes(2);
-      expect(global.fetch).toHaveBeenCalledTimes(2);
-
-      // Verify first client call
-      expect(global.fetch).toHaveBeenCalledWith(
-        'https://app1.example.com/logout',
-        expect.objectContaining({
-          method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: 'logout_token=mock.jwt.token',
-          // The logout token never follows a redirect elsewhere.
-          redirect: 'error',
-        }),
-      );
-
-      // Verify second client call
-      expect(global.fetch).toHaveBeenCalledWith(
-        'https://app2.example.com/logout',
-        expect.objectContaining({
-          method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: 'logout_token=mock.jwt.token',
-        }),
-      );
-    });
-
-    it('should include sid claim when backchannelLogoutSessionRequired is true', async () => {
-      const clients = [
-        {
-          id: 'client-1',
-          clientId: 'app-1',
-          backchannelLogoutUri: 'https://app1.example.com/logout',
+        select: {
+          clientId: true,
+          backchannelLogoutUri: true,
           backchannelLogoutSessionRequired: true,
         },
-      ];
-
-      prisma.client.findMany.mockResolvedValue(clients);
-      prisma.realmSigningKey.findFirst.mockResolvedValue(mockSigningKey);
-      (global.fetch as jest.Mock).mockResolvedValue({ ok: true });
-
-      service.sendLogoutTokens(mockRealm, 'user-1', 'session-1');
-      await flushPromises();
-
-      expect(mockJwkService.signJwt).toHaveBeenCalledWith(
-        expect.objectContaining({
-          iss: expect.stringContaining('/realms/test-realm'),
-          sub: 'user-1',
-          aud: 'app-1',
-          sid: 'session-1',
-          events: { 'http://schemas.openid.net/event/backchannel-logout': {} },
-        }),
-        'mock-private-key',
-        'kid-1',
-        120,
-      );
+      });
+      expect(global.fetch).not.toHaveBeenCalled();
     });
 
-    it('should NOT include sid claim when backchannelLogoutSessionRequired is false', async () => {
-      const clients = [
-        {
-          id: 'client-1',
-          clientId: 'app-1',
-          backchannelLogoutUri: 'https://app1.example.com/logout',
-          backchannelLogoutSessionRequired: false,
-        },
-      ];
+    it('builds a spec-compliant logout token: iss, aud, sub, sid, events, no nonce, typed', async () => {
+      prisma.client.findMany.mockResolvedValue([client('app-1', true)]);
 
-      prisma.client.findMany.mockResolvedValue(clients);
-      prisma.realmSigningKey.findFirst.mockResolvedValue(mockSigningKey);
-      (global.fetch as jest.Mock).mockResolvedValue({ ok: true });
+      await service.dispatch(realm, [session('s-1', ['app-1'])]);
 
-      service.sendLogoutTokens(mockRealm, 'user-1', 'session-1');
-      await flushPromises();
+      expect(mockJwkService.signJwt).toHaveBeenCalledTimes(1);
+      const [payload, key, kid, lifetime, typ] =
+        mockJwkService.signJwt.mock.calls[0];
+      expect(payload).toEqual({
+        iss: expect.stringMatching(/\/realms\/test-realm$/),
+        aud: 'app-1',
+        sub: 'user-1',
+        sid: 's-1',
+        events: { [BACKCHANNEL_LOGOUT_EVENT]: {} },
+      });
+      // iat and jti are set by JwkService.signJwt on every token.
+      expect(payload).not.toHaveProperty('nonce');
+      expect(key).toBe('mock-private-key');
+      expect(kid).toBe('kid-1');
+      expect(lifetime).toBe(120);
+      expect(typ).toBe('logout+jwt');
+    });
 
-      const signCall = mockJwkService.signJwt.mock.calls[0][0];
-      expect(signCall).not.toHaveProperty('sid');
-      expect(signCall).toEqual(
+    it('POSTs the token form-encoded to the registered URI, never following a redirect', async () => {
+      prisma.client.findMany.mockResolvedValue([client('app-1', true)]);
+
+      await service.dispatch(realm, [session('s-1', ['app-1'])]);
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        'https://app-1.example.com/logout',
         expect.objectContaining({
-          iss: expect.stringContaining('/realms/test-realm'),
-          sub: 'user-1',
-          aud: 'app-1',
-          events: { 'http://schemas.openid.net/event/backchannel-logout': {} },
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: 'logout_token=mock.jwt.token',
+          redirect: 'error',
+          signal: expect.any(AbortSignal),
         }),
       );
     });
 
-    it('should handle fetch failure gracefully without throwing', async () => {
-      const clients = [
-        {
-          id: 'client-1',
-          clientId: 'app-1',
-          backchannelLogoutUri: 'https://app1.example.com/logout',
-          backchannelLogoutSessionRequired: false,
-        },
-      ];
+    it('sends one token per session, with sid, to a client that requires sid', async () => {
+      prisma.client.findMany.mockResolvedValue([client('app-1', true)]);
 
-      prisma.client.findMany.mockResolvedValue(clients);
-      prisma.realmSigningKey.findFirst.mockResolvedValue(mockSigningKey);
-      (global.fetch as jest.Mock).mockRejectedValue(new Error('Network error'));
+      await service.dispatch(
+        realm,
+        [
+          session('s-1', ['app-1']),
+          session('s-2', ['app-1']),
+          session('s-3', ['other-app']),
+        ],
+        { allSessionsOfUser: true },
+      );
 
-      // sendLogoutTokens is fire-and-forget (void); errors must not propagate
-      expect(() =>
-        service.sendLogoutTokens(mockRealm, 'user-1', 'session-1'),
-      ).not.toThrow();
-      await flushPromises(); // confirm the background work also swallows the error
+      const sids = mockJwkService.signJwt.mock.calls.map((c) => c[0].sid);
+      expect(sids.sort()).toEqual(['s-1', 's-2']);
+      expect(global.fetch).toHaveBeenCalledTimes(2);
     });
 
-    it('should handle non-ok response gracefully without throwing', async () => {
-      const clients = [
-        {
-          id: 'client-1',
-          clientId: 'app-1',
-          backchannelLogoutUri: 'https://app1.example.com/logout',
-          backchannelLogoutSessionRequired: false,
-        },
-      ];
+    it('still names the session to a client that does not require sid when only some sessions ended', async () => {
+      prisma.client.findMany.mockResolvedValue([client('app-1', false)]);
 
+      await service.dispatch(realm, [session('s-1', ['app-1'])]);
+
+      // A sub-only token would end the user's other sessions at the RP.
+      expect(mockJwkService.signJwt).toHaveBeenCalledTimes(1);
+      expect(mockJwkService.signJwt.mock.calls[0][0]).toMatchObject({
+        sub: 'user-1',
+        sid: 's-1',
+      });
+    });
+
+    it('sends one sub-only token per user to a client that does not require sid when every session of the user ended', async () => {
+      prisma.client.findMany.mockResolvedValue([client('app-1', false)]);
+
+      await service.dispatch(
+        realm,
+        [session('s-1', ['app-1']), session('s-2', ['app-1'])],
+        { allSessionsOfUser: true },
+      );
+
+      expect(mockJwkService.signJwt).toHaveBeenCalledTimes(1);
+      const payload = mockJwkService.signJwt.mock.calls[0][0];
+      expect(payload).not.toHaveProperty('sid');
+      expect(payload).toMatchObject({ sub: 'user-1', aud: 'app-1' });
+    });
+
+    it('sends nothing without an active signing key, and logs it', async () => {
+      prisma.client.findMany.mockResolvedValue([client('app-1', true)]);
+      prisma.realmSigningKey.findFirst.mockResolvedValue(null);
+
+      await service.dispatch(realm, [session('s-1', ['app-1'])]);
+
+      expect(mockJwkService.signJwt).not.toHaveBeenCalled();
+      expect(global.fetch).not.toHaveBeenCalled();
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining('No active signing key'),
+      );
+    });
+
+    it('logs a failed or refused delivery and carries on with the others', async () => {
+      prisma.client.findMany.mockResolvedValue([
+        client('down', true),
+        client('refuses', true),
+        client('fine', true),
+      ]);
+      (global.fetch as jest.Mock).mockImplementation((url: string) => {
+        if (url.includes('down')) {
+          return Promise.reject(new Error('connect ECONNREFUSED'));
+        }
+        if (url.includes('refuses')) {
+          return Promise.resolve({ ok: false, status: 500 });
+        }
+        return Promise.resolve({ ok: true, status: 200 });
+      });
+
+      await expect(
+        service.dispatch(realm, [session('s-1', ['down', 'refuses', 'fine'])]),
+      ).resolves.toBeUndefined();
+
+      expect(global.fetch).toHaveBeenCalledTimes(3);
+      expect(warn).toHaveBeenCalledWith(
+        'Back-channel logout to down in realm test-realm failed: connect ECONNREFUSED',
+      );
+      expect(warn).toHaveBeenCalledWith(
+        'Back-channel logout to refuses in realm test-realm returned 500',
+      );
+    });
+
+    it('never has more than 8 deliveries in flight', async () => {
+      const clients = Array.from({ length: 20 }, (_, i) =>
+        client(`app-${i}`, true),
+      );
       prisma.client.findMany.mockResolvedValue(clients);
-      prisma.realmSigningKey.findFirst.mockResolvedValue(mockSigningKey);
-      (global.fetch as jest.Mock).mockResolvedValue({ ok: false, status: 500 });
+      let inFlight = 0;
+      let peak = 0;
+      (global.fetch as jest.Mock).mockImplementation(async () => {
+        inFlight++;
+        peak = Math.max(peak, inFlight);
+        await new Promise((resolve) => setImmediate(resolve));
+        inFlight--;
+        return { ok: true, status: 200 };
+      });
 
-      // sendLogoutTokens is fire-and-forget (void); non-ok responses must not propagate
+      await service.dispatch(realm, [
+        session(
+          's-1',
+          clients.map((c) => c.clientId),
+        ),
+      ]);
+
+      expect(global.fetch).toHaveBeenCalledTimes(20);
+      expect(peak).toBe(8);
+    });
+  });
+
+  describe('clients of a session whose refresh tokens name none', () => {
+    it('falls back to the clients of the authorization codes it came from', async () => {
+      prisma.authorizationCode.findMany = jest
+        .fn()
+        .mockResolvedValue([
+          { sessionId: 's-old', client: { clientId: 'app-1' } },
+        ]);
+      prisma.client.findMany.mockResolvedValue([client('app-1', true)]);
+
+      await service.dispatch(realm, [session('s-old', [null])]);
+
+      expect(prisma.authorizationCode.findMany).toHaveBeenCalledWith({
+        where: { sessionId: { in: ['s-old'] }, client: { realmId: 'realm-1' } },
+        select: { sessionId: true, client: { select: { clientId: true } } },
+      });
+      expect(prisma.client.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ clientId: { in: ['app-1'] } }),
+        }),
+      );
+      expect(mockJwkService.signJwt.mock.calls[0][0]).toMatchObject({
+        aud: 'app-1',
+        sid: 's-old',
+      });
+    });
+
+    it('goes to every client of the realm with a back-channel URI when nothing names one', async () => {
+      prisma.authorizationCode.findMany = jest.fn().mockResolvedValue([]);
+      prisma.client.findMany.mockResolvedValue([
+        client('app-1', true),
+        client('app-2', false),
+      ]);
+
+      await service.dispatch(realm, [session('s-old', [null])]);
+
+      // No clientId filter: the realm's clients with a URI.
+      expect(prisma.client.findMany.mock.calls[0][0].where).toEqual({
+        realmId: 'realm-1',
+        backchannelLogoutUri: { not: null },
+      });
+      const sent = mockJwkService.signJwt.mock.calls.map((c) => c[0]);
+      // Both name the session: one ended session is never sub-only.
+      expect(sent).toEqual([
+        expect.objectContaining({ aud: 'app-1', sid: 's-old' }),
+        expect.objectContaining({ aud: 'app-2', sid: 's-old' }),
+      ]);
+    });
+
+    it('does not look further when the refresh tokens name a client', async () => {
+      prisma.authorizationCode.findMany = jest.fn();
+      prisma.client.findMany.mockResolvedValue([]);
+
+      await service.dispatch(realm, [session('s-1', ['app-1', null])]);
+
+      expect(prisma.authorizationCode.findMany).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('link-local and cloud-metadata targets', () => {
+    const original = process.env['BACKCHANNEL_LOGOUT_ALLOW_LINK_LOCAL'];
+    afterEach(() => {
+      if (original === undefined) {
+        delete process.env['BACKCHANNEL_LOGOUT_ALLOW_LINK_LOCAL'];
+      } else {
+        process.env['BACKCHANNEL_LOGOUT_ALLOW_LINK_LOCAL'] = original;
+      }
+    });
+
+    it('refuses a target the check rejects, logs it, and sends nothing there', async () => {
+      delete process.env['BACKCHANNEL_LOGOUT_ALLOW_LINK_LOCAL'];
+      prisma.client.findMany.mockResolvedValue([
+        client('metadata', true, 'http://169.254.169.254/latest'),
+      ]);
+      (assertNotLinkLocalTarget as jest.Mock).mockRejectedValue(
+        new Error(
+          'Delivery blocked: target is a link-local or cloud-metadata address',
+        ),
+      );
+
+      await service.dispatch(realm, [session('s-1', ['metadata'])]);
+
+      expect(assertNotLinkLocalTarget).toHaveBeenCalledWith(
+        'http://169.254.169.254/latest',
+      );
+      expect(global.fetch).not.toHaveBeenCalled();
+      expect(warn).toHaveBeenCalledWith(
+        'Back-channel logout to metadata in realm test-realm failed: Delivery blocked: target is a link-local or cloud-metadata address',
+      );
+    });
+
+    it('skips the check when BACKCHANNEL_LOGOUT_ALLOW_LINK_LOCAL=true', async () => {
+      process.env['BACKCHANNEL_LOGOUT_ALLOW_LINK_LOCAL'] = 'true';
+      prisma.client.findMany.mockResolvedValue([client('app-1', true)]);
+
+      await service.dispatch(realm, [session('s-1', ['app-1'])]);
+
+      expect(assertNotLinkLocalTarget).not.toHaveBeenCalled();
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('notifySessionsEnded', () => {
+    it('returns at once and delivers in the background', async () => {
+      prisma.client.findMany.mockResolvedValue([client('app-1', true)]);
+      let release!: () => void;
+      (global.fetch as jest.Mock).mockReturnValue(
+        new Promise((resolve) => {
+          release = () => resolve({ ok: true, status: 200 });
+        }),
+      );
+
+      const result = service.notifySessionsEnded(realm, [
+        session('s-1', ['app-1']),
+      ]);
+
+      expect(result).toBeUndefined();
+      await flushPromises();
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+      release();
+      await flushPromises();
+    });
+
+    it('does nothing for sessions without refresh tokens (impersonation)', async () => {
+      service.notifySessionsEnded(realm, [session('s-1', [])]);
+      service.notifySessionsEnded(realm, []);
+      await flushPromises();
+
+      expect(prisma.client.findMany).not.toHaveBeenCalled();
+    });
+
+    it('swallows and logs a database failure: it can never reject', async () => {
+      prisma.client.findMany.mockRejectedValue(new Error('db down'));
+
       expect(() =>
-        service.sendLogoutTokens(mockRealm, 'user-1', 'session-1'),
+        service.notifySessionsEnded(realm, [session('s-1', ['app-1'])]),
       ).not.toThrow();
-      await flushPromises(); // confirm the background work also swallows the warning
+      await flushPromises();
+
+      expect(warn).toHaveBeenCalledWith(
+        'Back-channel logout for realm test-realm failed: db down',
+      );
     });
   });
 });

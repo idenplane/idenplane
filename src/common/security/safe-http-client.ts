@@ -23,7 +23,11 @@ import type { LookupAddress } from 'node:dns';
 import { request as httpRequest } from 'node:http';
 import { request as httpsRequest } from 'node:https';
 import type { IncomingMessage, RequestOptions } from 'node:http';
-import { isBlockedHostnameLiteral, isBlockedIp } from './ip-range-guard.js';
+import {
+  isBlockedHostnameLiteral,
+  isBlockedIp,
+  isLinkLocalOrMetadataIp,
+} from './ip-range-guard.js';
 
 /**
  * The generic, non-leaking message persisted to `WebhookDelivery.response`
@@ -351,4 +355,48 @@ function sendPinnedRequest(
     req.write(body);
     req.end();
   });
+}
+
+const LINK_LOCAL_BLOCKED_MESSAGE =
+  'Delivery blocked: target is a link-local or cloud-metadata address';
+
+/**
+ * A lighter check than `resolveSafeTarget`, for admin-configured URLs that
+ * may legitimately point at the operator's own network (back-channel
+ * logout): private and loopback addresses are allowed, but a URL whose host
+ * is, or resolves to, a link-local or cloud-metadata address
+ * (`isLinkLocalOrMetadataIp`) is refused with `SsrfBlockedError`, as is any
+ * scheme other than http(s). Every resolved address is checked, not only
+ * the first, since the HTTP client may connect to any of them.
+ *
+ * It does not pin the connection: the caller's `fetch` resolves the name
+ * again, so a name whose DNS answer flips between the two lookups (DNS
+ * rebinding) can still get through. Closing that needs a pinned connection
+ * (`safePost`), which would also refuse private addresses.
+ */
+export async function assertNotLinkLocalTarget(rawUrl: string): Promise<void> {
+  let url: URL;
+  try {
+    url = new URL(rawUrl);
+  } catch {
+    throw new SsrfBlockedError('Delivery blocked: not an http(s) URL');
+  }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+    throw new SsrfBlockedError('Delivery blocked: not an http(s) URL');
+  }
+  const hostname = url.hostname.replace(/^\[|\]$/g, '');
+  if (isIP(hostname) !== 0) {
+    if (isLinkLocalOrMetadataIp(hostname))
+      throw new SsrfBlockedError(LINK_LOCAL_BLOCKED_MESSAGE);
+    return;
+  }
+  let records: LookupAddress[];
+  try {
+    records = await lookup(hostname, { all: true, verbatim: true });
+  } catch {
+    throw new Error('Delivery blocked: DNS resolution failed');
+  }
+  if (records.some((record) => isLinkLocalOrMetadataIp(record.address))) {
+    throw new SsrfBlockedError(LINK_LOCAL_BLOCKED_MESSAGE);
+  }
 }
