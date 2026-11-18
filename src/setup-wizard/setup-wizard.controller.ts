@@ -202,16 +202,27 @@ export class SetupWizardController {
   @RequireAdminRoles(SUPER_ADMIN)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: 'Check the saved SMTP configuration',
+    summary: 'Send a test email with the saved SMTP configuration',
     description:
-      'Only while setup is open, and only with the settings saved in the ' +
-      'wizard. After setup, use the realm SMTP test in the admin API.',
+      'Sends a test message to `to` through the SMTP settings saved in the ' +
+      'wizard. Only while setup is open; after setup, use the realm SMTP ' +
+      'test in the admin API.',
   })
-  @ApiResponse({ status: 200, description: 'SMTP configuration looks valid' })
-  @ApiResponse({ status: 400, description: 'SMTP not configured' })
+  @ApiResponse({
+    status: 200,
+    description: 'The SMTP server accepted the test email',
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'SMTP not configured, or `to` is not an email address',
+  })
   @ApiResponse({ status: 409, description: 'Setup is already complete' })
-  testSmtp(@Body() _dto: SmtpTestDto) {
-    return this.wizardService.testSmtp();
+  @ApiResponse({
+    status: 502,
+    description: 'The SMTP server refused the message or could not be reached',
+  })
+  testSmtp(@Body() dto: SmtpTestDto) {
+    return this.wizardService.testSmtp(dto.to);
   }
 
   @Post('client')

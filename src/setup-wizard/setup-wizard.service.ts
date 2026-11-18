@@ -9,6 +9,7 @@ import type { WizardState } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { CryptoService } from '../crypto/crypto.service.js';
 import { JwkService } from '../crypto/jwk.service.js';
+import { EmailService } from '../email/email.service.js';
 import { seedDefaultScopesIn } from '../scopes/scope-seed.service.js';
 import { signingKeySecrets } from '../crypto/signing-key-secrets.js';
 import { wizardSecrets } from './wizard-secrets.js';
@@ -122,6 +123,7 @@ export class SetupWizardService {
     private readonly prisma: PrismaService,
     private readonly crypto: CryptoService,
     private readonly jwkService: JwkService,
+    private readonly emailService: EmailService,
   ) {}
 
   /**
@@ -301,11 +303,13 @@ export class SetupWizardService {
   }
 
   /**
-   * Checks the saved SMTP settings (Step 3). Only while setup is open: once
-   * it is done, the realm-level SMTP test in the admin API takes over. It
-   * uses the stored settings only and sends nothing.
+   * Sends a test message to `to` with the saved SMTP settings (Step 3). Only
+   * while setup is open: once it is done, the realm-level SMTP test in the
+   * admin API takes over. 400 when nothing is saved yet, 502 when the server
+   * refused the message or could not be reached (the reason is in `message`,
+   * never the server's own reply).
    */
-  async testSmtp(): Promise<{ message: string; host: unknown; port: unknown }> {
+  async testSmtp(to: string): Promise<{ success: true; message: string }> {
     const state = await this.getWizardState();
     this.assertOpen(state);
 
@@ -316,11 +320,25 @@ export class SetupWizardService {
       );
     }
 
-    return {
-      message: 'SMTP configuration appears valid',
-      host: smtpConfig['host'],
-      port: smtpConfig['port'],
-    };
+    await this.emailService.sendSmtpTestMessage(
+      {
+        host: smtpConfig['host'] as string,
+        port: smtpConfig['port'] as number,
+        user: (smtpConfig['user'] as string | undefined) || undefined,
+        // Stored encrypted by saveSmtpConfig, as Realm.smtpPassword is.
+        password:
+          this.crypto.decryptSecret(
+            smtpConfig['password'] as string | undefined,
+          ) ?? undefined,
+        from: (smtpConfig['from'] as string | undefined) ?? '',
+        secure: smtpConfig['secure'] === true,
+      },
+      to,
+      'Idenplane Email Test',
+      '<p>This is a test email from the Idenplane setup wizard. Your SMTP settings work.</p>',
+    );
+
+    return { success: true, message: `Test email sent to ${to}` };
   }
 
   /**

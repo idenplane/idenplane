@@ -8,7 +8,10 @@ import { PrismaService } from '../prisma/prisma.service.js';
 import { CryptoService } from '../crypto/crypto.service.js';
 import sanitizeHtml from 'sanitize-html';
 import { EmailProvider } from './providers/email-provider.interface.js';
-import { SmtpEmailProvider } from './providers/smtp.provider.js';
+import {
+  SmtpEmailProvider,
+  type SmtpConfig,
+} from './providers/smtp.provider.js';
 import { ResendEmailProvider } from './providers/resend.provider.js';
 import { SendGridEmailProvider } from './providers/sendgrid.provider.js';
 import { MailgunEmailProvider } from './providers/mailgun.provider.js';
@@ -126,16 +129,56 @@ export class EmailService {
       );
     }
 
+    await this.deliverTestMessage(
+      provider,
+      recipient,
+      subject,
+      html,
+      `realm "${realmName}"`,
+    );
+  }
+
+  /**
+   * Sends a test message to `to` through SMTP settings that are not a
+   * realm's yet: the setup wizard's saved settings, before the wizard
+   * creates the realm. `config.password` is the plaintext password. Fails
+   * like {@link sendTestMessage}: 400 without a host, 502 when the server
+   * refused the message or could not be reached.
+   */
+  async sendSmtpTestMessage(
+    config: SmtpConfig,
+    to: string,
+    subject: string,
+    html: string,
+  ): Promise<void> {
+    const provider = new SmtpEmailProvider(config);
+    if (!provider.isConfigured()) {
+      throw new BadRequestException('SMTP is not configured');
+    }
+    await this.deliverTestMessage(provider, to, subject, html, 'setup wizard');
+  }
+
+  /**
+   * Sends one test message; a provider failure becomes a 502 whose message
+   * names the cause without the provider's error text, which is only logged.
+   */
+  private async deliverTestMessage(
+    provider: EmailProvider,
+    to: string,
+    subject: string,
+    html: string,
+    context: string,
+  ): Promise<void> {
     try {
       await provider.sendEmail(
-        recipient,
+        to,
         subject,
         sanitizeHtml(html, EMAIL_SANITIZE_OPTIONS),
       );
     } catch (err) {
       const code = (err as { code?: unknown } | null)?.code;
       this.logger.error(
-        `Test email for realm "${realmName}" failed (provider: ${provider.name}` +
+        `Test email for ${context} failed (provider: ${provider.name}` +
           `${typeof code === 'string' ? `, code: ${code}` : ''}): ` +
           `${err instanceof Error ? err.message : String(err)}`,
       );
@@ -143,7 +186,7 @@ export class EmailService {
     }
 
     this.logger.log(
-      `Test email sent for realm "${realmName}" (provider: ${provider.name})`,
+      `Test email sent for ${context} (provider: ${provider.name})`,
     );
   }
 

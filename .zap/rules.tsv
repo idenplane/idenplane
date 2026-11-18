@@ -10,9 +10,9 @@
 # Formats (fields are TAB-separated):
 #   <plugin id>  IGNORE      <reason>        whole plugin; ZAP syntax
 #   <plugin id>  OUTOFSCOPE  <url regex>     plugin on matching URLs; ZAP syntax
-#   #@accept  <alertRef>  <url regex>  <reason>
-#       one alert (one plugin can raise several, e.g. 10055-6 vs 10055-13),
-#       on matching URLs; read only by gate.mjs (ZAP skips comment lines)
+#   #@accept  <alertRef>  <url regex>  <reason>  [exact evidence]
+#       one alert on matching URLs, optionally requiring exact evidence;
+#       read only by gate.mjs (ZAP skips comment lines)
 
 # ── Informational rules: they describe the application, not a weakness ──
 # "A login form / session cookie was identified": ZAP's own bookkeeping.
@@ -35,8 +35,11 @@
 #@accept	10049-3	(/themes/|/\.well-known/|/protocol/openid-connect/certs$)	Static theme assets and public OIDC metadata (discovery, JWKS) are public and meant to be cached by clients.
 
 # 4xx responses to fuzzed input are correct behaviour. 5xx (100000-2) stay
-# a failure everywhere except the upgrade endpoints below.
+# a failure except the documented upstream failure and upgrade endpoints below.
 #@accept	100000-1	.*	A 4xx answer to fuzzed or invalid input is the correct response, not a weakness.
+# The wizard now really sends mail. Fuzzed SMTP settings have no reachable
+# mail server in this scan, so 502 is expected. Other statuses still fail.
+#@accept	100000-2	^https?://[^/]+/setup-wizard/smtp/test/?(\?.*)?$	SMTP delivery failure is a documented 502 when the scanner's saved mail server is unreachable; unexpected 500/503 responses remain failures.	502
 # The upgrade API answers 503 by design while UPGRADE_API_ENABLED is unset
 # (docs/docs/deployment/upgrading.mdx); the scan runs with it unset.
 100000	OUTOFSCOPE	.*/admin/upgrade(/rollback)?/?(\?.*)?$
