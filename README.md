@@ -99,7 +99,7 @@ Most identity solutions are either too complex to self-host (Java, heavy runtime
 | **Outbound Webhooks** | Event-driven HTTP callbacks with AES-256-GCM encryption at rest |
 | **Retry & Scheduling** | Async delivery with configurable retry policies and status tracking |
 | **Plugin System** | Extensible plugin architecture with event listeners and token enrichment hooks |
-| **Data Migration** | Built-in importers for Keycloak, Auth0, Zitadel and Authentik exports |
+| **Data Migration** | Built-in importers for Keycloak, Auth0, Zitadel and Authentik exports; guides for [Keycloak](https://idenplane.com/migration/keycloak), [Auth0](https://idenplane.com/migration/auth0) and [Authentik](https://idenplane.com/migration/authentik) |
 
 ### Operations & DevOps
 

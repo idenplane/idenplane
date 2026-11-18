@@ -286,54 +286,59 @@ export class CustomAttributesService {
     displayName: string,
     options: string[] | null,
   ) {
-    switch (type) {
-      case 'number':
-        if (isNaN(Number(value))) {
-          throw new BadRequestException(`'${displayName}' must be a number`);
-        }
-        break;
-      case 'boolean':
-        if (
-          !['true', 'false', '1', '0', 'yes', 'no'].includes(
-            value.toLowerCase(),
-          )
-        ) {
-          throw new BadRequestException(
-            `'${displayName}' must be a boolean value`,
-          );
-        }
-        break;
-      case 'select':
-        if (options && !options.includes(value)) {
-          throw new BadRequestException(
-            `'${displayName}' must be one of: ${options.join(', ')}`,
-          );
-        }
-        break;
-      case 'multi-select':
-        if (options) {
-          const selected = value.split(',').map((v) => v.trim());
-          for (const s of selected) {
-            if (!options.includes(s)) {
-              throw new BadRequestException(
-                `'${displayName}' contains invalid option: ${s}`,
-              );
-            }
+    const problem = attributeValueProblem(type, value, displayName, options);
+    if (problem) throw new BadRequestException(problem);
+  }
+}
+
+/**
+ * Why `value` is not acceptable for a custom attribute of this type, or
+ * null when it is. Shared by the admin API and the importers.
+ */
+export function attributeValueProblem(
+  type: string,
+  value: string,
+  displayName: string,
+  options: string[] | null,
+): string | null {
+  switch (type) {
+    case 'number':
+      if (isNaN(Number(value))) {
+        return `'${displayName}' must be a number`;
+      }
+      break;
+    case 'boolean':
+      if (
+        !['true', 'false', '1', '0', 'yes', 'no'].includes(value.toLowerCase())
+      ) {
+        return `'${displayName}' must be a boolean value`;
+      }
+      break;
+    case 'select':
+      if (options && !options.includes(value)) {
+        return `'${displayName}' must be one of: ${options.join(', ')}`;
+      }
+      break;
+    case 'multi-select':
+      if (options) {
+        const selected = value.split(',').map((v) => v.trim());
+        for (const s of selected) {
+          if (!options.includes(s)) {
+            return `'${displayName}' contains invalid option: ${s}`;
           }
         }
-        break;
-      case 'text':
-      default:
-        // Match the rest of the admin DTO surface (username, firstName,
-        // displayName, group/role names): reject angle brackets so stored
-        // attribute values can never become a vector if a downstream sink
-        // ever interpolates them into HTML without escaping.
-        if (/[<>]/.test(value)) {
-          throw new BadRequestException(
-            `'${displayName}' must not contain HTML tags or angle brackets`,
-          );
-        }
-        break;
-    }
+      }
+      break;
+    case 'text':
+    default:
+      // Match the rest of the admin DTO surface (username, firstName,
+      // displayName, group/role names): reject angle brackets so stored
+      // attribute values can never become a vector if a downstream sink
+      // ever interpolates them into HTML without escaping.
+      if (/[<>]/.test(value)) {
+        return `'${displayName}' must not contain HTML tags or angle brackets`;
+      }
+      break;
   }
+  return null;
 }

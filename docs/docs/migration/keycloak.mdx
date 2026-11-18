@@ -21,7 +21,7 @@ Before starting the migration:
 - Sufficient database storage for migrated data
 
 :::note Large Export Files
-The server accepts JSON request bodies up to 100 KB, so most exports with users must be split into batches. See [Handling Large Exports](#handling-large-exports) for details.
+The import endpoint accepts a JSON request body of up to 10 MB, so a very large export must be split into batches. See [Handling Large Exports](#handling-large-exports) for details.
 :::
 
 ---
@@ -90,7 +90,7 @@ curl -X POST "http://localhost:3000/admin/migration/keycloak" \
   -d @import.json
 ```
 
-The endpoint needs a global (super-admin) credential. The server accepts JSON request bodies up to 100 KB, so a large export has to be split, for example into several files that each carry the realm settings and a slice of `users`.
+The endpoint needs a global (super-admin) credential. It accepts a JSON body of up to 10 MB (see [Request Size Limit](#request-size-limit)), so a larger export has to be split, for example into several files that each carry the realm settings and a slice of `users`.
 
 ### Specify Target Realm
 
@@ -328,7 +328,7 @@ Nested groups are preserved in the same structure:
 
 ### Batch Processing
 
-The server accepts JSON request bodies up to 100 KB; a larger request gets `413`. That is a few hundred users, depending on how much each one carries. For a larger export:
+The import endpoint accepts a JSON body of up to 10 MB; a larger request gets `413`, and a very large one may also hit a gateway timeout. For an export above that, or with more than about 5,000 users:
 
 1. Split the export into several files, each with the realm settings and a slice of `users`
 2. Import each batch separately
@@ -340,9 +340,9 @@ The server accepts JSON request bodies up to 100 KB; a larger request gets `413`
 # Get total user count
 USER_COUNT=$(jq '.users | length' export.json)
 
-# Batches of 200 users, each a complete export with a slice of users
-jq '.users |= .[0:200]'   export.json > batch1.json
-jq '.users |= .[200:400]' export.json > batch2.json
+# Batches of 5,000 users, each a complete export with a slice of users
+jq '.users |= .[0:5000]'     export.json > batch1.json
+jq '.users |= .[5000:10000]' export.json > batch2.json
 ```
 
 ### Sequential Import
@@ -378,9 +378,9 @@ curl -X GET "http://localhost:3000/admin/realms/my-realm/users?limit=1" \
 
 ### 2. Test Authentication
 
-Sign in through the browser login (`/realms/{realm}/protocol/openid-connect/auth`) with a client you created, using a few migrated users. The browser login is what verifies an imported hash and rehashes it; the password grant only checks Argon2id hashes, so a migrated user fails it until after a first browser sign-in.
+Sign in through the browser login (`/realms/{realm}/protocol/openid-connect/auth`) with a client you created, using a few migrated users. The password grant checks imported hashes the same way as the login page, and either one moves the hash to Argon2id on the first successful sign-in.
 
-If the realm has a client that allows the password grant, you can also script the check for users who have already signed in once:
+If the realm has a client that allows the password grant, you can also script the check:
 
 ```typescript
 async function testMigration(realm: string, testUsers: string[]) {
@@ -502,13 +502,13 @@ Import realm from Keycloak export.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `data` | object | Yes | Keycloak realm export JSON (body limit 100 KB) |
+| `data` | object | Yes | Keycloak realm export JSON (body limit 10 MB) |
 | `dryRun` | boolean | No | Test migration without changes (default: false) |
 | `targetRealm` | string | No | Override target realm name |
 
-**Response:** `200` with the migration report above. `400` for a missing or non-object `data`, `401` without credentials, `403` for an admin without global scope, `413` for a body over 100 KB.
+**Response:** `200` with the migration report above. `400` for a missing or non-object `data`, `401` without credentials, `403` for an admin without global scope, `413` for a body over 10 MB.
 
-The same endpoint family also imports Auth0 (`/admin/migration/auth0`, see [Migrating from Auth0](./auth0.mdx)), Zitadel (`/admin/migration/zitadel`) and Authentik (`/admin/migration/authentik`).
+The same endpoint family also imports Auth0 (`/admin/migration/auth0`, see [Migrating from Auth0](./auth0.mdx)), Zitadel (`/admin/migration/zitadel`) and Authentik (`/admin/migration/authentik`, see [Migrating from Authentik](./authentik.mdx)).
 
 ---
 

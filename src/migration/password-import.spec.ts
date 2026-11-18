@@ -292,4 +292,26 @@ describe('authentikPassword', () => {
     expect(imported.hash).toBeNull();
     expect(imported.warning).toMatch(/"bcrypt_sha256" is not supported/);
   });
+
+  it('Django bcrypt is carried over without its prefix and verifies', async () => {
+    const bcrypt = await bcryptjs.hash(PASSWORD, 4);
+    const imported = authentikPassword('bcrypt$' + bcrypt);
+    expect(imported).toEqual({ hash: bcrypt, algorithm: 'bcrypt' });
+    await expect(bcryptjs.compare(PASSWORD, imported.hash!)).resolves.toBe(
+      true,
+    );
+  });
+
+  it('a malformed Django bcrypt hash is dropped with a warning', () => {
+    const imported = authentikPassword('bcrypt$not-a-bcrypt-hash');
+    expect(imported.hash).toBeNull();
+    expect(imported.warning).toMatch(/bcrypt password hash is malformed/);
+  });
+
+  it("Django's unusable-password marker becomes no password, explained", () => {
+    const imported = authentikPassword('!' + 'x'.repeat(40));
+    expect(imported.hash).toBeNull();
+    expect(imported.warning).toMatch(/no usable password/);
+    expect(imported.warning).not.toContain('x'.repeat(40));
+  });
 });
