@@ -3,9 +3,11 @@ import {
   Get,
   Delete,
   Param,
+  Query,
   UseGuards,
   HttpCode,
   HttpStatus,
+  BadRequestException,
   NotFoundException,
   UnauthorizedException,
   Req,
@@ -13,6 +15,7 @@ import {
 import {
   ApiTags,
   ApiOperation,
+  ApiQuery,
   ApiResponse,
   ApiSecurity,
 } from '@nestjs/swagger';
@@ -34,6 +37,14 @@ import { hasRecentAdminMfa } from '../admin-rbac/admin-access-policy.js';
 import { LoginService } from '../login/login.service.js';
 import { CryptoService } from '../crypto/crypto.service.js';
 import { SessionsService } from '../sessions/sessions.service.js';
+import { WebAuthnService } from '../webauthn/webauthn.service.js';
+
+/** `keepPasskeys` of a full MFA reset: absent or `false` removes them. */
+function parseKeepPasskeys(value: string | undefined): boolean {
+  if (value === undefined || value === '' || value === 'false') return false;
+  if (value === 'true') return true;
+  throw new BadRequestException('keepPasskeys must be true or false');
+}
 
 @ApiTags('MFA')
 @Controller('admin/realms/:realmName/users/:userId/mfa')
@@ -47,6 +58,7 @@ export class MfaController {
     private readonly loginService: LoginService,
     private readonly crypto: CryptoService,
     private readonly sessions: SessionsService,
+    private readonly webAuthn: WebAuthnService,
   ) {}
 
   /**
@@ -82,24 +94,103 @@ export class MfaController {
     @Param('userId') userId: string,
   ) {
     await this.assertUserInRealm(userId, realm);
-    const methods = await this.mfaService.getEnrolledFactors(userId);
-    return { enabled: methods.length > 0, methods };
+    const [methods, passkeys] = await Promise.all([
+      this.mfaService.getEnrolledFactors(userId),
+      this.webAuthn.countCredentials(userId, realm.id),
+    ]);
+    // `enabled`/`methods` are the second factors a sign-in asks for after
+    // the password. Passkeys are counted apart: they are a sign-in of their
+    // own (and a step-up), not a step after the password.
+    return { enabled: methods.length > 0, methods, passkeys };
   }
 
+  /**
+   * Full reset: every second factor (authenticator app, SMS phone), the
+   * recovery codes and, unless `keepPasskeys=true`, every passkey. Then the
+   * user is signed out everywhere.
+   *
+   * Passkeys go by default because this is the account-recovery action: a
+   * passkey registered by whoever took the account over signs in on its
+   * own, without the password, so a reset that left it would leave them
+   * in. A passkey has no flag saying whether it is used passwordless or as
+   * a step-up, so it cannot be told apart from the user's own; an admin
+   * who knows the passkeys are the user's (a lost phone, say) passes
+   * `keepPasskeys=true`, or removes single passkeys with
+   * `DELETE .../mfa/passkeys/{credentialId}`.
+   */
   @Delete()
   @HttpCode(HttpStatus.NO_CONTENT)
-  @ApiOperation({ summary: 'Reset/disable MFA for a user' })
-  @ApiResponse({ status: 204, description: 'MFA disabled' })
+  @ApiOperation({
+    summary: "Reset a user's MFA: second factors, recovery codes and passkeys",
+  })
+  @ApiQuery({
+    name: 'keepPasskeys',
+    required: false,
+    type: Boolean,
+    description:
+      "true keeps the user's passkeys (WebAuthn credentials). Default false: they are removed too.",
+  })
+  @ApiResponse({ status: 204, description: 'MFA reset' })
+  @ApiResponse({ status: 400, description: 'keepPasskeys is not true/false' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Not found' })
   async resetMfa(
     @CurrentRealm() realm: Realm,
     @Param('userId') userId: string,
     @Req() req: Request,
+    @Query('keepPasskeys') keepPasskeys?: string,
   ) {
+    const keep = parseKeepPasskeys(keepPasskeys);
     await this.assertUserInRealm(userId, realm);
     await this.requireAdminMfaStepUp(realm, req);
     await this.mfaService.disableAllFactors(userId);
+    if (!keep) await this.webAuthn.removeAllCredentials(userId, realm.id);
+    await this.endSessions(realm, userId);
+  }
+
+  @Get('passkeys')
+  @ApiOperation({ summary: "List a user's passkeys (WebAuthn credentials)" })
+  @ApiResponse({ status: 200, description: 'The passkeys, oldest first' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 404, description: 'Not found' })
+  async listPasskeys(
+    @CurrentRealm() realm: Realm,
+    @Param('userId') userId: string,
+  ) {
+    await this.assertUserInRealm(userId, realm);
+    const credentials = await this.webAuthn.getUserCredentials(userId);
+    return credentials
+      .filter((c) => c.realmId === realm.id)
+      .map((c) => ({
+        id: c.id,
+        friendlyName: c.friendlyName,
+        deviceType: c.deviceType,
+        backedUp: c.backedUp,
+        transports: c.transports,
+        createdAt: c.createdAt,
+        lastUsedAt: c.lastUsedAt,
+      }));
+  }
+
+  @Delete('passkeys/:credentialId')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Remove one passkey of a user' })
+  @ApiResponse({ status: 204, description: 'Passkey removed' })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized – MFA step-up required',
+  })
+  @ApiResponse({ status: 404, description: 'Not found' })
+  async removePasskey(
+    @CurrentRealm() realm: Realm,
+    @Param('userId') userId: string,
+    @Param('credentialId') credentialId: string,
+    @Req() req: Request,
+  ) {
+    await this.assertUserInRealm(userId, realm);
+    // Same bar as removing a second factor: a passkey signs the user in.
+    await this.requireAdminMfaStepUp(realm, req);
+    await this.webAuthn.removeCredential(userId, realm.id, credentialId);
     await this.endSessions(realm, userId);
   }
 

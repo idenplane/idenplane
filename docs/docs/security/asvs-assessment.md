@@ -122,7 +122,7 @@ Every row below has its own recommendation.
 | V1.3.3 | 2 | Partial | src/main.ts ValidationPipe whitelist+forbidNonWhitelisted; src/scim/scim.controller.ts:158 (@Body() typed as an interface) | Interface-typed and scalar bodies skip class-validator. **Recommendation:** DTO classes for SCIM bodies and the test-email body (M). |
 | V1.3.4 | 2 | Partial | src/theme/theme-upload.service.ts:36 accepts image/svg+xml; src/main.ts serves uploads with a sandbox CSP and nosniff | Served SVG is inert, but it is stored unsanitized. **Recommendation:** Sanitize SVG on upload or refuse it (S/M). |
 | V1.3.5 | 2 | Partial | src/theme/theme-render.service.ts:24 sanitizeCss (blocklist) | Admin-supplied custom CSS is filtered by blocklist; the CSP limits exfiltration. **Recommendation:** Allowlist CSS parser (M). |
-| V1.3.6 | 2 | Partial | src/common/security/safe-http-client.ts (DNS pinning + IP blocklist) for webhooks and SMS webhook; raw fetch in src/tokens/backchannel-logout.service.ts, src/events/audit-streams.service.ts, src/broker/broker.service.ts | Admin- or client-configured URLs on the raw-fetch paths can reach internal addresses. **Recommendation:** Route those fetches through safe-http-client (M). |
+| V1.3.6 | 2 | Partial | src/common/security/safe-http-client.ts (DNS pinning + IP blocklist) for webhooks and SMS webhook; raw fetch in src/tokens/backchannel-logout.service.ts, src/events/audit-streams.service.ts, src/broker/broker.service.ts | Admin- or client-configured URLs on the raw-fetch paths can reach internal addresses. Back-channel logout (0.13.0) refuses link-local and cloud-metadata addresses (`assertNotLinkLocalTarget`, opt-in `BACKCHANNEL_LOGOUT_ALLOW_LINK_LOCAL`) but by design still reaches private ones, without DNS pinning. **Recommendation:** Route those fetches through safe-http-client (M). |
 | V1.3.7 | 2 | Pass | src/theme/theme-handlebars.ts:4 (isolated env); src/theme/theme-render.service.ts:56 (withoutReservedLocals) | Templates load only from theme files. |
 | V1.3.8 | 2 | N/A |  | No JNDI (Node.js). |
 | V1.3.9 | 2 | N/A |  | No memcache. |
@@ -260,10 +260,10 @@ Every row below has its own recommendation.
 | V7.4.2 | 1 | Pass | src/users/users.service.ts; src/auth/auth.service.ts (code and device grants check enabled); src/tokens/tokens.service.ts:525 | FIXED gap: the code exchange did not check enabled. |
 | V7.4.3 | 2 | Pass | src/sessions/sessions.service.ts revokeAllUserSessions; test/theme-views.e2e-spec.ts, test/offline-sessions.e2e-spec.ts | FIXED: every credential change ends the user's sessions, offline ones included: a password reset by email, a password set by an admin, an admin removing second factors, and an admin MFA reset (console tokens too). A password change in the account console ends every other session and keeps the current one (0.12.0). |
 | V7.4.4 | 2 | Pass | themes/idenplane/account/templates/account.hbs:11; admin-ui Layout.tsx |  |
-| V7.4.5 | 2 | Partial | src/sessions/sessions.controller.ts:58-83 | No realm-wide termination; admin termination sends no back-channel logout. **Recommendation:** (S) |
+| V7.4.5 | 2 | Partial | src/sessions/sessions.controller.ts:58-83 | No realm-wide termination. Admin termination sends back-channel logout tokens (FIXED in 0.13.0). **Recommendation:** (S) |
 | V7.5.1 | 2 | Partial | src/account/account.controller.ts:283-322,688-702; src/webauthn/webauthn.controller.ts:78-118,341-354; src/admin-mfa/admin-mfa.controller.ts | Admin console (0.11.0): changing a factor or the recovery codes needs a second factor checked in the last 15 minutes. End-user account console: TOTP enrolment and passkey add/delete still need only the session. **Recommendation:** Require re-authentication there too (S). |
 | V7.5.2 | 2 | **Fail** | src/account/account.controller.ts | Users cannot list or end their own sessions. **Recommendation:** Account session list (M). |
-| V7.6.1 | 2 | Partial | src/tokens/backchannel-logout.service.ts; src/oauth/oauth.controller.ts:208-231 | Admin and account-console terminations do not notify RPs. **Recommendation:** (S) |
+| V7.6.1 | 2 | Partial | src/tokens/backchannel-logout.service.ts; src/sessions/sessions.service.ts; src/sessions/sessions-cleanup.service.ts; src/oauth/oauth.controller.ts:208-231 | FIXED in part in 0.13.0: admin, account-console and credential-change terminations and the SSO idle timeout notify RPs by back-channel logout. A session reaching its maximum lifetime is not announced (documented). **Recommendation:** (S) |
 | V7.6.2 | 2 | Pass | src/oauth/oauth.controller.ts:174-231; src/login/session-issuer.service.ts:50-97 |  |
 
 ### V8 Authorization
@@ -404,7 +404,7 @@ Every row below has its own recommendation.
 | V15.3.3 | 2 | Pass | src/main.ts ValidationPipe; explicit Prisma data objects |  |
 | V15.3.4 | 2 | Pass | src/common/utils/proxy-ip.util.ts |  |
 | V15.3.5 | 2 | Partial | src/auth/auth.controller.ts:64; src/account/account.controller.ts:235 | Untyped bodies: repeated keys become arrays (fails closed with 500). **Recommendation:** (M) |
-| V15.3.6 | 2 | Pass | src/scim/scim-users.service.ts:489; src/theme/theme-render.service.ts:52 |  |
+| V15.3.6 | 2 | Pass | src/scim/scim-resource.ts (projectResource: reads and writes only keys the resource already has); src/scim/scim-bulk.service.ts resolveReferences (Object.fromEntries); src/theme/theme-render.service.ts:52 |  |
 | V15.3.7 | 2 | Partial | as V15.3.5 |  |
 
 ### V16 Security Logging and Error Handling

@@ -5,6 +5,7 @@ import { ClientAuthModule } from '../client-auth/client-auth.module.js';
 import { CustomAttributesModule } from '../custom-attributes/custom-attributes.module.js';
 import { StepUpCoreModule } from '../step-up/step-up-core.module.js';
 import { UserFederationModule } from '../user-federation/user-federation.module.js';
+import { BackchannelLogoutModule } from '../tokens/backchannel-logout.module.js';
 
 @Module({
   imports: [
@@ -12,6 +13,7 @@ import { UserFederationModule } from '../user-federation/user-federation.module.
     CustomAttributesModule,
     StepUpCoreModule,
     UserFederationModule,
+    BackchannelLogoutModule,
   ],
   controllers: [AuthController],
   providers: [AuthService],

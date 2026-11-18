@@ -75,14 +75,20 @@ export async function unlockUser(
 
 export type MfaMethod = 'totp' | 'sms';
 
+export interface MfaStatus {
+  enabled: boolean;
+  methods?: MfaMethod[];
+  /** Passkeys (WebAuthn credentials), counted apart from the second factors. */
+  passkeys?: number;
+}
+
 export async function getMfaStatus(
   realmName: string,
   userId: string,
-): Promise<{ enabled: boolean; methods?: MfaMethod[] }> {
-  const { data } = await apiClient.get<{
-    enabled: boolean;
-    methods?: MfaMethod[];
-  }>(`/realms/${realmName}/users/${userId}/mfa/status`);
+): Promise<MfaStatus> {
+  const { data } = await apiClient.get<MfaStatus>(
+    `/realms/${realmName}/users/${userId}/mfa/status`,
+  );
   return data;
 }
 
@@ -94,12 +100,47 @@ export async function resetSmsMfa(
   await apiClient.delete(`/realms/${realmName}/users/${userId}/mfa/sms`);
 }
 
+/**
+ * Full MFA reset: second factors, recovery codes and, unless `keepPasskeys`,
+ * the user's passkeys.
+ */
 export async function resetMfa(
   realmName: string,
   userId: string,
+  options: { keepPasskeys?: boolean } = {},
+): Promise<void> {
+  await apiClient.delete(`/realms/${realmName}/users/${userId}/mfa`, {
+    params: options.keepPasskeys ? { keepPasskeys: 'true' } : undefined,
+  });
+}
+
+export interface UserPasskey {
+  id: string;
+  friendlyName: string | null;
+  deviceType: string;
+  backedUp: boolean;
+  transports: string[];
+  createdAt: string;
+  lastUsedAt: string | null;
+}
+
+export async function getPasskeys(
+  realmName: string,
+  userId: string,
+): Promise<UserPasskey[]> {
+  const { data } = await apiClient.get<UserPasskey[]>(
+    `/realms/${realmName}/users/${userId}/mfa/passkeys`,
+  );
+  return data;
+}
+
+export async function removePasskey(
+  realmName: string,
+  userId: string,
+  credentialId: string,
 ): Promise<void> {
   await apiClient.delete(
-    `/realms/${realmName}/users/${userId}/mfa`,
+    `/realms/${realmName}/users/${userId}/mfa/passkeys/${encodeURIComponent(credentialId)}`,
   );
 }
 

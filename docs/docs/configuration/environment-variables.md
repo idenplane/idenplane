@@ -157,6 +157,12 @@ WEBHOOK_ENCRYPTION_SALT=REPLACE_ME_WITH_A_UNIQUE_RANDOM_SALT
 | `HCAPTCHA_SECRET_KEY` | — | No | The same fallback for realms using `hcaptcha`. |
 | `ENFORCE_ACR_ON_FRESH_LOGIN` | off | No | `true` makes a fresh sign-in honour what the authorization request asks of `acr`: the login form carries `acr_values` and `claims`, and an `acr` requested as an Essential Claim (OIDC `claims` parameter) is mandatory. A sign-in that cannot meet it ends with `unmet_authentication_requirements` instead of a code at a weaker level. `acr_values` stays voluntary. Custom login themes should add the hidden fields `acr_values` and `claims` (see the built-in `login.hbs`). |
 
+### Back-channel logout
+
+| Variable | Default | Required | Description |
+|----------|---------|----------|-------------|
+| `BACKCHANNEL_LOGOUT_ALLOW_LINK_LOCAL` | off | No | Since 0.13.0. `true` lets logout tokens go to a `backchannelLogoutUri` that is, or resolves to, a link-local or cloud-metadata address (`169.254.0.0/16`, `fe80::/10`, `fd00:ec2::254`, `100.100.100.200`, `192.0.0.192`). Off: such deliveries are refused and logged. Private and loopback addresses are always allowed. See [Back-Channel Logout](../guides/authentication.mdx#back-channel-logout) |
+
 ### SAML identity provider
 
 | Variable | Default | Required | Description |

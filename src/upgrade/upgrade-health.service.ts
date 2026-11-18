@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { prismaMigrateStatus } from './migrate-status.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { policyProblems } from '../authorization/policy-engine.js';
+import { classifyIdpProviderType } from '../identity-providers/idp-provider-types.js';
 import { adminMfaRequiredFromEnv } from '../admin-rbac/admin-principal.service.js';
 import {
   ADMIN_ROLES,
@@ -156,6 +157,14 @@ export class UpgradeHealthService {
     const policyCheck = await this.checkInvalidPolicies();
     checks.push(policyCheck);
     if (policyCheck.status === 'pass') passed++;
+    else warnings++;
+
+    // 12. Identity providers stored with a type the broker does not take
+    // (SAML, or anything else saved before 0.12.0). Also only ever a
+    // warning.
+    const idpCheck = await this.checkIdentityProviderTypes();
+    checks.push(idpCheck);
+    if (idpCheck.status === 'pass') passed++;
     else warnings++;
 
     const healthy = failures === 0;
@@ -426,6 +435,88 @@ export class UpgradeHealthService {
         name: 'invalid_authorization_policies',
         status: 'warn',
         message: 'Could not check authorization policies',
+        details: (error as Error).message,
+      };
+    }
+  }
+
+  /**
+   * Warns about identity providers whose `providerType` the broker does not
+   * sign in with (`oidc` and `oauth2` only, since 0.12.0). Before 0.12.0
+   * the admin API and the importers stored any type, so a realm can still
+   * hold `SAML` rows, or other types; an enabled one shows a sign-in
+   * button on the login page. (Supported types stored in another case,
+   * such as `OIDC`, were lower-cased by the 0.13.0 migration.)
+   *
+   * SAML rows are reported as needing configuration review rather than as
+   * unusable: they were stored before 0.12.0, when Idenplane had no SAML
+   * broker, and nothing checked their configuration then.
+   * Each is listed as `realm/alias (type, enabled|disabled)`. What counts
+   * as SAML or supported is decided by classifyIdpProviderType.
+   */
+  async checkIdentityProviderTypes(): Promise<UpgradeHealthCheck> {
+    try {
+      const providers = await this.prisma.identityProvider.findMany({
+        select: {
+          alias: true,
+          providerType: true,
+          enabled: true,
+          realm: { select: { name: true } },
+        },
+        orderBy: [{ realm: { name: 'asc' } }, { alias: 'asc' }],
+      });
+      const listed = (kind: 'saml' | 'unsupported') =>
+        providers
+          .filter((p) => classifyIdpProviderType(p.providerType).kind === kind)
+          .map(
+            (p) =>
+              `${p.realm.name}/${p.alias} (${p.providerType || '(none)'}, ${p.enabled ? 'enabled' : 'disabled'})`,
+          );
+      const saml = listed('saml');
+      const unsupported = listed('unsupported');
+      if (saml.length === 0 && unsupported.length === 0) {
+        return {
+          name: 'identity_provider_types',
+          status: 'pass',
+          message: 'Every identity provider has a supported type',
+        };
+      }
+      const parts: string[] = [];
+      if (saml.length > 0) {
+        parts.push(
+          `${saml.length} SAML identity provider(s) need configuration review: ` +
+            'they were stored before 0.12.0, when Idenplane had no SAML broker. ' +
+            "Review each one's configuration, or delete it.",
+        );
+      }
+      if (unsupported.length > 0) {
+        parts.push(
+          `${unsupported.length} identity provider(s) have a type the broker ` +
+            'does not support (oidc and oauth2 are). Change the type to oidc or ' +
+            'oauth2 if the provider speaks it, or delete them.',
+        );
+      }
+      parts.push(
+        'An enabled one shows a sign-in button that cannot complete a sign-in until then.',
+      );
+      const details: string[] = [];
+      if (saml.length > 0) {
+        details.push(`Needs configuration review: ${saml.join(', ')}`);
+      }
+      if (unsupported.length > 0) {
+        details.push(`Unsupported type: ${unsupported.join(', ')}`);
+      }
+      return {
+        name: 'identity_provider_types',
+        status: 'warn',
+        message: parts.join(' '),
+        details: details.join('; '),
+      };
+    } catch (error) {
+      return {
+        name: 'identity_provider_types',
+        status: 'warn',
+        message: 'Could not check identity provider types',
         details: (error as Error).message,
       };
     }
