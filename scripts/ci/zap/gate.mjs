@@ -17,6 +17,7 @@
 // ignore must say why, in rules.tsv, where it is reviewed.
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { isStoredAdditionCollision } from './stored-ssti-collision.mjs';
 
 const [dir, rulesFile, ...reports] = process.argv.slice(2);
 const ignore = new Set();
@@ -60,8 +61,10 @@ for (const name of reports) {
         (x) =>
           x.ref === ref &&
           x.url.test(i.uri) &&
-          (x.evidence === undefined ||
-            (x.evidence !== '' && x.evidence === i.evidence)),
+          (x.evidence === '@stored-addition-collision'
+            ? ref === '90035' && isStoredAdditionCollision(i)
+            : x.evidence === undefined ||
+              (x.evidence !== '' && x.evidence === i.evidence)),
       );
       if (acc) {
         accepted.set(ref, {
