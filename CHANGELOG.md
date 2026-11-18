@@ -9,12 +9,19 @@ For full per-commit detail, see the [GitHub Releases](https://github.com/idenpla
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-11-18
+
+Sign in through SAML, and finishing what 0.12.0 started. Users can now sign in through a SAML 2.0 identity provider (Entra ID, Okta, ADFS, Google Workspace, Keycloak). Ending a session now tells the apps through OpenID Connect Back-Channel Logout, wherever the session ends. SCIM covers what Entra ID and Okta send, passwords included, and an admin's MFA reset now removes passkeys too. Authentik has a migration guide and a CLI command.
+
 ### Before you upgrade
-- **Database migrations run at startup.** One adds `password_histories.password_algorithm` (nullable; existing rows stay null). Two rewrite identity provider types stored as a supported type in another case (`OIDC`, `OAuth2`, `SAML`) to `oidc` / `oauth2` / `saml`; no other row changes.
-- **Check `GET /admin/upgrade/health` after the upgrade** for the new `identity_provider_types` warning (below).
-- **Behaviour you may notice:** an admin's full MFA reset (`DELETE .../users/{id}/mfa`) now also removes the user's passkeys, unless `?keepPasskeys=true`; wrong current passwords in the account console now count toward the account lock.
-- **A database migration runs at startup.** It adds `users.scim_external_id`, `users.scim_profile` (JSON) and `groups.scim_external_id`, all nullable, with an index on each `externalId` column. It changes no existing data.
-- **SCIM behaviour you may notice** (see *Changed* below):
+- **Database migrations run at startup.** They add `password_histories.password_algorithm`, `users.scim_external_id`, `users.scim_profile` and `groups.scim_external_id` (all nullable, with an index on each `externalId` column), and the tables `saml_broker_requests` and `saml_broker_assertion_ids`. Two rewrite identity provider types stored as a supported type in another case (`OIDC`, `OAuth2`, `SAML`) to `oidc` / `oauth2` / `saml`. No other existing data changes, and no one is signed out by the upgrade.
+- **Check `GET /admin/upgrade/health` after the upgrade** for the new `identity_provider_types` warning: SAML providers stored before 0.13.0 have no SAML configuration yet, and other types the broker does not use are listed (below).
+- **Behaviour you may notice:**
+  - an admin's full MFA reset (`DELETE .../users/{id}/mfa`) now also removes the user's passkeys, unless `?keepPasskeys=true`;
+  - wrong current passwords in the account console now count toward the account lock;
+  - apps with a `backchannelLogoutUri` now get a logout token whenever Idenplane ends a session (admin sign-out, password or MFA reset, disabling, session limits, refresh-token reuse, the idle timeout), not only on the user's own sign-out, and only the apps the session was used with; logout tokens carry `typ: logout+jwt`; a `backchannelLogoutUri` on a link-local or cloud-metadata address is refused (`BACKCHANNEL_LOGOUT_ALLOW_LINK_LOCAL=true` allows link-local);
+  - a logout that names only the user (`sub` without `sid`) no longer ends their offline sessions.
+- **If you provision users with SCIM** (see *Changed* below):
   - `PATCH /Groups/{id}` answers `204 No Content` unless the request has an `attributes` or `excludedAttributes` query parameter;
   - `PUT /Users/{id}` clears the stored attributes the body leaves out, and `PUT /Groups/{id}` without `members` leaves the group empty, as RFC 7644 replaces;
   - SCIM `userName`, email and group names are unique case-insensitively, so a create that differs only in case from an existing one is a 409;
@@ -863,7 +870,8 @@ The foundation release: core IAM server with OAuth, OIDC, SAML, MFA, and the ini
 - `removeUserRealmRoles` returning 200 instead of 204
 - Login error messages never displayed on failed login
 
-[Unreleased]: https://github.com/idenplane/idenplane/compare/v0.12.0...HEAD
+[Unreleased]: https://github.com/idenplane/idenplane/compare/v0.13.0...HEAD
+[0.13.0]: https://github.com/idenplane/idenplane/releases/tag/v0.13.0
 [0.12.0]: https://github.com/idenplane/idenplane/releases/tag/v0.12.0
 [0.11.1]: https://github.com/idenplane/idenplane/releases/tag/v0.11.1
 [0.11.0]: https://github.com/idenplane/idenplane/releases/tag/v0.11.0
