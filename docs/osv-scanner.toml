@@ -13,3 +13,17 @@
 id = "GHSA-gcqx-w48m-w2h4"
 ignoreUntil = 2027-05-16T00:00:00Z
 reason = "No fixed deepmerge release; build-time only via @svgr/plugin-svgo merging the docs build's SVGO config, absent from the static site"
+
+[[IgnoredVulns]]
+# picomatch: ReDoS through single-branch repeated extglobs. No fixed release
+# exists yet: every version up to 4.0.7, the latest, is affected. Here it is
+# picomatch 2.3.2, reached through Docusaurus' build tooling (micromatch via
+# @docusaurus/utils and fast-glob, anymatch and readdirp via chokidar,
+# jest-util via jest-worker). It matches this repository's own glob patterns
+# while the docs site is built, or file paths in the local `docusaurus start`
+# dev server. The published site is static files; picomatch never runs in it.
+# Shorter expiry than usual because the advisory is high: drop this as soon as
+# a fixed picomatch ships (Dependabot alert #723 stays open to catch that).
+id = "GHSA-fc5q-39xc-vjpf"
+ignoreUntil = 2027-02-18T00:00:00Z
+reason = "No fixed picomatch release; build-time only via Docusaurus tooling matching the repository's own globs, absent from the static site"
