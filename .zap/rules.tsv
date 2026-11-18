@@ -107,3 +107,10 @@
 # second is refused as a duplicate, so the pages differ. src/registration
 # has no raw SQL; every value is bound by Prisma.
 #@accept	40018	/realms/[^/]+/registration/register	False positive: the second of the paired registrations is a duplicate of the first, so the responses differ; registration uses only Prisma-bound queries (no raw SQL in src/registration).
+
+# ZAP 90035 can find the computed number inside a DIFFERENT unevaluated
+# Django-addition probe in the same realm export. The gate's special matcher
+# requires that exact collision, the original input unchanged, and no computed
+# result outside literal probes. Missing proof or an evaluated result still fails.
+# Regression: test/dast-regressions.e2e-spec.ts and stored-ssti-collision.test.mjs.
+#@accept	90035	^https?://[^/]+/admin/realms/[^/]+/webhooks/?$	False positive only when ZAP's alleged result occurs exclusively inside other unevaluated stored addition probes in the same realm export.	@stored-addition-collision

@@ -267,6 +267,50 @@ describe('DAST regressions (e2e)', () => {
     });
   });
 
+  describe('stored template probes stay literal JSON', () => {
+    it('does not evaluate webhook event types, descriptions or exported secrets', async () => {
+      const attack = 'zj{{11940|add:38450}}zj';
+      // The alleged result of the first probe occurs inside the second,
+      // unevaluated probe: this is the collision ZAP 90035 reported.
+      const secret = 'zj{{86320|add:50390}}zj';
+      const description = 'zj{{7*7}}zj';
+      const created = await admin(
+        http().post(`/admin/realms/${REALM}/webhooks`),
+      ).send({
+        url: 'https://example.com/hook',
+        eventTypes: [attack],
+        secret,
+        description,
+      });
+      expect(created.status).toBe(201);
+      expect(created.body).toMatchObject({
+        eventTypes: [attack],
+        secret,
+        description,
+      });
+
+      const exported = await admin(
+        http().get(
+          `/admin/realms/${REALM}/export?includeUsers=true&includeSecrets=true`,
+        ),
+      );
+      expect(exported.status).toBe(200);
+      expect(exported.headers['content-type']).toMatch(/^application\/json/);
+      expect(exported.headers['x-content-type-options']).toBe('nosniff');
+      expect(exported.body.webhooks).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            eventTypes: [attack],
+            secret,
+            description,
+          }),
+        ]),
+      );
+      expect(exported.text).not.toContain('zj50390zj');
+      expect(exported.text).not.toContain('zj49zj');
+    });
+  });
+
   describe('security headers', () => {
     it('hosted pages: Permissions-Policy, CORP, no-store, nonce-only <style>', async () => {
       const res = await http().get(

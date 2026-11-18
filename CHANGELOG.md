@@ -9,6 +9,9 @@ For full per-commit detail, see the [GitHub Releases](https://github.com/idenpla
 
 ## [Unreleased]
 
+### Security
+- **Back-channel logout pins its connection to the validated IP address.** DNS rebinding can no longer switch a checked hostname to a link-local or cloud-metadata address when the connection opens. Private and loopback relying parties remain supported, redirects are never followed, response bodies are discarded, and the 10-second deadline includes DNS resolution. `BACKCHANNEL_LOGOUT_ALLOW_LINK_LOCAL=true` remains an explicit override; it does not disable pinning.
+
 ### Fixed
 - **The setup wizard's SMTP test sends a test email.** **Send Test** in the wizard's email step said "Test email sent successfully!", but `POST /setup-wizard/smtp/test` only checked that a host and port were saved and sent nothing, ignoring the `to` address. It now saves the form, then sends a test message to `to` through the saved SMTP settings. It answers like the realm SMTP test: `400` when nothing is saved, and `502` with a short reason when the server refuses the message or cannot be reached. The server's own reply is logged, not returned.
 
