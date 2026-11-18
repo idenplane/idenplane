@@ -11,7 +11,6 @@ name: Publish idenplane-cli
 # npmjs.com name this repository and workflow file as its trusted publisher,
 # so the job's GitHub OIDC token is exchanged for a one-time publish
 # credential; no long-lived token is involved, and provenance is attached.
-# NPM_TOKEN is only a fallback while a package has no trusted publisher yet.
 on:
   push:
     tags: ['cli-v*']
@@ -103,5 +102,3 @@ jobs:
       - name: Publish to npm
         working-directory: packages/idenplane-cli
         run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
