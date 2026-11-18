@@ -34,6 +34,7 @@ The values live in one place, `src/realms/realm-security-defaults.ts`. They are 
 ### How the lockout works
 
 - Each failed password or LDAP bind counts as a failure: on the hosted login page, the password grant, device approval and admin console sign-in. Failed TOTP codes and passkey assertions are counted separately, with the same limits.
+- So does a wrong **current password in the account console** (since 0.13.0): when changing the password, adding or removing a phone for text-message codes, turning off the authenticator app, and requesting or cancelling account deletion. A stolen session therefore cannot be used to guess the password faster than the sign-in page allows. While the account is locked these forms are refused without checking the password, and the right password clears the failures, as a sign-in does. An empty password field is not counted.
 - When `maxLoginFailures` failures fall within `failureResetTime`, the account is locked for `lockoutDuration`.
 - **While the account is locked, the password is not checked at all.** The answer is the same whether the password was right or wrong, so a locked account can't be used to test passwords. Attempts during the lock are not counted and don't extend it.
 - The lock ends by itself. A successful sign-in afterwards clears the failures.
@@ -124,7 +125,7 @@ Each default below was reviewed against the rule: change it only when it is clea
 | `passwordMaxAgeDays` | `0` (no forced rotation) | Kept (ASVS 5.0 V6.2.10). |
 | `accessTokenLifespan` | 300 s | Kept. |
 | `refreshTokenLifespan` | 1800 s; also the lifetime of an OAuth session, checked at every refresh | Kept. |
-| `offlineTokenLifespan` | 30 days; the lifetime of an offline session, counted from sign-in (since 0.11.0; before, offline sessions got `refreshTokenLifespan`) | Kept. Offline tokens are still ended by sign-out everywhere, a password reset or change, an admin setting the password or removing second factors, disabling or deleting the user, SCIM deactivation and the admin "sign out all sessions". |
+| `offlineTokenLifespan` | 30 days; the lifetime of an offline session, counted from sign-in (since 0.11.0; before, offline sessions got `refreshTokenLifespan`) | Kept. Offline tokens are still ended by sign-out everywhere, a password reset or change, an admin or a SCIM client setting the password, an admin removing second factors, disabling or deleting the user, SCIM deactivation and the admin "sign out all sessions". |
 | `maxSessionsPerUser` | 10; offline sessions don't count (since 0.12.0) | Kept. |
 | `ssoSessionIdleTimeout` | `0` (off), since 0.12.0 | **Recommended when you raise `refreshTokenLifespan`, not changed.** With the default 30-minute maximum lifetime it adds little; on by default it would sign out users of realms configured for long sessions at the upgrade. See [Idle timeout](../configuration/options.md#idle-timeout). |
 | `rateLimitEnabled` | Off | **Recommended on, not changed.** The default per-IP limit (20 per minute) can block many users behind one NAT or a misconfigured `TRUSTED_PROXIES`. Turn it on after checking `TRUSTED_PROXIES` and the limits. |

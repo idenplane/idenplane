@@ -4,8 +4,13 @@ import { CryptoService } from '../crypto/crypto.service.js';
 import type { ZitadelExport, ZitadelUser } from './zitadel-types.js';
 import { createEmptyReport, type MigrationReport } from './migration-report.js';
 import { idpSecrets } from '../identity-providers/idp-secrets.js';
-import { unsupportedIdpTypeReason } from '../identity-providers/idp-provider-types.js';
-import { idpCreateData, planIdpImport, reportIdpPlan } from './idp-import.js';
+import {
+  idpCreateData,
+  planIdpImport,
+  reportIdpPlan,
+  samlFromMetadata,
+  type IdpImportPlan,
+} from './idp-import.js';
 
 export interface ZitadelImportOptions {
   dryRun: boolean;
@@ -227,29 +232,50 @@ export class ZitadelImporterService {
   ): Promise<void> {
     for (const idp of data.idps ?? []) {
       const alias = idp.name ?? idp.idpId;
-      if (!idp.oidcConfig) {
+      let plan: IdpImportPlan;
+      if (/SAML/i.test(idp.type ?? '') || idp.samlConfig) {
+        // A SAML IdP: Zitadel keeps its metadata (base64 XML).
+        const fromMetadata = samlFromMetadata(idp.samlConfig?.metadataXml);
+        if ('reason' in fromMetadata) {
+          plan = {
+            skip: true,
+            reason: `it is a SAML identity provider and ${fromMetadata.reason}; add it in the admin console from the IdP's metadata.`,
+          };
+        } else {
+          const saml = fromMetadata.saml;
+          if (idp.samlConfig?.withSignedRequest === true) {
+            saml['signAuthnRequests'] = true;
+          }
+          if (/POST/i.test(idp.samlConfig?.binding ?? '')) {
+            saml['ssoBinding'] = 'post';
+          }
+          plan = planIdpImport({
+            alias,
+            providerType: 'saml',
+            fields: {},
+            saml,
+          });
+        }
+      } else if (!idp.oidcConfig) {
         report.summary.identityProviders.skipped++;
         report.warnings.push({
           entity: 'identity_provider',
-          message: `Identity provider '${alias}' was not imported: ${
-            /SAML/i.test(idp.type ?? '')
-              ? unsupportedIdpTypeReason('saml')
-              : `it has no oidcConfig (type ${idp.type ?? 'unknown'}); only generic OIDC identity providers can be imported, recreate this one manually.`
-          }`,
+          message: `Identity provider '${alias}' was not imported: it has no oidcConfig (type ${idp.type ?? 'unknown'}); only generic OIDC and SAML identity providers can be imported, recreate this one manually.`,
         });
         continue;
+      } else {
+        plan = planIdpImport({
+          alias,
+          providerType: 'oidc',
+          fields: {
+            clientId: idp.oidcConfig.clientId,
+            clientSecret: idp.oidcConfig.clientSecret,
+            authorizationUrl: idp.oidcConfig.authorizationEndpoint,
+            tokenUrl: idp.oidcConfig.tokenEndpoint,
+            issuer: idp.oidcConfig.issuer,
+          },
+        });
       }
-      const plan = planIdpImport({
-        alias,
-        providerType: 'oidc',
-        fields: {
-          clientId: idp.oidcConfig.clientId,
-          clientSecret: idp.oidcConfig.clientSecret,
-          authorizationUrl: idp.oidcConfig.authorizationEndpoint,
-          tokenUrl: idp.oidcConfig.tokenEndpoint,
-          issuer: idp.oidcConfig.issuer,
-        },
-      });
       if (!reportIdpPlan(report, alias, plan)) continue;
       try {
         const existing = await this.prisma.identityProvider.findFirst({

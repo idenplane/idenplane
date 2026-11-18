@@ -275,13 +275,36 @@ export function auth0Password(user: Auth0User): ImportedPassword {
  * - `pbkdf2_sha256$<iterations>$<salt>$<base64 hash>` (the default) and
  *   `pbkdf2_sha1$…`; the salt is a plain string, used as its UTF-8 bytes;
  * - `argon2$argon2id$v=19$m=…` (Django's ArgonPasswordHasher): the PHC
- *   string after the `argon2` prefix.
- * Anything else (bcrypt_sha256, scrypt, md5…) is dropped with a warning.
+ *   string after the `argon2` prefix;
+ * - `bcrypt$$2b$…` (Django's BCryptPasswordHasher): the bcrypt string after
+ *   the `bcrypt$` prefix.
+ * Anything else is dropped with a warning: `bcrypt_sha256` (bcrypt over a
+ * SHA-256 of the password, which no Idenplane check computes), scrypt, md5,
+ * and Django's unusable-password marker (`!…`).
  */
 export function authentikPassword(raw: string | undefined): ImportedPassword {
   if (!raw) return NONE;
   if (/^argon2\$argon2(id|i|d)\$/.test(raw)) {
     return { hash: raw.slice('argon2'.length), algorithm: 'argon2' };
+  }
+  if (raw.startsWith('bcrypt$')) {
+    const bcrypt = raw.slice('bcrypt$'.length);
+    return isBcryptHash(bcrypt)
+      ? { hash: bcrypt, algorithm: 'bcrypt' }
+      : dropped('Authentik bcrypt password hash is malformed');
+  }
+  if (raw.startsWith('bcrypt_sha256$')) {
+    return dropped(
+      'Authentik password hasher "bcrypt_sha256" is not supported (bcrypt over a SHA-256 of the password)',
+    );
+  }
+  if (raw.startsWith('!')) {
+    // Django's set_unusable_password(): "!" and random characters, no hash.
+    return {
+      ...NONE,
+      warning:
+        'Authentik marks this account as having no usable password (it signs in through a source); imported without a password',
+    };
   }
   const django = /^pbkdf2_(sha1|sha256)\$(\d+)\$([^$]+)\$([^$]+)$/.exec(raw);
   if (django) {

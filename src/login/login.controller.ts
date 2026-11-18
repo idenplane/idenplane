@@ -895,12 +895,13 @@ export class LoginController {
       data: { passwordHash, passwordChangedAt: new Date() },
     });
 
-    // Record history
+    // Record history, with the replaced hash if it was not in it yet.
     await this.passwordPolicyService.recordHistory(
       user.id,
       realm.id,
       passwordHash,
       realm.passwordHistoryCount,
+      user,
     );
 
     // Consume the token
@@ -1672,6 +1673,30 @@ export class LoginController {
       );
     }
 
+    // Password history applies to a reset as to any other change. Checked
+    // before the link is used up, so the user can pick another password
+    // with the same link.
+    if (realm.passwordHistoryCount > 0) {
+      const pending = await this.verificationService.peekToken(
+        token,
+        'password_reset',
+        realm.id,
+      );
+      if (
+        pending &&
+        (await this.passwordPolicyService.checkHistory(
+          pending.userId,
+          realm.id,
+          password,
+          realm.passwordHistoryCount,
+        ))
+      ) {
+        return res.redirect(
+          `/realms/${realm.name}/reset-password?token=${encodeURIComponent(token)}&error=${encodeURIComponent('Password was used recently. Choose a different password.')}`,
+        );
+      }
+    }
+
     const result = await this.verificationService.validateToken(
       token,
       'password_reset',
@@ -1682,6 +1707,12 @@ export class LoginController {
         `/realms/${realm.name}/reset-password?error=${encodeURIComponent('This reset link is invalid or has expired.')}`,
       );
     }
+
+    // The hash being replaced, for the password history.
+    const previous = await this.prisma.user.findUnique({
+      where: { id: result.userId },
+      select: { passwordHash: true, passwordAlgorithm: true },
+    });
 
     const passwordHash = await this.crypto.hashPassword(password);
     await this.prisma.user.update({
@@ -1694,16 +1725,15 @@ export class LoginController {
     // is not signed in, so there is no session of theirs to keep.
     await this.sessions.revokeAllUserSessions(realm, result.userId);
 
-    // Record password history
-    const user = await this.prisma.user.findUnique({
-      where: { id: result.userId },
-    });
-    if (user) {
+    // Record password history, with the replaced hash if it was not in it
+    // yet (an imported password, say).
+    if (previous) {
       await this.passwordPolicyService.recordHistory(
-        user.id,
+        result.userId,
         realm.id,
         passwordHash,
         realm.passwordHistoryCount,
+        previous,
       );
     }
 

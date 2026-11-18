@@ -3,6 +3,8 @@ import {
   Injectable,
   Logger,
   BadRequestException,
+  ConflictException,
+  Optional,
   UnauthorizedException,
 } from '@nestjs/common';
 import type { Realm, IdentityProvider, User } from '@prisma/client';
@@ -12,6 +14,29 @@ import { IdentityProvidersService } from '../identity-providers/identity-provide
 import { CryptoService } from '../crypto/crypto.service.js';
 import { idpSecrets } from '../identity-providers/idp-secrets.js';
 import { matchesRedirectUri } from '../common/redirect-uri.utils.js';
+import { SamlBrokerService } from './saml/saml-broker.service.js';
+import { EventsService } from '../events/events.service.js';
+import { LoginEventType } from '../events/event-types.js';
+
+/** The `error` of the login event recorded for a {@link FederatedLinkConflictException}. */
+export const FEDERATED_LINK_CONFLICT = 'federated_identity_conflict';
+
+/**
+ * An external account whose trusted, verified email belongs to a local
+ * user who is already linked to the same provider through another
+ * external account (another `sub` / NameID). Never relinked: moving the
+ * link would let whoever controls the second external account take over
+ * the local one. The user sees `message`; admins see a LOGIN_ERROR event.
+ */
+export class FederatedLinkConflictException extends ConflictException {
+  constructor(providerName: string) {
+    super(
+      `Your account is already linked to ${providerName} through a different ${providerName} account. ` +
+        `Sign in with the ${providerName} account linked to it, or ask an administrator to remove the old link.`,
+    );
+    this.name = 'FederatedLinkConflictException';
+  }
+}
 
 /**
  * A sign-in at an external provider started by a `social` step of a login
@@ -99,7 +124,14 @@ export class BrokerService {
     private readonly jwkService: JwkService,
     private readonly idpService: IdentityProvidersService,
     private readonly crypto: CryptoService,
+    private readonly saml: SamlBrokerService,
+    @Optional() private readonly events?: EventsService,
   ) {}
+
+  /** The SAML side of the broker, for a `saml` provider. */
+  private samlBroker(): SamlBrokerService {
+    return this.saml;
+  }
 
   /**
    * Build the external provider's authorization URL and a signed broker state.
@@ -165,6 +197,12 @@ export class BrokerService {
       claims: params.claims,
     };
 
+    // SAML: the state stays on the server, the browser gets a one-time
+    // start link (see SamlBrokerService).
+    if (idp.providerType === 'saml') {
+      return this.samlBroker().createStart(realm, idp, brokerState);
+    }
+
     const stateJwt = await this.jwkService.signJwt(
       { ...brokerState, typ: 'broker_state' },
       signingKey.privateKey,
@@ -210,13 +248,16 @@ export class BrokerService {
     if (!idp.enabled) {
       throw new BadRequestException(`Identity provider '${alias}' is disabled`);
     }
-    const signingKey = await this.getActiveSigningKey(realm.id);
     const brokerState: BrokerState = {
       realmId: realm.id,
       realmName: realm.name,
       alias,
       flow,
     };
+    if (idp.providerType === 'saml') {
+      return this.samlBroker().createStart(realm, idp, brokerState);
+    }
+    const signingKey = await this.getActiveSigningKey(realm.id);
     const stateJwt = await this.jwkService.signJwt(
       { ...brokerState, typ: 'broker_state' },
       signingKey.privateKey,
@@ -262,6 +303,12 @@ export class BrokerService {
     const idp = await this.idpService.findByAlias(realm, alias);
     if (!idp.enabled) {
       throw new BadRequestException(`Identity provider '${alias}' is disabled`);
+    }
+    // A SAML provider answers at its ACS, never with an OAuth code.
+    if (idp.providerType === 'saml') {
+      throw new BadRequestException(
+        `Identity provider '${alias}' is a SAML identity provider`,
+      );
     }
     const baseUrl = process.env['BASE_URL'] ?? 'http://localhost:3000';
     const callbackUrl = `${baseUrl}/realms/${realm.name}/broker/${alias}/callback`;
@@ -319,15 +366,7 @@ export class BrokerService {
       !!user.email &&
       external.email.toLowerCase() === user.email.toLowerCase()
     ) {
-      await this.prisma.federatedIdentity.create({
-        data: {
-          userId: user.id,
-          identityProviderId: idp.id,
-          externalUserId: external.sub,
-          externalUsername: external.preferredUsername,
-          externalEmail: external.email,
-        },
-      });
+      await this.linkByEmail(idp, external, user);
       return 'linked';
     }
     return 'not_linked';
@@ -360,6 +399,17 @@ export class BrokerService {
     // sign-in (account status, MFA policy, session, consent, code) is the
     // same as after a password and is done by the caller via LoginFlowService.
     // The original OAuth request travels with it.
+    return { user, oauthParams: this.oauthParamsOf(brokerState) };
+  }
+
+  /**
+   * The original OAuth request of a built-in (unbound) federated sign-in,
+   * from its broker state, for LoginFlowService.
+   */
+  oauthParamsOf(brokerState: BrokerState): Record<string, string> {
+    if (!brokerState.clientId || !brokerState.redirectUri) {
+      throw new BadRequestException('Broker state mismatch');
+    }
     const oauthParams: Record<string, string> = {
       response_type: 'code',
       client_id: brokerState.clientId,
@@ -379,8 +429,7 @@ export class BrokerService {
     if (brokerState.acrValues)
       oauthParams['acr_values'] = brokerState.acrValues;
     if (brokerState.claims) oauthParams['claims'] = brokerState.claims;
-
-    return { user, oauthParams };
+    return oauthParams;
   }
 
   private async exchangeCode(
@@ -590,16 +639,7 @@ export class BrokerService {
       });
 
       if (existingUser) {
-        // Link existing user
-        await this.prisma.federatedIdentity.create({
-          data: {
-            userId: existingUser.id,
-            identityProviderId: idp.id,
-            externalUserId: external.sub,
-            externalUsername: external.preferredUsername,
-            externalEmail: external.email,
-          },
-        });
+        await this.linkByEmail(idp, external, existingUser);
         return existingUser;
       }
     }
@@ -639,6 +679,86 @@ export class BrokerService {
     });
 
     return user;
+  }
+
+  /**
+   * Links `external` to `user`, whose address it matched. A user has at
+   * most one link per provider: when `user` is already linked to `idp`
+   * through another external account, the sign-in is refused
+   * (FederatedLinkConflictException) and recorded, never relinked. The
+   * unique (user, provider) index catches a concurrent link the same way.
+   */
+  private async linkByEmail(
+    idp: IdentityProvider,
+    external: ExternalUserInfo,
+    user: User,
+  ): Promise<void> {
+    const existing = await this.prisma.federatedIdentity.findUnique({
+      where: {
+        userId_identityProviderId: {
+          userId: user.id,
+          identityProviderId: idp.id,
+        },
+      },
+      select: { externalUserId: true },
+    });
+    if (existing) {
+      await this.linkConflict(idp, external, user, existing.externalUserId);
+    }
+    try {
+      await this.prisma.federatedIdentity.create({
+        data: {
+          userId: user.id,
+          identityProviderId: idp.id,
+          externalUserId: external.sub,
+          externalUsername: external.preferredUsername,
+          externalEmail: external.email,
+        },
+      });
+    } catch (err) {
+      if ((err as { code?: string }).code !== 'P2002') throw err;
+      // A concurrent sign-in of the same external account linked it first.
+      const now = await this.prisma.federatedIdentity.findUnique({
+        where: {
+          userId_identityProviderId: {
+            userId: user.id,
+            identityProviderId: idp.id,
+          },
+        },
+        select: { externalUserId: true },
+      });
+      if (now?.externalUserId === external.sub) return;
+      await this.linkConflict(idp, external, user, now?.externalUserId ?? null);
+    }
+  }
+
+  private async linkConflict(
+    idp: IdentityProvider,
+    external: ExternalUserInfo,
+    user: User,
+    linkedExternalUserId: string | null,
+  ): Promise<never> {
+    this.logger.warn(
+      `Federated sign-in refused: user ${user.id} is already linked to '${idp.alias}' ` +
+        `as ${JSON.stringify(linkedExternalUserId)}, not ${JSON.stringify(external.sub)}`,
+    );
+    await this.events
+      ?.recordLoginEvent({
+        realmId: idp.realmId,
+        userId: user.id,
+        type: LoginEventType.LOGIN_ERROR,
+        error: FEDERATED_LINK_CONFLICT,
+        details: {
+          identityProvider: idp.alias,
+          providerType: idp.providerType,
+          externalUserId: external.sub,
+          linkedExternalUserId,
+          reason:
+            'The account is already linked to this identity provider with a different subject; it was not relinked.',
+        },
+      })
+      .catch(() => undefined);
+    throw new FederatedLinkConflictException(idp.displayName ?? idp.alias);
   }
 
   private async getActiveSigningKey(realmId: string) {

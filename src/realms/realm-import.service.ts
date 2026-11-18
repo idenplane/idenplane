@@ -39,6 +39,10 @@ import {
   supportedIdpProviderType,
   unsupportedIdpTypeReason,
 } from '../identity-providers/idp-provider-types.js';
+import {
+  SAML_UNUSED_OAUTH_COLUMNS,
+  validateSamlConfig,
+} from '../identity-providers/saml-config.js';
 import { federationSecrets } from '../user-federation/federation-secrets.js';
 import { STREAM_HEADERS_SHAPE } from '../events/audit-stream-secrets.js';
 import { SSO_CONFIG_SHAPE } from '../organizations/sso-connection-secrets.js';
@@ -620,8 +624,9 @@ export class RealmImportService {
     }
 
     // ── Identity providers and federation ──
-    // Only types the broker can sign in with (oidc, oauth2) are stored; a
-    // SAML or unknown type is skipped with a warning, never stored.
+    // Only types the broker can sign in with (oidc, oauth2, saml) are
+    // stored; an unknown type, or a SAML provider whose samlConfig does not
+    // pass the admin API's checks, is skipped with a warning.
     const idps: Item[] = [];
     for (const idp of items(payload, 'identityProviders')) {
       const providerType = supportedIdpProviderType(
@@ -633,6 +638,22 @@ export class RealmImportService {
         );
         continue;
       }
+      if (providerType === 'saml') {
+        const checked = validateSamlConfig(idp['samlConfig']);
+        if (!checked.ok) {
+          warnings.push(
+            `identity provider '${idp['alias'] as string}': not imported, its SAML settings are incomplete or unusable (${checked.errors.join('; ')})`,
+          );
+          continue;
+        }
+        idps.push({
+          ...idp,
+          ...SAML_UNUSED_OAUTH_COLUMNS,
+          providerType,
+          samlConfig: checked.config,
+        });
+        continue;
+      }
       idps.push({ ...idp, providerType });
     }
     await tx.identityProvider.createMany({
@@ -640,6 +661,10 @@ export class RealmImportService {
         'IdentityProvider',
         idps,
         (idp) => {
+          // A SAML provider has no client secret.
+          if (idp['providerType'] === 'saml') {
+            return { clientSecret: idpSecrets.forCreate(this.crypto, '') };
+          }
           if (typeof idp['clientSecret'] === 'string') {
             return {
               clientSecret: idpSecrets.forCreate(

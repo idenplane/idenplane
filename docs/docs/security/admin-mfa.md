@@ -134,7 +134,7 @@ Some actions need the admin's factor checked in the last **15 minutes**. The che
 - adding a factor when the admin already has one;
 - resetting another admin's MFA;
 - turning the requirement off;
-- resetting an end user's MFA (`DELETE /admin/realms/{realm}/users/{id}/mfa...`) and unlocking a user (`.../brute-force/users/{id}/unlock`).
+- resetting an end user's MFA or removing one of their passkeys (`DELETE /admin/realms/{realm}/users/{id}/mfa...`, including `.../mfa/passkeys/{credentialId}`) and unlocking a user (`.../brute-force/users/{id}/unlock`). A full reset removes the user's passkeys too unless `?keepPasskeys=true` (since 0.13.0; see [MFA](/guides/mfa#disabling-mfa-admin)).
 
 A route declares the check with `@RequireRecentAdminMfa()`. `AdminAuthorizationGuard` enforces it and refuses with `403 admin_recent_mfa_required`. The console then asks for a code, calls step-up and retries.
 

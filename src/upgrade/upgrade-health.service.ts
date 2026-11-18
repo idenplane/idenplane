@@ -2,6 +2,8 @@ import { Injectable, Logger } from '@nestjs/common';
 import { prismaMigrateStatus } from './migrate-status.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { policyProblems } from '../authorization/policy-engine.js';
+import { classifyIdpProviderType } from '../identity-providers/idp-provider-types.js';
+import { storedSamlConfig } from '../identity-providers/saml-config.js';
 import { adminMfaRequiredFromEnv } from '../admin-rbac/admin-principal.service.js';
 import {
   ADMIN_ROLES,
@@ -156,6 +158,14 @@ export class UpgradeHealthService {
     const policyCheck = await this.checkInvalidPolicies();
     checks.push(policyCheck);
     if (policyCheck.status === 'pass') passed++;
+    else warnings++;
+
+    // 12. Identity providers the broker cannot sign in with: a SAML one
+    // without a valid SAML configuration, or a type it does not take
+    // (anything else saved before 0.12.0). Also only ever a warning.
+    const idpCheck = await this.checkIdentityProviderTypes();
+    checks.push(idpCheck);
+    if (idpCheck.status === 'pass') passed++;
     else warnings++;
 
     const healthy = failures === 0;
@@ -426,6 +436,108 @@ export class UpgradeHealthService {
         name: 'invalid_authorization_policies',
         status: 'warn',
         message: 'Could not check authorization policies',
+        details: (error as Error).message,
+      };
+    }
+  }
+
+  /**
+   * Warns about identity providers the broker cannot sign in with. Before
+   * 0.12.0 the admin API and the importers stored any type, so a realm can
+   * still hold such rows; an enabled one shows a sign-in button on the
+   * login page. (Supported types stored in another case, such as `OIDC` or
+   * `SAML`, were lower-cased by the 0.13.0 migrations.)
+   *
+   * - **Needs configuration review**: a SAML provider without a valid SAML
+   *   configuration. A `saml` row stored before 0.13.0, when Idenplane had
+   *   no SAML broker, has none, and the broker refuses its sign-ins until
+   *   an admin completes it; `samlp` and `adfs` rows (Auth0 exports) also
+   *   need their type set to `saml`. A `saml` row with a valid
+   *   configuration passes.
+   * - **Unsupported type**: anything else that is not `oidc`, `oauth2` or
+   *   `saml`.
+   *
+   * Each is listed as `realm/alias (type, enabled|disabled)`. What counts
+   * as SAML or supported is decided by classifyIdpProviderType.
+   */
+  async checkIdentityProviderTypes(): Promise<UpgradeHealthCheck> {
+    try {
+      const providers = await this.prisma.identityProvider.findMany({
+        select: {
+          alias: true,
+          providerType: true,
+          samlConfig: true,
+          enabled: true,
+          realm: { select: { name: true } },
+        },
+        orderBy: [{ realm: { name: 'asc' } }, { alias: 'asc' }],
+      });
+      const problemOf = (p: (typeof providers)[number]) => {
+        const kind = classifyIdpProviderType(p.providerType);
+        if (kind.kind === 'unsupported') return 'unsupported';
+        if (kind.kind === 'saml') return 'review';
+        if (
+          kind.type === 'saml' &&
+          (p.providerType !== 'saml' || !storedSamlConfig(p.samlConfig))
+        ) {
+          return 'review';
+        }
+        return null;
+      };
+      const listed = (problem: 'review' | 'unsupported') =>
+        providers
+          .filter((p) => problemOf(p) === problem)
+          .map(
+            (p) =>
+              `${p.realm.name}/${p.alias} (${p.providerType || '(none)'}, ${p.enabled ? 'enabled' : 'disabled'})`,
+          );
+      const saml = listed('review');
+      const unsupported = listed('unsupported');
+      if (saml.length === 0 && unsupported.length === 0) {
+        return {
+          name: 'identity_provider_types',
+          status: 'pass',
+          message:
+            'Every identity provider has a supported type, and every SAML one a valid configuration',
+        };
+      }
+      const parts: string[] = [];
+      if (saml.length > 0) {
+        parts.push(
+          `${saml.length} SAML identity provider(s) need configuration review: ` +
+            'they have no valid SAML configuration (rows stored before 0.13.0, ' +
+            'when Idenplane had no SAML broker, have none). Complete the SAML ' +
+            'settings of each one (type saml), or delete it.',
+        );
+      }
+      if (unsupported.length > 0) {
+        parts.push(
+          `${unsupported.length} identity provider(s) have a type the broker ` +
+            'does not support (oidc, oauth2 and saml are). Change the type to ' +
+            'one the provider speaks, or delete them.',
+        );
+      }
+      parts.push(
+        'An enabled one shows a sign-in button that cannot complete a sign-in until then.',
+      );
+      const details: string[] = [];
+      if (saml.length > 0) {
+        details.push(`Needs configuration review: ${saml.join(', ')}`);
+      }
+      if (unsupported.length > 0) {
+        details.push(`Unsupported type: ${unsupported.join(', ')}`);
+      }
+      return {
+        name: 'identity_provider_types',
+        status: 'warn',
+        message: parts.join(' '),
+        details: details.join('; '),
+      };
+    } catch (error) {
+      return {
+        name: 'identity_provider_types',
+        status: 'warn',
+        message: 'Could not check identity provider types',
         details: (error as Error).message,
       };
     }

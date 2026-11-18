@@ -254,9 +254,53 @@ export interface IdentityProvider {
   trustEmail: boolean;
   linkOnly: boolean;
   syncUserProfile: boolean;
-  samlConfig?: Record<string, unknown> | null;
+  /** The settings of a `saml` provider; null for oidc/oauth2. */
+  samlConfig?: SamlIdpConfig | null;
+  /** For a `saml` provider: what to register at the IdP. */
+  samlSp?: SamlSpEndpoints;
   createdAt: string;
   updatedAt: string;
+}
+
+/** A SAML identity provider's settings (Idenplane as the SP). */
+export interface SamlIdpConfig {
+  entityId: string;
+  ssoUrl: string;
+  ssoBinding: 'redirect' | 'post';
+  signingCertificates: string[];
+  nameIdFormat: string;
+  signAuthnRequests: boolean;
+  wantAssertionsSigned: boolean;
+  wantResponseSigned: boolean;
+  allowSha1: boolean;
+  sloUrl: string | null;
+  clockSkewSeconds: number;
+  subjectAttribute: string | null;
+  usernameSource: 'nameId' | 'email' | 'attribute';
+  attributes: {
+    email?: string | null;
+    firstName?: string | null;
+    lastName?: string | null;
+    username?: string | null;
+  };
+}
+
+/** The service-provider endpoints of a SAML identity provider. */
+export interface SamlSpEndpoints {
+  entityId: string;
+  acsUrl: string;
+  metadataUrl: string;
+}
+
+/** What IdP metadata fills in, from POST …/identity-providers/saml-metadata. */
+export interface SamlMetadataFields {
+  entityId: string;
+  ssoUrl: string;
+  ssoBinding: 'redirect' | 'post';
+  signingCertificates: string[];
+  nameIdFormat: string;
+  sloUrl: string | null;
+  signAuthnRequests?: boolean;
 }
 
 export interface SamlServiceProvider {

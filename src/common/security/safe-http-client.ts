@@ -23,7 +23,11 @@ import type { LookupAddress } from 'node:dns';
 import { request as httpRequest } from 'node:http';
 import { request as httpsRequest } from 'node:https';
 import type { IncomingMessage, RequestOptions } from 'node:http';
-import { isBlockedHostnameLiteral, isBlockedIp } from './ip-range-guard.js';
+import {
+  isBlockedHostnameLiteral,
+  isBlockedIp,
+  isLinkLocalOrMetadataIp,
+} from './ip-range-guard.js';
 
 /**
  * The generic, non-leaking message persisted to `WebhookDelivery.response`
@@ -283,17 +287,76 @@ export async function safePost(
   }
 }
 
+/** A response body larger than the caller's `maxBytes`. */
+export class ResponseTooLargeError extends Error {
+  constructor(readonly maxBytes: number) {
+    super(`Response is larger than ${maxBytes} bytes`);
+    this.name = 'ResponseTooLargeError';
+    Object.setPrototypeOf(this, ResponseTooLargeError.prototype);
+  }
+}
+
+export interface SafeGetOptions extends SafePostOptions {
+  /** Largest response body read; a larger one is refused. Default 1 MiB. */
+  maxBytes?: number;
+}
+
 /**
- * Send a single POST request to `target.url`, with the TCP connection
+ * The GET counterpart of {@link safePost}, with the same SSRF protections
+ * (address validation, DNS pinning, re-validated redirects, a hop cap) and
+ * a cap on the response size. Used to fetch SAML IdP metadata.
+ */
+export async function safeGet(
+  rawUrl: string,
+  headers: Record<string, string> = {},
+  options: SafeGetOptions = {},
+): Promise<SafePostResult> {
+  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const maxBytes = options.maxBytes ?? 1024 * 1024;
+  let target = await resolveSafeTarget(rawUrl);
+  for (let hop = 0; ; hop++) {
+    const result = await sendPinnedRequest(
+      target,
+      null,
+      headers,
+      timeoutMs,
+      'GET',
+      maxBytes,
+    );
+    if (!REDIRECT_STATUS_CODES.has(result.statusCode)) {
+      return { statusCode: result.statusCode, body: result.body };
+    }
+    const location = result.headers.location;
+    const locationValue = Array.isArray(location) ? location[0] : location;
+    if (!locationValue) {
+      return { statusCode: result.statusCode, body: result.body };
+    }
+    if (hop >= MAX_REDIRECT_HOPS) {
+      throw new SsrfBlockedError('Delivery blocked: too many redirects');
+    }
+    let nextUrl: URL;
+    try {
+      nextUrl = new URL(locationValue, target.url);
+    } catch {
+      throw new SsrfBlockedError('Delivery blocked: invalid redirect location');
+    }
+    target = await resolveSafeTarget(nextUrl.toString());
+  }
+}
+
+/**
+ * Send a single request (POST, or GET for safeGet) to `target.url`, with the TCP connection
  * pinned to `target.pinnedAddress`/`target.family` via a custom `lookup`
  * implementation that ignores whatever hostname Node would otherwise
  * resolve and always returns the pre-validated address instead.
  */
 function sendPinnedRequest(
   target: SafeTarget,
-  body: string,
+  body: string | null,
   headers: Record<string, string>,
   timeoutMs: number,
+  method: 'GET' | 'POST' = 'POST',
+  maxBytes = Infinity,
 ): Promise<PinnedRequestResult> {
   const { url, pinnedAddress, family } = target;
   const isHttps = url.protocol === 'https:';
@@ -316,7 +379,7 @@ function sendPinnedRequest(
       hostname: url.hostname,
       port: url.port !== '' ? Number(url.port) : isHttps ? 443 : 80,
       path: `${url.pathname}${url.search}`,
-      method: 'POST',
+      method,
       headers,
       lookup: pinnedLookup,
       family,
@@ -328,7 +391,17 @@ function sendPinnedRequest(
 
     const req = requestFn(requestOptions, (res: IncomingMessage) => {
       const chunks: Buffer[] = [];
-      res.on('data', (chunk: Buffer) => chunks.push(chunk));
+      let received = 0;
+      res.on('data', (chunk: Buffer) => {
+        received += chunk.length;
+        if (received > maxBytes) {
+          clearTimeout(timer);
+          req.destroy();
+          reject(new ResponseTooLargeError(maxBytes));
+          return;
+        }
+        chunks.push(chunk);
+      });
       res.on('end', () => {
         clearTimeout(timer);
         resolve({
@@ -348,7 +421,51 @@ function sendPinnedRequest(
       reject(err);
     });
 
-    req.write(body);
+    if (body !== null) req.write(body);
     req.end();
   });
+}
+
+const LINK_LOCAL_BLOCKED_MESSAGE =
+  'Delivery blocked: target is a link-local or cloud-metadata address';
+
+/**
+ * A lighter check than `resolveSafeTarget`, for admin-configured URLs that
+ * may legitimately point at the operator's own network (back-channel
+ * logout): private and loopback addresses are allowed, but a URL whose host
+ * is, or resolves to, a link-local or cloud-metadata address
+ * (`isLinkLocalOrMetadataIp`) is refused with `SsrfBlockedError`, as is any
+ * scheme other than http(s). Every resolved address is checked, not only
+ * the first, since the HTTP client may connect to any of them.
+ *
+ * It does not pin the connection: the caller's `fetch` resolves the name
+ * again, so a name whose DNS answer flips between the two lookups (DNS
+ * rebinding) can still get through. Closing that needs a pinned connection
+ * (`safePost`), which would also refuse private addresses.
+ */
+export async function assertNotLinkLocalTarget(rawUrl: string): Promise<void> {
+  let url: URL;
+  try {
+    url = new URL(rawUrl);
+  } catch {
+    throw new SsrfBlockedError('Delivery blocked: not an http(s) URL');
+  }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+    throw new SsrfBlockedError('Delivery blocked: not an http(s) URL');
+  }
+  const hostname = url.hostname.replace(/^\[|\]$/g, '');
+  if (isIP(hostname) !== 0) {
+    if (isLinkLocalOrMetadataIp(hostname))
+      throw new SsrfBlockedError(LINK_LOCAL_BLOCKED_MESSAGE);
+    return;
+  }
+  let records: LookupAddress[];
+  try {
+    records = await lookup(hostname, { all: true, verbatim: true });
+  } catch {
+    throw new Error('Delivery blocked: DNS resolution failed');
+  }
+  if (records.some((record) => isLinkLocalOrMetadataIp(record.address))) {
+    throw new SsrfBlockedError(LINK_LOCAL_BLOCKED_MESSAGE);
+  }
 }

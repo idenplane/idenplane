@@ -4,7 +4,9 @@
  *
  * Filter format: {attr} {operator} {value}
  * Example: userName eq "john"
- * One comparison only: `and`, `or` and grouping are not supported.
+ * Comparisons may be joined with `and` and `or` (`and` binds tighter, as in
+ * RFC 7644); parentheses, `not` and value-path filters (`emails[...]`) are
+ * not supported and are refused with 400 invalidFilter.
  */
 
 import { Injectable, Logger } from '@nestjs/common';
@@ -70,7 +72,64 @@ export function parseScimFilter(filter: string): FilterParseResult {
   };
 }
 
-type FieldKind = 'string' | 'boolean' | 'id';
+/** Most comparisons one filter may join with `and`/`or`. */
+const MAX_FILTER_COMPARISONS = 20;
+
+/**
+ * Splits a filter into its comparisons: the result is an OR of ANDs
+ * (`a and b or c` → [[a, b], [c]]). Scans once, left to right, outside
+ * quoted strings; each comparison is then read by {@link parseScimFilter}.
+ */
+export function parseScimFilterExpression(
+  filter: string,
+): FilterParseResult[][] {
+  if (!filter || typeof filter !== 'string') {
+    throw invalidFilter('Invalid filter expression');
+  }
+  const groups: FilterParseResult[][] = [[]];
+  let count = 0;
+  let start = 0;
+  let quote: string | null = null;
+  const push = (end: number) => {
+    const text = filter.slice(start, end);
+    if (++count > MAX_FILTER_COMPARISONS) {
+      throw invalidFilter(
+        `A filter may join at most ${MAX_FILTER_COMPARISONS} comparisons`,
+      );
+    }
+    groups[groups.length - 1].push(parseScimFilter(text));
+  };
+  for (let i = 0; i < filter.length; i++) {
+    const c = filter[i];
+    if (quote) {
+      if (c === '\\') i++;
+      else if (c === quote) quote = null;
+      continue;
+    }
+    if (c === '"' || c === "'") {
+      quote = c;
+      continue;
+    }
+    if (c === '(' || c === ')' || c === '[' || c === ']') {
+      throw invalidFilter(
+        'Grouping and value-path filters are not supported; join comparisons with "and" or "or"',
+      );
+    }
+    if (c !== ' ') continue;
+    // A logical operator is a whole word between spaces.
+    const word = /^(and|or) +/i.exec(filter.slice(i + 1, i + 6));
+    if (!word) continue;
+    push(i);
+    if (word[1].toLowerCase() === 'or') groups.push([]);
+    i += word[0].length;
+    start = i + 1;
+  }
+  if (quote) throw invalidFilter('Unterminated string in filter');
+  push(filter.length);
+  return groups;
+}
+
+type FieldKind = 'string' | 'exact' | 'boolean' | 'id' | 'member';
 
 /**
  * Filterable User attributes, by lowercased SCIM name. Only these reach the
@@ -85,12 +144,16 @@ const USER_FILTER_FIELDS: Record<string, { field: string; kind: FieldKind }> = {
   emails: { field: 'email', kind: 'string' },
   'emails.value': { field: 'email', kind: 'string' },
   active: { field: 'enabled', kind: 'boolean' },
+  externalid: { field: 'scimExternalId', kind: 'exact' },
 };
 
 const GROUP_FILTER_FIELDS: Record<string, { field: string; kind: FieldKind }> =
   {
     id: { field: 'id', kind: 'id' },
     displayname: { field: 'name', kind: 'string' },
+    externalid: { field: 'scimExternalId', kind: 'exact' },
+    members: { field: 'userGroups', kind: 'member' },
+    'members.value': { field: 'userGroups', kind: 'member' },
   };
 
 function fieldCondition(
@@ -100,8 +163,21 @@ function fieldCondition(
   const { operator, value, attribute } = parsed;
   const { field, kind } = spec;
 
+  if (kind === 'member') {
+    // `members eq "<userId>"`: the groups that user belongs to.
+    if (operator === 'pr') return { [field]: { some: {} } };
+    if (operator !== 'eq' || typeof value !== 'string') {
+      throw invalidFilter(
+        `"${attribute}" supports only eq with a user id, or pr`,
+      );
+    }
+    return { [field]: { some: { userId: value } } };
+  }
+
   if (operator === 'pr') {
-    return kind === 'string' ? { [field]: { not: null } } : {};
+    return kind === 'string' || kind === 'exact'
+      ? { [field]: { not: null } }
+      : {};
   }
 
   if (kind === 'boolean') {
@@ -127,6 +203,22 @@ function fieldCondition(
     if (operator === 'eq') return { [field]: text };
     if (operator === 'ne') return { [field]: { not: text } };
     throw invalidFilter(`Operator "${operator}" is not supported for "id"`);
+  }
+
+  if (kind === 'exact') {
+    // externalId is caseExact (RFC 7643 §3.1).
+    switch (operator) {
+      case 'eq':
+        return { [field]: text };
+      case 'ne':
+        return { [field]: { not: text } };
+      case 'co':
+        return { [field]: { contains: text } };
+      case 'sw':
+        return { [field]: { startsWith: text } };
+      case 'ew':
+        return { [field]: { endsWith: text } };
+    }
   }
 
   // String attributes here are case-insensitive (RFC 7643 caseExact=false).
@@ -161,18 +253,25 @@ function toWhere(
   fields: Record<string, { field: string; kind: FieldKind }>,
   resource: string,
 ): Record<string, unknown> {
-  const parsed = parseScimFilter(filter);
-  const key = parsed.attribute
-    .replace(/^urn:ietf:params:scim:schemas:core:2\.0:(User|Group):/i, '')
-    .toLowerCase();
-  const spec = Object.hasOwn(fields, key) ? fields[key] : undefined;
-  if (!spec) {
-    throw invalidFilter(
-      `Filtering ${resource} on "${parsed.attribute}" is not supported`,
-    );
-  }
-  // realmId last, so no filter can widen the query to another realm.
-  return { ...fieldCondition(parsed, spec), realmId };
+  const condition = (parsed: FilterParseResult) => {
+    const key = parsed.attribute
+      .replace(/^urn:ietf:params:scim:schemas:core:2\.0:(User|Group):/i, '')
+      .toLowerCase();
+    const spec = Object.hasOwn(fields, key) ? fields[key] : undefined;
+    if (!spec) {
+      throw invalidFilter(
+        `Filtering ${resource} on "${parsed.attribute}" is not supported`,
+      );
+    }
+    return fieldCondition(parsed, spec);
+  };
+  const groups = parseScimFilterExpression(filter).map((all) =>
+    all.length === 1 ? condition(all[0]) : { AND: all.map(condition) },
+  );
+  const where = groups.length === 1 ? groups[0] : { OR: groups };
+  // realmId last, so no filter can widen the query to another realm: it
+  // is ANDed with the whole expression.
+  return { ...where, realmId };
 }
 
 /**

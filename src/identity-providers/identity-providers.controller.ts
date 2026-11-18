@@ -23,6 +23,7 @@ import { CurrentRealm } from '../common/decorators/current-realm.decorator.js';
 import { IdentityProvidersService } from './identity-providers.service.js';
 import { CreateIdentityProviderDto } from './dto/create-identity-provider.dto.js';
 import { UpdateIdentityProviderDto } from './dto/update-identity-provider.dto.js';
+import { ReadSamlMetadataDto } from './dto/read-saml-metadata.dto.js';
 import { idpSecrets } from './idp-secrets.js';
 
 @ApiTags('Identity Providers')
@@ -41,7 +42,23 @@ export class IdentityProvidersController {
     @CurrentRealm() realm: Realm,
     @Body() dto: CreateIdentityProviderDto,
   ) {
-    return idpSecrets.redact(await this.idpService.create(realm, dto));
+    return this.idpService.withSpEndpoints(
+      realm,
+      idpSecrets.redact(await this.idpService.create(realm, dto)),
+    );
+  }
+
+  @Post('saml-metadata')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary:
+      'Read SAML IdP metadata (pasted or from a URL) into samlConfig fields; stores nothing',
+  })
+  @ApiResponse({ status: 200, description: 'The fields the metadata fills' })
+  @ApiResponse({ status: 400, description: 'Unusable metadata or URL' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  readSamlMetadata(@Body() dto: ReadSamlMetadataDto) {
+    return this.idpService.readSamlMetadata(dto);
   }
 
   @Get()
@@ -61,7 +78,10 @@ export class IdentityProvidersController {
     @CurrentRealm() realm: Realm,
     @Param('alias') alias: string,
   ) {
-    return idpSecrets.redact(await this.idpService.findByAlias(realm, alias));
+    return this.idpService.withSpEndpoints(
+      realm,
+      idpSecrets.redact(await this.idpService.findByAlias(realm, alias)),
+    );
   }
 
   @Put(':alias')
@@ -74,7 +94,10 @@ export class IdentityProvidersController {
     @Param('alias') alias: string,
     @Body() dto: UpdateIdentityProviderDto,
   ) {
-    return idpSecrets.redact(await this.idpService.update(realm, alias, dto));
+    return this.idpService.withSpEndpoints(
+      realm,
+      idpSecrets.redact(await this.idpService.update(realm, alias, dto)),
+    );
   }
 
   @Delete(':alias')

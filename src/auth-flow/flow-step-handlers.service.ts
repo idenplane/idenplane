@@ -16,7 +16,11 @@ import {
   MagicLinkService,
   type FlowMagicLink,
 } from '../magic-link/magic-link.service.js';
-import { BrokerService } from '../broker/broker.service.js';
+import {
+  BrokerService,
+  FederatedLinkConflictException,
+  type ExternalIdentity,
+} from '../broker/broker.service.js';
 import { STEP_AMR, type StepOutcome } from '../authn-core/flow-contracts.js';
 import type { RuntimeStep } from './flow-graph.js';
 import { EmailOtpService } from './email-otp.service.js';
@@ -55,6 +59,12 @@ export interface SocialStepInput {
   alias: string;
   /** The provider's authorization code; absent when it refused or failed. */
   code?: string;
+  /**
+   * A SAML provider's answer: the identity its ACS already verified
+   * (signature, audience, InResponseTo, replay; see SamlBrokerService).
+   * Absent with no code: the provider refused or the user cancelled.
+   */
+  verified?: ExternalIdentity;
   /** The `flow` part of the signed broker state. */
   flow: { txn: string; step: string; nonce: string };
 }
@@ -271,20 +281,25 @@ export class FlowStepHandlers {
     if (typeof alias !== 'string' || alias !== input.alias) {
       return { kind: 'failed', message: 'Sign-in with this provider failed.' };
     }
-    if (!input.code) {
+    if (input.verified && input.verified.idp.alias !== alias) {
+      return { kind: 'failed', message: 'Sign-in with this provider failed.' };
+    }
+    if (!input.code && !input.verified) {
       // Cancelled or refused at the provider: the fallback may run.
       return {
         kind: 'failed',
         message: 'Sign-in with the identity provider was cancelled.',
       };
     }
-    let identity;
+    let identity: ExternalIdentity;
     try {
-      identity = await this.broker.fetchExternalIdentity(
-        realm,
-        alias,
-        input.code,
-      );
+      identity =
+        input.verified ??
+        (await this.broker.fetchExternalIdentity(
+          realm,
+          alias,
+          input.code as string,
+        ));
     } catch (err) {
       if (
         err instanceof UnauthorizedException ||
@@ -300,7 +315,15 @@ export class FlowStepHandlers {
     }
 
     if (pinned) {
-      const owner = await this.broker.belongsToUser(identity, pinned);
+      let owner: Awaited<ReturnType<BrokerService['belongsToUser']>>;
+      try {
+        owner = await this.broker.belongsToUser(identity, pinned);
+      } catch (err) {
+        if (err instanceof FederatedLinkConflictException) {
+          return { kind: 'failed', message: err.message };
+        }
+        throw err;
+      }
       if (owner === 'other_user') return { kind: 'user_mismatch' };
       if (owner === 'not_linked') {
         return {
@@ -321,8 +344,12 @@ export class FlowStepHandlers {
     try {
       user = await this.broker.resolveFederatedUser(realm, identity);
     } catch (err) {
-      if (err instanceof UnauthorizedException) {
-        // A link-only provider with no matching account.
+      if (
+        err instanceof UnauthorizedException ||
+        err instanceof FederatedLinkConflictException
+      ) {
+        // A link-only provider with no matching account, or an account
+        // already linked to this provider through another external one.
         return { kind: 'failed', message: err.message };
       }
       throw err;

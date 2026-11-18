@@ -1,5 +1,9 @@
 import apiClient from './client';
-import type { IdentityProvider } from '../types';
+import type {
+  IdentityProvider,
+  SamlIdpConfig,
+  SamlMetadataFields,
+} from '../types';
 
 export async function getIdentityProviders(
   realmName: string,
@@ -25,10 +29,11 @@ export interface CreateIdpPayload {
   displayName?: string;
   enabled?: boolean;
   providerType?: string;
-  clientId: string;
-  clientSecret: string;
-  authorizationUrl: string;
-  tokenUrl: string;
+  /** oidc/oauth2 only. */
+  clientId?: string;
+  clientSecret?: string;
+  authorizationUrl?: string;
+  tokenUrl?: string;
   userinfoUrl?: string;
   jwksUrl?: string;
   issuer?: string;
@@ -36,6 +41,8 @@ export interface CreateIdpPayload {
   trustEmail?: boolean;
   linkOnly?: boolean;
   syncUserProfile?: boolean;
+  /** saml only. */
+  samlConfig?: Partial<SamlIdpConfig>;
 }
 
 export async function createIdentityProvider(
@@ -68,4 +75,16 @@ export async function deleteIdentityProvider(
   await apiClient.delete(
     `/realms/${realmName}/identity-providers/${alias}`,
   );
+}
+
+/** Reads IdP metadata (pasted XML or a URL) into SAML settings; stores nothing. */
+export async function readSamlMetadata(
+  realmName: string,
+  source: { xml: string } | { url: string },
+): Promise<SamlMetadataFields> {
+  const { data } = await apiClient.post<SamlMetadataFields>(
+    `/realms/${realmName}/identity-providers/saml-metadata`,
+    source,
+  );
+  return data;
 }

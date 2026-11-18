@@ -158,7 +158,7 @@ The hosted-login SSO cookie lasts for the browser session, or 30 days with "reme
 `ssoSessionIdleTimeout` ends a session that is not used for that many seconds, before its maximum lifetime (`refreshTokenLifespan`):
 
 - **Browser SSO session** (the `IDENPLANE_SESSION` cookie). Using it means an authorization request that reads the cookie (sign-in to an app, silent SSO, SAML), or a hosted page such as the account console. A session not used for longer than the timeout is refused and deleted; the user signs in again. Idle sessions are not listed or counted as active, and the hourly clean-up deletes them.
-- **OAuth session** (refresh tokens). Each normal refresh token is issued for at most the timeout, so a client that does not refresh within it has to sign the user in again. Every refresh issues a new token with a new window.
+- **OAuth session** (refresh tokens). Each normal refresh token is issued for at most the timeout, so a client that does not refresh within it has to sign the user in again. Every refresh issues a new token with a new window. Since 0.13.0 the hourly clean-up deletes a session whose refresh tokens have all expired this way (before, it stayed listed until its maximum lifetime) and sends the clients it was used with a [back-channel logout](../guides/authentication.mdx#back-channel-logout) token.
 - **Offline sessions** (`offline_access`) are not affected: they live for `offlineTokenLifespan`.
 
 **Default: off (`0`), for new and upgraded realms.** With the default `refreshTokenLifespan` of 30 minutes an idle timeout adds little; it matters once you raise the maximum lifetime, for example an 8 or 10 hour working-day session with a 30-minute idle timeout (`refreshTokenLifespan: 36000`, `ssoSessionIdleTimeout: 1800`, Keycloak's defaults). It is off by default so that upgrading never signs anyone out.
@@ -248,7 +248,7 @@ The password policy is a set of realm fields. Passwords are hashed with Argon2id
 | `passwordRequireLowercase` | boolean | `false` | At least one lowercase letter |
 | `passwordRequireDigits` | boolean | `false` | At least one digit |
 | `passwordRequireSpecialChars` | boolean | `false` | At least one special character |
-| `passwordHistoryCount` | integer | `0` | Previous passwords that cannot be reused |
+| `passwordHistoryCount` | integer | `0` | Recent passwords that cannot be reused; the current one always counts, an imported one included |
 | `passwordMaxAgeDays` | integer | `0` | Days until a password expires; `0` never |
 
 ```bash

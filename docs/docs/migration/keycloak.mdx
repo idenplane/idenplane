@@ -21,7 +21,7 @@ Before starting the migration:
 - Sufficient database storage for migrated data
 
 :::note Large Export Files
-The server accepts JSON request bodies up to 100 KB, so most exports with users must be split into batches. See [Handling Large Exports](#handling-large-exports) for details.
+The import endpoint accepts a JSON request body of up to 10 MB, so a very large export must be split into batches. See [Handling Large Exports](#handling-large-exports) for details.
 :::
 
 ---
@@ -90,7 +90,7 @@ curl -X POST "http://localhost:3000/admin/migration/keycloak" \
   -d @import.json
 ```
 
-The endpoint needs a global (super-admin) credential. The server accepts JSON request bodies up to 100 KB, so a large export has to be split, for example into several files that each carry the realm settings and a slice of `users`.
+The endpoint needs a global (super-admin) credential. It accepts a JSON body of up to 10 MB (see [Request Size Limit](#request-size-limit)), so a larger export has to be split, for example into several files that each carry the realm settings and a slice of `users`.
 
 ### Specify Target Realm
 
@@ -173,6 +173,8 @@ A user is skipped when a user with the same username already exists in the targe
 ## Password Migration
 
 Users keep their Keycloak password: Idenplane imports the hash and checks it on sign-in, on the hosted login page and with the password grant alike. On the first successful sign-in the hash is replaced with an Argon2id hash, transparently; the user notices nothing.
+
+The imported password counts as used for the realm's password history (`passwordHistoryCount`): a user cannot "change" it to the same password, at the first change or the next ones (since 0.13.0).
 
 ### Supported Algorithms
 
@@ -326,7 +328,7 @@ Nested groups are preserved in the same structure:
 
 ### Batch Processing
 
-The server accepts JSON request bodies up to 100 KB; a larger request gets `413`. That is a few hundred users, depending on how much each one carries. For a larger export:
+The import endpoint accepts a JSON body of up to 10 MB; a larger request gets `413`, and a very large one may also hit a gateway timeout. For an export above that, or with more than about 5,000 users:
 
 1. Split the export into several files, each with the realm settings and a slice of `users`
 2. Import each batch separately
@@ -338,9 +340,9 @@ The server accepts JSON request bodies up to 100 KB; a larger request gets `413`
 # Get total user count
 USER_COUNT=$(jq '.users | length' export.json)
 
-# Batches of 200 users, each a complete export with a slice of users
-jq '.users |= .[0:200]'   export.json > batch1.json
-jq '.users |= .[200:400]' export.json > batch2.json
+# Batches of 5,000 users, each a complete export with a slice of users
+jq '.users |= .[0:5000]'     export.json > batch1.json
+jq '.users |= .[5000:10000]' export.json > batch2.json
 ```
 
 ### Sequential Import
@@ -376,9 +378,9 @@ curl -X GET "http://localhost:3000/admin/realms/my-realm/users?limit=1" \
 
 ### 2. Test Authentication
 
-Sign in through the browser login (`/realms/{realm}/protocol/openid-connect/auth`) with a client you created, using a few migrated users. The browser login is what verifies an imported hash and rehashes it; the password grant only checks Argon2id hashes, so a migrated user fails it until after a first browser sign-in.
+Sign in through the browser login (`/realms/{realm}/protocol/openid-connect/auth`) with a client you created, using a few migrated users. The password grant checks imported hashes the same way as the login page, and either one moves the hash to Argon2id on the first successful sign-in.
 
-If the realm has a client that allows the password grant, you can also script the check for users who have already signed in once:
+If the realm has a client that allows the password grant, you can also script the check:
 
 ```typescript
 async function testMigration(realm: string, testUsers: string[]) {
@@ -423,10 +425,29 @@ Update applications to use Idenplane endpoints:
 
 The importer creates an identity provider for each entry in `identityProviders` that the broker can use, with the client ID, secret, endpoints (`authorizationUrl`, `tokenUrl`, `userInfoUrl`, `jwksUrl`, `issuer`), default scope, `trustEmail` and `enabled` flag from the export. Every other entry is skipped, counted in `summary.identityProviders.skipped`, and named in `warnings` with the reason:
 
-- Idenplane brokers OpenID Connect and OAuth 2.0 providers only. A Keycloak **SAML** identity provider is not imported. Connect that IdP over OIDC if it supports it.
+- A Keycloak **SAML** identity provider (`providerId: saml`) is imported as a `saml` provider, with:
+
+  | Keycloak (`config`) | Idenplane (`samlConfig`) |
+  |---|---|
+  | `idpEntityId` | `entityId` (Keycloak's `entityId` is its own SP entity ID and is not used) |
+  | `singleSignOnServiceUrl` | `ssoUrl` |
+  | `postBindingAuthnRequest` | `ssoBinding` (`post` when `true`, else `redirect`) |
+  | `signingCertificate` (comma-separated) | `signingCertificates` |
+  | `nameIDPolicyFormat` | `nameIdFormat` |
+  | `wantAuthnRequestsSigned` | `signAuthnRequests` |
+  | `wantAssertionsSigned` | `wantAssertionsSigned` |
+  | `singleLogoutServiceUrl` | `sloUrl` (stored only) |
+  | `allowedClockSkew` | `clockSkewSeconds` (at most 600) |
+  | `principalType: ATTRIBUTE` + `principalAttribute` | `subjectAttribute` |
+  | `identityProviderMappers` of type `saml-user-attribute-idp-mapper` (`attribute.name` → `user.attribute` `email`, `firstName`, `lastName`) | `attributes` |
+
+  Idenplane matches SAML attributes by `Name`. A provider with `principalType: FRIENDLY_ATTRIBUTE` (users identified by an attribute's FriendlyName), or `ATTRIBUTE` without `principalAttribute`, is **skipped** with a warning rather than imported with the NameID, which would link users to different identities; add it in the console with that attribute's Name as the subject attribute. A mapper that only has `attribute.friendly.name` is not carried over (warning): the usual attribute names are tried for that field. Mappers to other user attributes are not imported.
+
+  Idenplane always verifies signatures, whatever `validateSignature` says, so a provider without a usable signing certificate (or without `idpEntityId` or an SSO URL) is **skipped**, with every missing or unusable setting named in the warning; add it from the IdP's metadata in the admin console instead. An imported SAML provider gets a warning too: Idenplane has a **new SP entity ID and ACS URL**, so register its SP metadata (`/realms/{realm}/broker/{alias}/saml/metadata`) at the IdP before users sign in. Keycloak providers that expected encrypted assertions get a warning: Idenplane does not decrypt them. See [Sign in with a SAML identity provider](/guides/saml-identity-providers).
 - `oidc` and `keycloak-oidc` providers are imported as `oidc`. `google` and `microsoft` (as `oidc`) and `github` (as `oauth2`) get those services' endpoints filled in, since the export has none. Other social providers (`gitlab`, `facebook`, `linkedin-openid-connect`, …) are skipped; add them by hand as `oauth2` or `oidc` providers.
 - An `oidc` provider without a client ID or an `http(s)` authorization or token URL is skipped.
 - Keycloak exports secrets as `**********` unless told otherwise. A provider without a real secret is imported **disabled**, with a warning; set the secret and enable it.
+- Imports made before 0.12.0 stored SAML and other providers too. `GET /admin/upgrade/health` lists them in the `identity_provider_types` warning (see [Providers stored before 0.12.0](/guides/authentication#providers-stored-before-0120)).
 
 See [Identity Providers](/guides/authentication#identity-providers) for the supported types and how to configure one.
 
@@ -499,13 +520,13 @@ Import realm from Keycloak export.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `data` | object | Yes | Keycloak realm export JSON (body limit 100 KB) |
+| `data` | object | Yes | Keycloak realm export JSON (body limit 10 MB) |
 | `dryRun` | boolean | No | Test migration without changes (default: false) |
 | `targetRealm` | string | No | Override target realm name |
 
-**Response:** `200` with the migration report above. `400` for a missing or non-object `data`, `401` without credentials, `403` for an admin without global scope, `413` for a body over 100 KB.
+**Response:** `200` with the migration report above. `400` for a missing or non-object `data`, `401` without credentials, `403` for an admin without global scope, `413` for a body over 10 MB.
 
-The same endpoint family also imports Auth0 (`/admin/migration/auth0`, see [Migrating from Auth0](./auth0.mdx)), Zitadel (`/admin/migration/zitadel`) and Authentik (`/admin/migration/authentik`).
+The same endpoint family also imports Auth0 (`/admin/migration/auth0`, see [Migrating from Auth0](./auth0.mdx)), Zitadel (`/admin/migration/zitadel`) and Authentik (`/admin/migration/authentik`, see [Migrating from Authentik](./authentik.mdx)).
 
 ---
 

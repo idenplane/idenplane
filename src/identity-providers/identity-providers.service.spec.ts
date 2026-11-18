@@ -1,6 +1,14 @@
 jest.mock('../crypto/jwk.service.js', () => ({ JwkService: jest.fn() }));
 
-import { ConflictException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
+import { validate } from 'class-validator';
+import { plainToInstance } from 'class-transformer';
+import { CreateIdentityProviderDto } from './dto/create-identity-provider.dto.js';
+import { makeFakeIdp } from '../broker/saml/__mocks__/fake-saml-idp.js';
 import { IdentityProvidersService } from './identity-providers.service.js';
 import {
   createMockPrismaService,
@@ -298,6 +306,187 @@ describe('IdentityProvidersService', () => {
       );
 
       expect(prisma.identityProvider.delete).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('SAML identity providers', () => {
+    let cert: string;
+    beforeAll(async () => {
+      cert = (await makeFakeIdp()).certificatePem;
+    });
+    const samlConfig = () => ({
+      entityId: 'https://idp.example.com/saml',
+      ssoUrl: 'https://idp.example.com/sso',
+      signingCertificates: [cert],
+    });
+
+    it('creates a SAML provider: normalized config, OAuth columns empty', async () => {
+      prisma.identityProvider.findUnique.mockResolvedValue(null);
+      prisma.identityProvider.create.mockResolvedValue(mockIdp);
+      await service.create(mockRealm, {
+        alias: 'okta',
+        providerType: 'SAML',
+        samlConfig: samlConfig(),
+      } as any);
+      const data = (
+        prisma.identityProvider.create.mock.calls[0][0] as {
+          data: Record<string, any>;
+        }
+      ).data;
+      expect(data).toMatchObject({
+        providerType: 'saml',
+        clientId: '',
+        authorizationUrl: '',
+        tokenUrl: '',
+        defaultScopes: '',
+      });
+      expect(data['samlConfig']).toMatchObject({
+        entityId: 'https://idp.example.com/saml',
+        wantAssertionsSigned: true,
+        allowSha1: false,
+      });
+    });
+
+    it('refuses a SAML provider with an unusable config', async () => {
+      prisma.identityProvider.findUnique.mockResolvedValue(null);
+      await expect(
+        service.create(mockRealm, {
+          alias: 'okta',
+          providerType: 'saml',
+          samlConfig: { ssoUrl: 'http://idp.example.com/sso' },
+        } as any),
+      ).rejects.toThrow(BadRequestException);
+      expect(prisma.identityProvider.create).not.toHaveBeenCalled();
+    });
+
+    it('refuses samlConfig on an OIDC provider', async () => {
+      prisma.identityProvider.findUnique.mockResolvedValue(null);
+      await expect(
+        service.create(mockRealm, { ...createDto, samlConfig: samlConfig() }),
+      ).rejects.toThrow(/applies to providerType 'saml' only/);
+    });
+
+    it('switching an OIDC provider to SAML needs a full config', async () => {
+      prisma.identityProvider.findUnique.mockResolvedValue(mockIdp);
+      await expect(
+        service.update(mockRealm, 'google', { providerType: 'saml' }),
+      ).rejects.toThrow(BadRequestException);
+      prisma.identityProvider.update.mockResolvedValue(mockIdp);
+      await service.update(mockRealm, 'google', {
+        providerType: 'saml',
+        samlConfig: samlConfig(),
+      });
+      expect(
+        (prisma.identityProvider.update.mock.calls[0][0] as any).data,
+      ).toMatchObject({ providerType: 'saml', clientId: '', tokenUrl: '' });
+    });
+
+    it('an update of a SAML provider keeps its config unless a new one is sent', async () => {
+      prisma.identityProvider.findUnique.mockResolvedValue({
+        ...mockIdp,
+        providerType: 'saml',
+        samlConfig: samlConfig(),
+      });
+      prisma.identityProvider.update.mockResolvedValue(mockIdp);
+      await service.update(mockRealm, 'okta', { enabled: false });
+      const data = (prisma.identityProvider.update.mock.calls[0][0] as any)
+        .data;
+      expect(data.enabled).toBe(false);
+      expect(data.samlConfig).toBeUndefined();
+    });
+
+    it('switching a SAML provider to OIDC needs its endpoints', async () => {
+      prisma.identityProvider.findUnique.mockResolvedValue({
+        ...mockIdp,
+        providerType: 'saml',
+      });
+      await expect(
+        service.update(mockRealm, 'okta', { providerType: 'oidc' }),
+      ).rejects.toThrow(/required to change a SAML identity provider/);
+      // The console sends the hidden-secret placeholder back: still no secret.
+      await expect(
+        service.update(mockRealm, 'okta', {
+          providerType: 'oidc',
+          clientId: 'c',
+          clientSecret: SECRET_PLACEHOLDER,
+          authorizationUrl: 'https://idp/auth',
+          tokenUrl: 'https://idp/token',
+        }),
+      ).rejects.toThrow(/clientSecret required/);
+    });
+
+    it('adds the SP endpoints to a SAML provider', () => {
+      process.env['BASE_URL'] = 'https://iam.example.com';
+      expect(
+        service.withSpEndpoints(mockRealm, {
+          alias: 'okta',
+          providerType: 'saml',
+        }).samlSp,
+      ).toEqual({
+        entityId:
+          'https://iam.example.com/realms/test-realm/broker/okta/saml/metadata',
+        acsUrl:
+          'https://iam.example.com/realms/test-realm/broker/okta/saml/acs',
+        metadataUrl:
+          'https://iam.example.com/realms/test-realm/broker/okta/saml/metadata',
+      });
+      delete process.env['BASE_URL'];
+    });
+
+    it('reads pasted metadata, and refuses a private or non-https metadata URL', async () => {
+      const fields = await service.readSamlMetadata({
+        xml: '<EntityDescriptor xmlns="urn:oasis:names:tc:SAML:2.0:metadata" entityID="https://idp"><IDPSSODescriptor protocolSupportEnumeration="urn:oasis:names:tc:SAML:2.0:protocol"><SingleSignOnService Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST" Location="https://idp/sso"/></IDPSSODescriptor></EntityDescriptor>',
+      });
+      expect(fields).toMatchObject({
+        entityId: 'https://idp',
+        ssoUrl: 'https://idp/sso',
+        ssoBinding: 'post',
+      });
+      await expect(
+        service.readSamlMetadata({ url: 'https://127.0.0.1/metadata' }),
+      ).rejects.toThrow(/not allowed/);
+      await expect(
+        service.readSamlMetadata({ url: 'http://idp.example.com/metadata' }),
+      ).rejects.toThrow(/https/);
+    });
+  });
+
+  describe('CreateIdentityProviderDto', () => {
+    const errors = async (body: Record<string, unknown>) =>
+      (await validate(plainToInstance(CreateIdentityProviderDto, body))).map(
+        (e) => e.property,
+      );
+
+    it('needs the OAuth fields for oidc only', async () => {
+      expect(await errors({ alias: 'g', providerType: 'oidc' })).toEqual(
+        expect.arrayContaining([
+          'clientId',
+          'clientSecret',
+          'authorizationUrl',
+          'tokenUrl',
+        ]),
+      );
+      const cert = (await makeFakeIdp()).certificatePem;
+      expect(
+        await errors({
+          alias: 'okta',
+          providerType: 'saml',
+          samlConfig: {
+            entityId: 'https://idp',
+            ssoUrl: 'https://idp/sso',
+            signingCertificates: [cert],
+          },
+        }),
+      ).toEqual([]);
+    });
+
+    it('validates samlConfig with the shared validator', async () => {
+      expect(
+        await errors({ alias: 'okta', providerType: 'saml', samlConfig: {} }),
+      ).toEqual(['samlConfig']);
+      expect(await errors({ alias: 'okta', providerType: 'saml' })).toEqual([
+        'samlConfig',
+      ]);
     });
   });
 });

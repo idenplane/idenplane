@@ -83,7 +83,7 @@ What you see and can change depends on your admin role — see [Admin Roles](/ge
 
 | Section | What you manage |
 |---|---|
-| **Identity Providers** | OpenID Connect and OAuth 2.0 providers for social and enterprise login (SAML identity providers cannot be brokered) |
+| **Identity Providers** | OpenID Connect, OAuth 2.0 and SAML 2.0 providers for social and enterprise login |
 | **User Federation** | External user stores |
 
 ### Sign-in behaviour

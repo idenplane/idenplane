@@ -7,6 +7,12 @@ import {
   type SeededRealm,
   type TestContext,
 } from './setup';
+import { Browser, csrfFrom, useThemeViews } from './helpers/browser';
+import { VerificationService } from '../src/verification/verification.service.js';
+import {
+  legacyKeycloakRow,
+  pbkdf2Hash,
+} from '../src/crypto/__mocks__/password-hash-fixtures.js';
 
 describe('Password Policy (e2e)', () => {
   let app: INestApplication<App>;
@@ -47,6 +53,7 @@ describe('Password Policy (e2e)', () => {
   beforeAll(async () => {
     ctx = await createTestApp();
     app = ctx.app;
+    useThemeViews(app);
     seeded = await ctx.seedTestRealm(REALM_NAME);
   }, 30_000);
 
@@ -96,7 +103,9 @@ describe('Password Policy (e2e)', () => {
       expect(res.body).toHaveProperty('id');
 
       // Cleanup
-      await ctx.prisma.user.delete({ where: { id: res.body.id } }).catch(() => {});
+      await ctx.prisma.user
+        .delete({ where: { id: res.body.id } })
+        .catch(() => {});
     });
 
     it('should reject a password of exactly min-1 characters', async () => {
@@ -110,7 +119,9 @@ describe('Password Policy (e2e)', () => {
       const res = await createUser('policy-user-12', 'Twelvechar12');
       expect(res.status).toBe(201);
 
-      await ctx.prisma.user.delete({ where: { id: res.body.id } }).catch(() => {});
+      await ctx.prisma.user
+        .delete({ where: { id: res.body.id } })
+        .catch(() => {});
     });
   });
 
@@ -166,7 +177,9 @@ describe('Password Policy (e2e)', () => {
 
     afterAll(async () => {
       if (policyUserId) {
-        await ctx.prisma.user.delete({ where: { id: policyUserId } }).catch(() => {});
+        await ctx.prisma.user
+          .delete({ where: { id: policyUserId } })
+          .catch(() => {});
       }
     });
   });
@@ -197,7 +210,9 @@ describe('Password Policy (e2e)', () => {
 
     afterAll(async () => {
       if (historyUserId) {
-        await ctx.prisma.user.delete({ where: { id: historyUserId } }).catch(() => {});
+        await ctx.prisma.user
+          .delete({ where: { id: historyUserId } })
+          .catch(() => {});
       }
     });
 
@@ -230,6 +245,126 @@ describe('Password Policy (e2e)', () => {
     });
   });
 
+  // ─── 3b. AN IMPORTED PASSWORD IS HISTORY TOO ──────────────────────────
+  //
+  // A user imported from another IdP keeps the imported hash, which was
+  // never written to the history. It must count as used: at the first
+  // change (as the current password) and at the next ones (recorded when
+  // it is replaced). The unlabelled legacy PBKDF2 row (imported before
+  // 0.11.0) can only be checked with the user's passwordAlgorithm.
+
+  describe('Password history — an imported password counts', () => {
+    const imported = 'ImportedPass1!';
+    const other = 'OtherPass2@';
+    const userIds: string[] = [];
+
+    // The real formats, from the fixtures the unit tests verify:
+    // Keycloak PBKDF2-SHA512 as the pre-0.11.0 importer stored it
+    // (`iterations$salt$hash`, no algorithm in it), and the self-describing
+    // `$pbkdf2-sha256$…` the importers write since 0.11.0.
+    const legacyRow = (password: string) => legacyKeycloakRow(password);
+    const labelled = (password: string) => pbkdf2Hash('sha256', password);
+
+    beforeAll(async () => {
+      await resetPolicy();
+      await ctx.prisma.realm.update({
+        where: { name: REALM_NAME },
+        data: { passwordMinLength: 8, passwordHistoryCount: 3 },
+      });
+    });
+
+    afterAll(async () => {
+      await ctx.prisma.user
+        .deleteMany({ where: { id: { in: userIds } } })
+        .catch(() => {});
+    });
+
+    it.each([
+      ['an unlabelled legacy PBKDF2 row', legacyRow, 'pbkdf2-sha256'],
+      ['a self-describing PBKDF2 hash', labelled, 'pbkdf2-sha256'],
+    ])(
+      '%s: refused as the new password, now and after one change',
+      async (_label, hashOf, passwordAlgorithm) => {
+        const n = userIds.length;
+        const user = await ctx.prisma.user.create({
+          data: {
+            realmId: seeded.realm.id,
+            username: `imported-${n}`,
+            email: `imported-${n}@example.com`,
+            passwordHash: hashOf(imported),
+            passwordAlgorithm,
+          },
+        });
+        userIds.push(user.id);
+        expect(
+          await ctx.prisma.passwordHistory.count({
+            where: { userId: user.id },
+          }),
+        ).toBe(0);
+
+        // The first change: the imported (current) password is refused.
+        const same = await resetPassword(user.id, imported);
+        expect([400, 422]).toContain(same.status);
+
+        // A different one is accepted, and the imported hash is kept in
+        // the history with its algorithm.
+        expect((await resetPassword(user.id, other)).status).toBe(204);
+        const rows = await ctx.prisma.passwordHistory.findMany({
+          where: { userId: user.id },
+          orderBy: { createdAt: 'desc' },
+        });
+        expect(rows).toHaveLength(2);
+        expect(rows[1]).toMatchObject({ passwordAlgorithm });
+
+        // Changing back to the imported password is still refused.
+        const back = await resetPassword(user.id, imported);
+        expect([400, 422]).toContain(back.status);
+      },
+    );
+
+    it('a reset by email refuses the imported password and keeps the link usable', async () => {
+      const user = await ctx.prisma.user.create({
+        data: {
+          realmId: seeded.realm.id,
+          username: 'imported-reset',
+          email: 'imported-reset@example.com',
+          passwordHash: legacyRow(imported),
+          passwordAlgorithm: 'pbkdf2-sha256',
+        },
+      });
+      userIds.push(user.id);
+      const token = await app
+        .get(VerificationService)
+        .createToken(user.id, 'password_reset', 3600);
+      const browser = new Browser(app);
+      const submit = async (password: string) => {
+        const form = await browser.get(
+          `/realms/${REALM_NAME}/reset-password?token=${token}`,
+        );
+        expect(form.status).toBe(200);
+        return browser.post(`/realms/${REALM_NAME}/reset-password`, {
+          token,
+          password,
+          confirmPassword: password,
+          _csrf: csrfFrom(form.text),
+        });
+      };
+
+      const refused = await submit(imported);
+      expect(refused.status).toBe(302);
+      expect(refused.headers['location']).toContain('/reset-password?token=');
+      expect(
+        decodeURIComponent(refused.headers['location'] as string),
+      ).toContain('used recently');
+      // The link was not used up: the user picks another password with it.
+      const accepted = await submit(other);
+      expect(accepted.headers['location']).toContain('/login?info=');
+      expect(
+        await ctx.prisma.passwordHistory.count({ where: { userId: user.id } }),
+      ).toBe(2);
+    });
+  });
+
   // ─── 4. PASSWORD POLICY — NO RESTRICTIONS ────────────────────────────
 
   describe('When no password policy is enforced', () => {
@@ -248,7 +383,9 @@ describe('Password Policy (e2e)', () => {
       const res = await createUser('policy-simple-user', 'simple12');
       expect(res.status).toBe(201);
 
-      await ctx.prisma.user.delete({ where: { id: res.body.id } }).catch(() => {});
+      await ctx.prisma.user
+        .delete({ where: { id: res.body.id } })
+        .catch(() => {});
     });
   });
 });

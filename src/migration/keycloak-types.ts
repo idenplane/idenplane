@@ -88,6 +88,15 @@ export interface KeycloakIdentityProvider {
   displayName?: string;
 }
 
+/** A Keycloak identity provider mapper (`identityProviderMappers[]`). */
+export interface KeycloakIdentityProviderMapper {
+  name?: string;
+  identityProviderAlias: string;
+  /** e.g. 'saml-user-attribute-idp-mapper' */
+  identityProviderMapper: string;
+  config?: Record<string, string>;
+}
+
 export interface KeycloakSmtpServer {
   host?: string;
   port?: string;
@@ -124,6 +133,7 @@ export interface KeycloakRealmExport {
   groups?: KeycloakGroup[];
   clientScopes?: KeycloakClientScope[];
   identityProviders?: KeycloakIdentityProvider[];
+  identityProviderMappers?: KeycloakIdentityProviderMapper[];
   defaultDefaultClientScopes?: string[];
   defaultOptionalClientScopes?: string[];
 }

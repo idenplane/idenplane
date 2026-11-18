@@ -51,13 +51,13 @@ export const ALLOWED_DIGEST_ALGORITHMS: ReadonlySet<string> = new Set([
 ]);
 
 /** Canonicalization algorithms accepted (none of the #WithComments forms). */
-const ALLOWED_C14N_ALGORITHMS: ReadonlySet<string> = new Set([
+export const ALLOWED_C14N_ALGORITHMS: ReadonlySet<string> = new Set([
   'http://www.w3.org/2001/10/xml-exc-c14n#',
   'http://www.w3.org/TR/2001/REC-xml-c14n-20010315',
 ]);
 
 /** Reference transforms accepted: enveloped-signature and canonicalization. */
-const ALLOWED_TRANSFORMS: ReadonlySet<string> = new Set([
+export const ALLOWED_TRANSFORMS: ReadonlySet<string> = new Set([
   'http://www.w3.org/2000/09/xmldsig#enveloped-signature',
   ...ALLOWED_C14N_ALGORITHMS,
 ]);
@@ -81,7 +81,7 @@ const AUTHN_REQUEST_CHILDREN: ReadonlyArray<readonly [string, string]> = [
 const ID_ATTRIBUTE_NAMES: ReadonlySet<string> = new Set(['ID', 'Id', 'id']);
 
 /** XML NCName (the type of a SAML ID), any Unicode letter allowed. */
-const NCNAME = /^[\p{L}_][\p{L}\p{N}\p{M}\p{Pc}.\-·]*$/u;
+export const NCNAME = /^[\p{L}_][\p{L}\p{N}\p{M}\p{Pc}.\-·]*$/u;
 
 const ELEMENT_NODE = 1;
 const TEXT_NODE = 3;
@@ -246,18 +246,18 @@ export function parseAuthnRequest(xml: string): ParsedSamlRequest {
 
 // ─── FIELD EXTRACTION ───────────────────────────────────
 
-function childElements(el: Element): Element[] {
+export function childElements(el: Element): Element[] {
   return Array.from(el.childNodes).filter(
     (n): n is Element => n.nodeType === ELEMENT_NODE,
   );
 }
 
-function is(el: Element, ns: string, localName: string): boolean {
+export function is(el: Element, ns: string, localName: string): boolean {
   return el.namespaceURI === ns && el.localName === localName;
 }
 
 /** The text of an element that may hold only text. */
-function textOf(el: Element, what: string): string {
+export function textOf(el: Element, what: string): string {
   for (const child of Array.from(el.childNodes)) {
     if (child.nodeType !== TEXT_NODE) {
       throw new SamlRequestError(`${what} must contain text only`);
@@ -266,7 +266,7 @@ function textOf(el: Element, what: string): string {
   return (el.textContent ?? '').trim();
 }
 
-function attr(el: Element, name: string): string | null {
+export function attr(el: Element, name: string): string | null {
   return el.hasAttribute(name) ? el.getAttribute(name) : null;
 }
 
@@ -515,7 +515,7 @@ function checkEnvelopedSignatureShape(root: Element): Element {
 }
 
 /** The entries of an algorithm registry that are on an allow-list. */
-function pick<K extends string, T>(
+export function pick<K extends string, T>(
   all: Record<K, T>,
   allowed: Iterable<string>,
 ): Record<K, T> {

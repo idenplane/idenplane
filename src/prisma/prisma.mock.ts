@@ -120,7 +120,9 @@ export function createMockPrismaService(): MockPrismaService {
     },
     passwordHistory: {
       findMany: jest.fn(),
+      findFirst: jest.fn(),
       create: jest.fn(),
+      createMany: jest.fn(),
       deleteMany: jest.fn(),
     },
     loginFailure: {
@@ -294,6 +296,17 @@ export function createMockPrismaService(): MockPrismaService {
       delete: jest.fn(),
     },
     samlRequestId: {
+      create: jest.fn(),
+      updateMany: jest.fn(),
+      deleteMany: jest.fn(),
+    },
+    samlBrokerRequest: {
+      create: jest.fn(),
+      findUnique: jest.fn(),
+      updateMany: jest.fn(),
+      deleteMany: jest.fn(),
+    },
+    samlBrokerAssertionId: {
       create: jest.fn(),
       updateMany: jest.fn(),
       deleteMany: jest.fn(),

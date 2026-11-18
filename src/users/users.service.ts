@@ -273,11 +273,20 @@ export class UsersService {
 
   async remove(realm: Realm, userId: string) {
     await this.findById(realm, userId);
+    // End the user's sessions first, rather than leaving them to the delete's
+    // cascade: that also tells the apps they were used with (back-channel
+    // logout) and ends a master realm user's admin console tokens.
+    await this.sessions.revokeAllUserSessions(realm, userId);
     await this.prisma.user.delete({ where: { id: userId } });
   }
 
   async setPassword(realm: Realm, userId: string, password: string) {
     await this.findById(realm, userId);
+    // The hash being replaced, for the password history.
+    const previous = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { passwordHash: true, passwordAlgorithm: true },
+    });
 
     // Validate against realm password policy
     const validation = this.passwordPolicyService.validate(realm, password);
@@ -314,12 +323,14 @@ export class UsersService {
     // Unlock brute-force locked account and clear failure records
     await this.bruteForceService.resetFailures(realm.id, userId);
 
-    // Record password history
+    // Record password history, with the replaced hash if it was not in it
+    // yet (an imported password, say).
     await this.passwordPolicyService.recordHistory(
       userId,
       realm.id,
       passwordHash,
       realm.passwordHistoryCount,
+      previous,
     );
   }
 

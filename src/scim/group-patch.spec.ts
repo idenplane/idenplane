@@ -72,9 +72,14 @@ describe('planGroupPatch', () => {
     });
   });
 
-  it('ignores externalId', () => {
+  it('sets and removes externalId', () => {
     expect(plan([{ op: 'replace', path: 'externalId', value: 'x' }])).toEqual({
       members: [],
+      externalId: 'x',
+    });
+    expect(plan([{ op: 'remove', path: 'externalId' }])).toEqual({
+      members: [],
+      externalId: null,
     });
   });
 

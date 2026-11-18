@@ -29,6 +29,8 @@ export type GroupMemberStep =
 
 export interface GroupPatchPlan {
   displayName?: string;
+  /** A new externalId; null removes it. */
+  externalId?: string | null;
   members: GroupMemberStep[];
 }
 
@@ -111,7 +113,13 @@ function applyPath(
       applyMembers(plan, op, path, value);
       return;
     case 'externalid':
-      // Not stored; accepted and ignored, as on create.
+      if (path.filter || path.subAttribute) {
+        throw scimBadRequest(
+          'invalidPath',
+          '"externalId" is a simple attribute',
+        );
+      }
+      plan.externalId = op === 'remove' ? null : externalIdValue(value);
       return;
     case 'id':
     case 'meta':
@@ -186,4 +194,16 @@ export function memberIds(value: unknown): string[] {
     }
     return id;
   });
+}
+
+/** An `externalId` value: a string, or null/empty to clear it. */
+export function externalIdValue(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value !== 'string') {
+    throw scimBadRequest('invalidValue', '"externalId" must be a string');
+  }
+  if (value.length > 2048) {
+    throw scimBadRequest('invalidValue', '"externalId" is too long');
+  }
+  return value.trim() === '' ? null : value;
 }

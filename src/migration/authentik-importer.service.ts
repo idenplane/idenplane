@@ -1,34 +1,70 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
+import type { CustomAttribute } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { CryptoService } from '../crypto/crypto.service.js';
-import type { AuthentikExport } from './authentik-types.js';
+import type {
+  AuthentikExport,
+  AuthentikGroup,
+  AuthentikOAuth2Provider,
+  AuthentikOAuthSource,
+  AuthentikUser,
+} from './authentik-types.js';
 import { createEmptyReport, type MigrationReport } from './migration-report.js';
 import { authentikPassword } from './password-import.js';
 import { idpSecrets } from '../identity-providers/idp-secrets.js';
-import { unsupportedIdpTypeReason } from '../identity-providers/idp-provider-types.js';
 import { idpCreateData, planIdpImport, reportIdpPlan } from './idp-import.js';
+import {
+  authentikNonPersonReason,
+  authentikRedirectUris,
+  authentikSourceAlias,
+  issuerFromWellKnownUrl,
+  normalizeEmail,
+  unwrapAuthentikExport,
+} from './authentik-export.js';
+import { attributeValueProblem } from '../custom-attributes/custom-attributes.service.js';
 
 export interface AuthentikImportOptions {
   dryRun: boolean;
   targetRealm: string;
+  /**
+   * Add the export's group memberships to users that already exist in the
+   * realm (matched by username). Off by default: a local account that only
+   * shares a username with an Authentik user would otherwise get that
+   * user's groups, and the roles of a same-named Idenplane group.
+   */
+  addMembershipsToExistingUsers?: boolean;
 }
 
 const OIDC_SOURCE_TYPES = new Set(['openidconnect', 'oidc']);
 
+interface GroupIndex {
+  /** Idenplane group id by Authentik group pk and by group name. */
+  byKey: Map<string, string>;
+}
+
+/** Group ids handed out in a dry run: distinct per group, never written. */
+const dryRunGroupId = (name: string) => `dry-run-group:${name}`;
+
+function hasEntries(value: unknown): boolean {
+  if (Array.isArray(value)) return value.length > 0;
+  return (
+    typeof value === 'object' && value !== null && Object.keys(value).length > 0
+  );
+}
+
 @Injectable()
 export class AuthentikImporterService {
-  private readonly logger = new Logger(AuthentikImporterService.name);
-
   constructor(
     private readonly prisma: PrismaService,
     private readonly crypto: CryptoService,
   ) {}
 
   async importData(
-    data: AuthentikExport,
+    input: AuthentikExport | Record<string, unknown>,
     options: AuthentikImportOptions,
   ): Promise<MigrationReport> {
     const report = createEmptyReport('authentik', options.dryRun);
+    const data = unwrapAuthentikExport(input as Record<string, unknown>);
 
     const realm = await this.prisma.realm.findUnique({
       where: { name: options.targetRealm },
@@ -43,52 +79,107 @@ export class AuthentikImporterService {
       return report;
     }
 
-    const groupIdsByName = await this.importGroups(
-      data,
+    const groups = await this.importGroups(
+      data.groups,
       realm.id,
       report,
       options.dryRun,
     );
-    await this.importClients(data, realm.id, report, options.dryRun);
+    await this.importClients(data.providers, realm.id, report, options.dryRun);
     await this.importUsers(
-      data,
+      data.users,
       realm.id,
-      groupIdsByName,
+      groups,
       report,
       options.dryRun,
+      options.addMembershipsToExistingUsers ?? false,
     );
-    await this.importSources(data, realm.id, report, options.dryRun);
+    await this.importSources(
+      data.sources,
+      realm.id,
+      report,
+      options.dryRun,
+      data.users.length > 0,
+    );
 
     report.completedAt = new Date();
     return report;
   }
 
+  // ─── Groups ────────────────────────────────────────────────────────────
+
+  /**
+   * Groups, parents before children. A group whose name already exists in
+   * the realm is reused as is (its parent is not changed). A parent that
+   * is not in the export leaves the group at the top level, with a warning.
+   */
   private async importGroups(
-    data: AuthentikExport,
+    groups: AuthentikGroup[],
     realmId: string,
     report: MigrationReport,
     dryRun: boolean,
-  ): Promise<Map<string, string>> {
-    const idsByName = new Map<string, string>();
-    for (const group of data.groups ?? []) {
+  ): Promise<GroupIndex> {
+    const index: GroupIndex = { byKey: new Map() };
+    const byPk = new Map<string, AuthentikGroup>();
+    for (const g of groups) {
+      if (g.pk !== undefined && g.pk !== null) byPk.set(String(g.pk), g);
+    }
+
+    for (const group of this.parentsFirst(groups, byPk)) {
+      if (typeof group.name !== 'string' || !group.name) {
+        report.summary.groups.failed++;
+        report.errors.push({
+          entity: 'group',
+          name: String(group.pk ?? 'unknown'),
+          error: 'Group has no name',
+        });
+        continue;
+      }
+      this.warnGroupExtras(group, report);
       try {
         const existing = await this.prisma.group.findFirst({
-          where: { realmId, name: group.name, parentId: null },
+          where: { realmId, name: group.name },
         });
+        let id: string;
         if (existing) {
           report.summary.groups.skipped++;
-          idsByName.set(group.name, existing.id);
-          continue;
-        }
-        if (dryRun) {
-          idsByName.set(group.name, 'dry-run-group-id');
+          id = existing.id;
         } else {
-          const created = await this.prisma.group.create({
-            data: { realmId, name: group.name },
-          });
-          idsByName.set(group.name, created.id);
+          const parentPk =
+            group.parent !== undefined && group.parent !== null
+              ? String(group.parent)
+              : null;
+          let parentId: string | null = null;
+          if (parentPk !== null) {
+            const parent = byPk.get(parentPk);
+            parentId = parent
+              ? (index.byKey.get(`pk:${parentPk}`) ?? null)
+              : null;
+            if (!parentId) {
+              report.warnings.push({
+                entity: 'group',
+                message: `Group '${group.name}': its parent group ${parent ? `'${parent.name}' failed to import` : `(pk ${parentPk}) is not in the export`}, so it was imported as a top-level group.`,
+              });
+            }
+          }
+          if (dryRun) {
+            id = dryRunGroupId(group.name);
+          } else {
+            const created = await this.prisma.group.create({
+              data: {
+                realmId,
+                name: group.name,
+                ...(parentId ? { parentId } : {}),
+              },
+            });
+            id = created.id;
+          }
+          report.summary.groups.created++;
         }
-        report.summary.groups.created++;
+        index.byKey.set(`name:${group.name}`, id);
+        if (group.pk !== undefined && group.pk !== null) {
+          index.byKey.set(`pk:${String(group.pk)}`, id);
+        }
       } catch (error: unknown) {
         report.summary.groups.failed++;
         report.errors.push({
@@ -98,17 +189,72 @@ export class AuthentikImporterService {
         });
       }
     }
-    return idsByName;
+    return index;
   }
 
+  /** Depth-first order so every parent comes before its children; cycles are broken. */
+  private parentsFirst(
+    groups: AuthentikGroup[],
+    byPk: Map<string, AuthentikGroup>,
+  ): AuthentikGroup[] {
+    const ordered: AuthentikGroup[] = [];
+    const state = new Map<AuthentikGroup, 'visiting' | 'done'>();
+    const visit = (g: AuthentikGroup) => {
+      if (state.get(g)) return;
+      state.set(g, 'visiting');
+      const parent =
+        g.parent !== undefined && g.parent !== null
+          ? byPk.get(String(g.parent))
+          : undefined;
+      if (parent && parent !== g) visit(parent);
+      state.set(g, 'done');
+      ordered.push(g);
+    };
+    groups.forEach(visit);
+    return ordered;
+  }
+
+  private warnGroupExtras(group: AuthentikGroup, report: MigrationReport) {
+    const dropped: string[] = [];
+    if (group.is_superuser === true) {
+      dropped.push(
+        'is_superuser (Authentik admin rights; grant Idenplane admin access separately)',
+      );
+    }
+    if (hasEntries(group.roles)) {
+      dropped.push(
+        `${(group.roles ?? []).length} RBAC role(s) (recreate them as Idenplane roles and assign them to the group)`,
+      );
+    }
+    if (hasEntries(group.attributes)) {
+      dropped.push(
+        `attributes ${Object.keys(group.attributes ?? {})
+          .map((k) => `'${k}'`)
+          .join(', ')}`,
+      );
+    }
+    if (dropped.length) {
+      report.warnings.push({
+        entity: 'group',
+        message: `Group '${group.name}': not imported: ${dropped.join('; ')}.`,
+      });
+    }
+  }
+
+  // ─── Clients ───────────────────────────────────────────────────────────
+
   private async importClients(
-    data: AuthentikExport,
+    providers: AuthentikOAuth2Provider[],
     realmId: string,
     report: MigrationReport,
     dryRun: boolean,
   ): Promise<void> {
-    for (const provider of data.providers ?? []) {
+    for (const provider of providers) {
+      const label = provider.name || provider.client_id || 'unknown';
       try {
+        if (typeof provider.client_id !== 'string' || !provider.client_id) {
+          throw new Error('Provider has no client_id');
+        }
         const existing = await this.prisma.client.findFirst({
           where: { realmId, clientId: provider.client_id },
         });
@@ -116,19 +262,42 @@ export class AuthentikImporterService {
           report.summary.clients.skipped++;
           continue;
         }
+
+        const redirects = authentikRedirectUris(provider.redirect_uris);
+        for (const s of redirects.skipped) {
+          report.warnings.push({
+            entity: 'client',
+            message: `Client '${label}': redirect URI '${s.url}' was not imported: ${s.reason}. Add the exact callback URLs to the client.`,
+          });
+        }
+
+        const isPublic = provider.client_type === 'public';
+        const secret =
+          typeof provider.client_secret === 'string' &&
+          provider.client_secret !== ''
+            ? provider.client_secret
+            : null;
+        const enabled = isPublic || secret !== null;
+        if (!enabled) {
+          report.warnings.push({
+            entity: 'client',
+            message: `Client '${label}' is confidential but has no client secret in the export; it was imported disabled. Regenerate its secret and enable it.`,
+          });
+        }
+
         if (!dryRun) {
           await this.prisma.client.create({
             data: {
               realmId,
               clientId: provider.client_id,
               name: provider.name,
-              enabled: true,
-              clientType:
-                provider.client_type === 'public' ? 'PUBLIC' : 'CONFIDENTIAL',
-              clientSecret: provider.client_secret
-                ? await this.crypto.hashSecret(provider.client_secret)
-                : null,
-              redirectUris: provider.redirect_uris ?? [],
+              enabled,
+              clientType: isPublic ? 'PUBLIC' : 'CONFIDENTIAL',
+              clientSecret:
+                !isPublic && secret
+                  ? await this.crypto.hashSecret(secret)
+                  : null,
+              redirectUris: redirects.uris,
               webOrigins: [],
               grantTypes: ['authorization_code', 'refresh_token'],
             },
@@ -139,120 +308,379 @@ export class AuthentikImporterService {
         report.summary.clients.failed++;
         report.errors.push({
           entity: 'client',
-          name: provider.name,
+          name: label,
           error: (error as Error).message,
         });
       }
     }
   }
 
+  // ─── Users ─────────────────────────────────────────────────────────────
+
   private async importUsers(
-    data: AuthentikExport,
+    users: AuthentikUser[],
     realmId: string,
-    groupIdsByName: Map<string, string>,
+    groups: GroupIndex,
     report: MigrationReport,
     dryRun: boolean,
+    addToExisting: boolean,
   ): Promise<void> {
-    for (const user of data.users ?? []) {
+    if (users.length === 0) return;
+
+    const customAttributes = await this.prisma.customAttribute.findMany({
+      where: { realmId },
+    });
+    const attributeByName = new Map(customAttributes.map((a) => [a.name, a]));
+    /** E-mail addresses given to users earlier in this import, to the username. */
+    const emailsInImport = new Map<string, string>();
+    /** Attributes left out, by name and reason, to the number of users. */
+    const droppedAttributes = new Map<string, number>();
+    /** Existing users whose missing memberships were withheld (option off). */
+    let existingWithoutMemberships = 0;
+
+    for (const user of users) {
+      const username =
+        typeof user.username === 'string' ? user.username : 'unknown';
+      const nonPerson = authentikNonPersonReason(user);
+      if (nonPerson) {
+        report.summary.users.skipped++;
+        report.warnings.push({
+          entity: 'user',
+          message: `User '${username}' was not imported: ${nonPerson}.`,
+        });
+        continue;
+      }
+
+      let userId: string;
+      let isNew: boolean;
       try {
+        if (!user.username) throw new Error('User has no username');
         const existing = await this.prisma.user.findFirst({
           where: { realmId, username: user.username },
         });
         if (existing) {
           report.summary.users.skipped++;
-          continue;
-        }
-
-        const { hash, algorithm, warning } = authentikPassword(user.password);
-        if (warning) {
-          report.warnings.push({
-            entity: 'user',
-            message: `User '${user.username}': ${warning}`,
-          });
-        }
-        const [firstName, ...rest] = (user.name ?? '')
-          .split(' ')
-          .filter(Boolean);
-        const lastName = rest.join(' ') || undefined;
-
-        let userId = 'dry-run-user-id';
-        if (!dryRun) {
-          const created = await this.prisma.user.create({
-            data: {
-              realmId,
-              username: user.username,
-              email: user.email,
-              firstName,
-              lastName,
-              enabled: user.is_active ?? true,
-              emailVerified: false,
-              passwordHash: hash,
-              passwordAlgorithm: algorithm,
-            },
-          });
-          userId = created.id;
-        }
-        report.summary.users.created++;
-
-        for (const groupName of user.groups ?? []) {
-          const groupId = groupIdsByName.get(groupName);
-          if (!groupId) {
-            report.warnings.push({
-              entity: 'user',
-              message: `User '${user.username}' references group '${groupName}', which was not in the export — skipped that membership.`,
-            });
-            continue;
-          }
-          if (!dryRun) {
-            await this.prisma.userGroup.create({
-              data: { userId, groupId },
-            });
-          }
+          userId = existing.id;
+          isNew = false;
+        } else {
+          userId = await this.createUser(
+            user,
+            realmId,
+            report,
+            dryRun,
+            emailsInImport,
+            attributeByName,
+            droppedAttributes,
+          );
+          report.summary.users.created++;
+          isNew = true;
         }
       } catch (error: unknown) {
         report.summary.users.failed++;
         report.errors.push({
           entity: 'user',
-          name: user.username,
+          name: username,
           error: (error as Error).message,
         });
+        continue;
       }
+
+      const withheld = await this.addMemberships(
+        user,
+        userId,
+        isNew,
+        groups,
+        report,
+        dryRun,
+        addToExisting,
+      );
+      if (withheld) existingWithoutMemberships++;
     }
+
+    if (existingWithoutMemberships > 0) {
+      report.warnings.push({
+        entity: 'user',
+        message: `${existingWithoutMemberships} existing user(s) were not given memberships (enable addMembershipsToExistingUsers to add them).`,
+      });
+    }
+
+    // One line per attribute and reason, not per user: Authentik puts
+    // internal keys on many users.
+    for (const [key, count] of droppedAttributes) {
+      const [name, reason] = JSON.parse(key) as [string, string];
+      report.warnings.push({
+        entity: 'user',
+        message: `User attribute '${name}' was not imported for ${count} user(s): ${reason}.`,
+      });
+    }
+
+    report.warnings.push({
+      entity: 'user',
+      message:
+        'MFA devices (TOTP, WebAuthn, static codes, Duo, SMS) are not in the Authentik API export and were not imported; users who had one must enrol again.',
+    });
   }
 
-  private async importSources(
-    data: AuthentikExport,
+  /** Creates one user (or, in a dry run, checks it) and returns its id. */
+  private async createUser(
+    user: AuthentikUser,
     realmId: string,
     report: MigrationReport,
     dryRun: boolean,
+    emailsInImport: Map<string, string>,
+    attributeByName: Map<string, CustomAttribute>,
+    droppedAttributes: Map<string, number>,
+  ): Promise<string> {
+    const { hash, algorithm, warning } = authentikPassword(user.password);
+    if (warning) {
+      report.warnings.push({
+        entity: 'user',
+        message: `User '${user.username}': ${warning}`,
+      });
+    }
+
+    const email = await this.uniqueEmail(user, realmId, report, emailsInImport);
+
+    const [firstName, ...rest] = (user.name ?? '').split(' ').filter(Boolean);
+    const lastName = rest.join(' ') || undefined;
+
+    const attributes = this.importableAttributes(
+      user,
+      attributeByName,
+      droppedAttributes,
+    );
+
+    let userId = `dry-run-user:${user.username}`;
+    if (!dryRun) {
+      const created = await this.prisma.user.create({
+        data: {
+          realmId,
+          username: user.username,
+          email,
+          firstName,
+          lastName,
+          enabled: user.is_active ?? true,
+          emailVerified: false,
+          passwordHash: hash,
+          passwordAlgorithm: algorithm,
+          ...(attributes.length ? { attributes: { create: attributes } } : {}),
+        },
+      });
+      userId = created.id;
+    }
+    if (email) emailsInImport.set(email, user.username);
+    return userId;
+  }
+
+  /**
+   * The e-mail address to store for a new user: null for none (Authentik's
+   * `""`), and null with a warning when another user (in the realm, or
+   * earlier in this import) already has it, since an address belongs to
+   * one user per realm. Checked the same way in a dry run.
+   */
+  private async uniqueEmail(
+    user: AuthentikUser,
+    realmId: string,
+    report: MigrationReport,
+    emailsInImport: Map<string, string>,
+  ): Promise<string | null> {
+    const email = normalizeEmail(user.email);
+    if (!email) return null;
+    let holder = emailsInImport.get(email);
+    if (!holder) {
+      const other = await this.prisma.user.findFirst({
+        where: { realmId, email },
+        select: { username: true },
+      });
+      holder = other?.username;
+    }
+    if (!holder) return email;
+    report.warnings.push({
+      entity: 'user',
+      message: `User '${user.username}': e-mail address ${email} already belongs to user '${holder}'; imported without an e-mail address. Resolve the duplicate and set it.`,
+    });
+    return null;
+  }
+
+  /**
+   * Authentik attributes that match a custom attribute defined in the
+   * realm, with a scalar value the attribute accepts. Every other one is
+   * counted in `droppedAttributes` by name and reason.
+   */
+  private importableAttributes(
+    user: AuthentikUser,
+    attributeByName: Map<string, CustomAttribute>,
+    droppedAttributes: Map<string, number>,
+  ): { attributeId: string; value: string }[] {
+    const attrs = user.attributes;
+    if (!attrs || typeof attrs !== 'object') return [];
+    const imported: { attributeId: string; value: string }[] = [];
+    const drop = (name: string, reason: string) => {
+      const key = JSON.stringify([name, reason]);
+      droppedAttributes.set(key, (droppedAttributes.get(key) ?? 0) + 1);
+    };
+    for (const [name, raw] of Object.entries(attrs)) {
+      const definition = attributeByName.get(name);
+      const scalar =
+        typeof raw === 'string' ||
+        typeof raw === 'number' ||
+        typeof raw === 'boolean';
+      if (!definition) {
+        drop(name, 'no custom attribute of that name is defined in the realm');
+        continue;
+      }
+      if (!scalar) {
+        drop(name, 'the value is not a single string, number or boolean');
+        continue;
+      }
+      const value = String(raw);
+      const problem = attributeValueProblem(
+        definition.type,
+        value,
+        definition.displayName,
+        Array.isArray(definition.options)
+          ? (definition.options as string[])
+          : null,
+      );
+      if (problem) {
+        drop(name, problem);
+        continue;
+      }
+      imported.push({ attributeId: definition.id, value });
+    }
+    return imported;
+  }
+
+  /**
+   * Adds the user's group memberships from the export. For a user that
+   * already exists, only when `addToExisting` is set; otherwise returns
+   * true when it would have added some, so the caller can report them.
+   * Only adds: a membership the user has in Idenplane and not in Authentik
+   * is kept. A failure here is reported on its own and does not count the
+   * user as failed.
+   */
+  private async addMemberships(
+    user: AuthentikUser,
+    userId: string,
+    isNew: boolean,
+    groups: GroupIndex,
+    report: MigrationReport,
+    dryRun: boolean,
+    addToExisting: boolean,
+  ): Promise<boolean> {
+    const groupIds = new Set<string>();
+    for (const ref of user.groups ?? []) {
+      const key = String(ref);
+      const groupId =
+        groups.byKey.get(`pk:${key}`) ?? groups.byKey.get(`name:${key}`);
+      if (!groupId) {
+        report.warnings.push({
+          entity: 'user',
+          message: `User '${user.username}' references group '${key}', which was not in the export — skipped that membership.`,
+        });
+        continue;
+      }
+      groupIds.add(groupId);
+    }
+    if (groupIds.size === 0) return false;
+
+    try {
+      let toAdd = [...groupIds];
+      if (!isNew) {
+        const current = await this.prisma.userGroup.findMany({
+          where: { userId, groupId: { in: toAdd } },
+          select: { groupId: true },
+        });
+        const have = new Set(current.map((m) => m.groupId));
+        toAdd = toAdd.filter((id) => !have.has(id));
+      }
+      if (toAdd.length === 0) return false;
+      if (!isNew && !addToExisting) return true;
+      if (!dryRun) {
+        await this.prisma.userGroup.createMany({
+          data: toAdd.map((groupId) => ({ userId, groupId })),
+          skipDuplicates: true,
+        });
+      }
+      if (!isNew) {
+        report.warnings.push({
+          entity: 'user',
+          message: `User '${user.username}' already existed and was not changed, except: ${dryRun ? 'would add' : 'added'} ${toAdd.length} group membership(s) from the export (existing memberships are kept).`,
+        });
+      }
+    } catch (error: unknown) {
+      report.errors.push({
+        entity: 'group_membership',
+        name: user.username,
+        error: `Group memberships not added: ${(error as Error).message}`,
+      });
+    }
+    return false;
+  }
+
+  // ─── Identity providers ────────────────────────────────────────────────
+
+  private async importSources(
+    sources: AuthentikOAuthSource[],
+    realmId: string,
+    report: MigrationReport,
+    dryRun: boolean,
+    hasUsers: boolean,
   ): Promise<void> {
-    for (const source of data.sources ?? []) {
+    let imported = 0;
+    /** Aliases taken by earlier sources in this file, to that source's label. */
+    const aliasesInFile = new Map<string, string>();
+    for (const source of sources) {
+      const label =
+        source.name || source.slug || String(source.pk ?? 'unknown');
       if (!OIDC_SOURCE_TYPES.has((source.provider_type ?? '').toLowerCase())) {
         report.summary.identityProviders.skipped++;
         report.warnings.push({
           entity: 'identity_provider',
-          message: `Identity provider '${source.name}' was not imported: ${
+          message: `Identity provider '${label}' was not imported: ${
             /saml/i.test(source.provider_type ?? '')
-              ? unsupportedIdpTypeReason(source.provider_type)
+              ? "it is a SAML source, and Authentik's export does not carry the IdP's signing certificate (only a reference to a stored key pair); add it in the admin console from the IdP's metadata."
               : `source type ${source.provider_type ?? 'unknown'} is not a generic OIDC source; only OIDC sources can be imported, recreate this one manually.`
           }`,
         });
         continue;
       }
+      const alias = authentikSourceAlias(source);
+      if (!alias) {
+        report.summary.identityProviders.skipped++;
+        report.warnings.push({
+          entity: 'identity_provider',
+          message: `Identity provider '${label}' was not imported: neither its slug nor its name gives an alias of lowercase letters, digits and hyphens.`,
+        });
+        continue;
+      }
+      const firstWithAlias = aliasesInFile.get(alias);
+      if (firstWithAlias !== undefined) {
+        report.summary.identityProviders.skipped++;
+        report.warnings.push({
+          entity: 'identity_provider',
+          message: `Source '${label}' skipped: alias '${alias}' already used by source '${firstWithAlias}' in this file.`,
+        });
+        continue;
+      }
+      aliasesInFile.set(alias, label);
       const plan = planIdpImport({
-        alias: source.name,
+        alias,
         providerType: 'oidc',
         fields: {
           clientId: source.consumer_key,
           clientSecret: source.consumer_secret,
           authorizationUrl: source.authorization_url,
           tokenUrl: source.access_token_url,
+          userinfoUrl: source.profile_url,
+          jwksUrl: source.oidc_jwks_url,
+          issuer: issuerFromWellKnownUrl(source.oidc_well_known_url),
         },
       });
-      if (!reportIdpPlan(report, source.name, plan)) continue;
+      if (!reportIdpPlan(report, alias, plan)) continue;
       try {
         const existing = await this.prisma.identityProvider.findFirst({
-          where: { realmId, alias: source.name },
+          where: { realmId, alias },
         });
         if (existing) {
           report.summary.identityProviders.skipped++;
@@ -262,8 +690,8 @@ export class AuthentikImporterService {
           await this.prisma.identityProvider.create({
             data: {
               realmId,
-              alias: source.name,
-              displayName: source.name,
+              alias,
+              displayName: source.name || alias,
               trustEmail: false,
               ...idpCreateData(plan, (secret) =>
                 idpSecrets.forCreate(this.crypto, secret),
@@ -272,14 +700,22 @@ export class AuthentikImporterService {
           });
         }
         report.summary.identityProviders.created++;
+        imported++;
       } catch (error: unknown) {
         report.summary.identityProviders.failed++;
         report.errors.push({
           entity: 'identity_provider',
-          name: source.name,
+          name: alias,
           error: (error as Error).message,
         });
       }
+    }
+    if (imported > 0 && hasUsers) {
+      report.warnings.push({
+        entity: 'identity_provider',
+        message:
+          "Links between users and their source accounts are not in the Authentik API export and were not imported. With trustEmail off (the default for imported providers), a migrated user's first sign-in through a provider creates a second account; turn trustEmail on for providers whose verified e-mail addresses you trust.",
+      });
     }
   }
 }

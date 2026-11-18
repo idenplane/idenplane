@@ -1,6 +1,6 @@
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import type { NextFunction, Request, Response } from 'express';
-import { json } from 'express';
+import { json, urlencoded } from 'express';
 import { SCIM_CONTENT_TYPE } from '../../scim/types/scim.types.js';
 
 /**
@@ -18,8 +18,11 @@ import { SCIM_CONTENT_TYPE } from '../../scim/types/scim.types.js';
  *
  * Size limits: {@link JSON_BODY_LIMIT} (body-parser's default) everywhere,
  * except the import endpoints ({@link isImportRequest}), which take whole
- * realm and user exports and get {@link IMPORT_JSON_BODY_LIMIT}. A larger
- * body is answered with 413. Keeping the small limit everywhere else bounds
+ * realm and user exports and get {@link IMPORT_JSON_BODY_LIMIT}, and SCIM
+ * ({@link isScimRequest}), which gets {@link SCIM_JSON_BODY_LIMIT}: a PUT
+ * of a group lists every member, and that is the `maxPayloadSize` the
+ * ServiceProviderConfig advertises for Bulk. A larger body is answered
+ * with 413. Keeping the small limit everywhere else bounds
  * what any unauthenticated request can make the server buffer and parse;
  * the import endpoints are admin-only, but the body is read before the
  * admin guard runs, so the larger limit is kept to these routes.
@@ -33,6 +36,17 @@ export const JSON_BODY_LIMIT = '100kb';
 
 /** The JSON body limit of realm import and user migration. */
 export const IMPORT_JSON_BODY_LIMIT = '10mb';
+
+/**
+ * The JSON body limit of the SCIM endpoints, in bytes; equal to the
+ * ServiceProviderConfig's `bulk.maxPayloadSize`.
+ */
+export const SCIM_JSON_BODY_LIMIT = 1024 * 1024;
+
+/** The SCIM endpoints, `/scim/v2/...`. */
+export function isScimRequest(req: Pick<Request, 'url'>): boolean {
+  return /^\/scim\/v2\//i.test(req.url ?? '');
+}
 
 /**
  * `POST /admin/realms/import` and `POST /admin/migration/{keycloak,auth0,
@@ -53,6 +67,7 @@ export function registerBodyParsers(app: NestExpressApplication): void {
     type: JSON_MEDIA_TYPES,
     limit: IMPORT_JSON_BODY_LIMIT,
   });
+  const scim = json({ type: JSON_MEDIA_TYPES, limit: SCIM_JSON_BODY_LIMIT });
   // The name is load-bearing: NestJS looks for a middleware called
   // `jsonParser` to decide not to add its own (see above).
   app.use(function jsonParser(
@@ -60,6 +75,51 @@ export function registerBodyParsers(app: NestExpressApplication): void {
     res: Response,
     next: NextFunction,
   ): void {
-    (isImportRequest(req) ? imports : standard)(req, res, next);
+    const parser = isImportRequest(req)
+      ? imports
+      : isScimRequest(req)
+        ? scim
+        : standard;
+    parser(req, res, next);
+  });
+}
+
+/** The form body limit of every endpoint but the SAML broker's ACS. */
+export const FORM_BODY_LIMIT = '100kb';
+
+/**
+ * The form body limit of a SAML ACS: a SAMLResponse may be up to 512 KB
+ * (MAX_SAML_RESPONSE_LENGTH), plus the RelayState and form encoding.
+ */
+export const SAML_ACS_FORM_BODY_LIMIT = '600kb';
+
+/** `POST /realms/{realm}/broker/{alias}/saml/acs`, also under a version prefix. */
+const SAML_ACS_PATH =
+  /^(?:\/api\/v\d+)?\/realms\/[^/]+\/broker\/[^/]+\/saml\/acs\/?$/i;
+
+export function isSamlAcsRequest(
+  req: Pick<Request, 'method' | 'url'>,
+): boolean {
+  if (req.method !== 'POST') return false;
+  return SAML_ACS_PATH.test((req.url ?? '').split('?')[0]);
+}
+
+/**
+ * Replaces NestJS's URL-encoded parser (same options: `extended`, 100 KB),
+ * giving only the SAML ACS the larger limit. The name is load-bearing, as
+ * for `jsonParser`.
+ */
+export function registerFormBodyParser(app: NestExpressApplication): void {
+  const standard = urlencoded({ extended: true, limit: FORM_BODY_LIMIT });
+  const samlAcs = urlencoded({
+    extended: true,
+    limit: SAML_ACS_FORM_BODY_LIMIT,
+  });
+  app.use(function urlencodedParser(
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ): void {
+    (isSamlAcsRequest(req) ? samlAcs : standard)(req, res, next);
   });
 }

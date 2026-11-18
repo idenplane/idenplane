@@ -697,6 +697,46 @@ async function logout(accessToken: string, refreshToken: string) {
 }
 ```
 
+### Back-Channel Logout
+
+A client that registers a `backchannelLogoutUri` ([OpenID Connect Back-Channel Logout 1.0](https://openid.net/specs/openid-connect-backchannel-1_0.html)) is told when a session it holds ends, by a server-to-server `POST` of a signed logout token to that URI. Idenplane sends one whenever an OAuth session ends:
+
+| How the session ended | Since |
+|---|---|
+| The user signs out (`/protocol/openid-connect/logout`) | earlier |
+| An admin ends one session (`DELETE /admin/realms/{realm}/sessions/{id}`) or continuous verification ends a risky one | 0.13.0 |
+| The user is signed out everywhere: admin "sign out all sessions" (`DELETE /admin/realms/{realm}/users/{id}/sessions`), disabling or deleting the user, SCIM deactivation, and every credential change (a password set, reset or changed, second factors removed) | 0.13.0 |
+| The SSO idle timeout (`ssoSessionIdleTimeout`): a session whose refresh token went unused for longer ends at the next hourly clean-up | 0.13.0 |
+| A new sign-in evicts the user's oldest session at `maxSessionsPerUser` | 0.13.0 |
+| A refresh token is reused (a sign of theft, RFC 9700 §4.14), which ends its whole session | 0.13.0 |
+| An authorization code is replayed by its client, which ends the session issued from it (RFC 6749 §4.1.2) | 0.13.0 |
+
+Only the clients the session was used with are told, not every client of the realm: the clients its refresh tokens were issued to. A session whose refresh tokens record no client (tokens issued before refresh tokens recorded one) falls back to the client of the authorization code it was created from. When neither records a client (access tokens are not stored, so they cannot say), every client of the realm with a `backchannelLogoutUri` is told, as every logout did before 0.13.0; each token names the session, so a client that never saw it ignores it. A session with no refresh token at all, such as an impersonation session, was never given to a client and is not announced.
+
+The request is `Content-Type: application/x-www-form-urlencoded` with one parameter, `logout_token`, a JWT signed with the realm's active key (`RS256`, verifiable with the realm's JWKS) and typed `logout+jwt`:
+
+```json
+{
+  "iss": "https://auth.example.com/realms/my-realm",
+  "aud": "my-app",
+  "sub": "<user id>",
+  "sid": "<session id: the sid claim of the session's ID tokens>",
+  "iat": 1795000000,
+  "exp": 1795000120,
+  "jti": "<unique id>",
+  "events": { "http://schemas.openid.net/event/backchannel-logout": {} }
+}
+```
+
+- Each token names one ended session (`sid`) and its user (`sub`), one token per session and client. The one exception: when a user is signed out everywhere, a client without `backchannelLogoutSessionRequired` (it is on by default) gets a single token with `sub` only, which per the specification means "end every session of this user". A session ended on its own never produces a `sub`-only token, so the client's other sessions for the user are left alone.
+- There is never a `nonce`, so a logout token cannot be mistaken for an ID token. Check the signature, `iss`, `aud`, `iat`/`exp`, the `events` member and the absence of `nonce`, as the specification describes.
+- **Offline sessions are included.** Signing a user out everywhere revokes their offline tokens too, so a client that keeps one for background work is told that the session (`sid`) is gone. A user's own sign-out is different: signing out of a session leaves the user's other sessions alone, offline ones included, and a logout that names only the user (an ID token or logout token with `sub` and no `sid`) ends their sessions but not their offline sessions (since 0.13.0). Signing out with the offline sign-in's own ID token or refresh token does end that offline session: it is the session named (see the [threat model](../security/threat-model.md)).
+- Browser SSO sessions (the `IDENPLANE_SESSION` cookie) are not tied to a client's session, so ending one, or one expiring, sends nothing. A session reaching its maximum lifetime (`refreshTokenLifespan`, `offlineTokenLifespan`) sends nothing either: the client already knows the refresh token's lifetime.
+
+**Where tokens may go.** Back-channel URIs on the operator's own network (`http://app.internal/...`, private and loopback addresses) are allowed: relying parties often run there. Link-local and cloud instance-metadata addresses are refused (`169.254.0.0/16`, which includes `169.254.169.254`; `fe80::/10`; AWS's `fd00:ec2::254`; Alibaba's `100.100.100.200`; Oracle's `192.0.0.192`; and the same addresses embedded in IPv6), checked on the URI's host and on every address its name resolves to, at each delivery. The refusal is logged and nothing is sent. Set `BACKCHANNEL_LOGOUT_ALLOW_LINK_LOCAL=true` to allow them. The check does not pin the connection, so a name whose DNS answer changes between the check and the request (DNS rebinding) is not caught.
+
+**Delivery** is fire-and-forget, after the sign-out has been committed: the admin call or sign-out never waits for, or fails because of, a client. Each `POST` has a 10-second timeout and does not follow redirects; at most 8 are in flight at once per server. A failure (a network error, a timeout, or a non-2xx answer) is logged as a warning by `BackchannelLogoutService` and not retried: the token is valid for two minutes, and the client's refresh token and session are already revoked, so a client that missed the token finds out at its next refresh or UserInfo call.
+
 ---
 
 ## Security Best Practices
@@ -854,12 +894,23 @@ Idenplane can delegate authentication to an external provider, so users sign in 
 
 ### What this covers
 
-These endpoints handle **OpenID Connect** providers — Okta, Auth0, Microsoft Entra, Google, another Keycloak or Idenplane, anything that speaks OIDC. `providerType` is `oidc` (the default) or `oauth2` (a plain OAuth 2.0 provider such as GitHub); the broker treats both the same way. Any other value, `saml` included, is refused with `400`.
+These endpoints handle **OpenID Connect** providers — Okta, Auth0, Microsoft Entra, Google, another Keycloak or Idenplane, anything that speaks OIDC — and **SAML 2.0** identity providers. `providerType` is `oidc` (the default), `oauth2` (a plain OAuth 2.0 provider such as GitHub; the broker treats it like `oidc`) or `saml`. Any other value is refused with `400`. A `saml` provider takes its settings in `samlConfig` instead of the OAuth fields: see [Sign in with a SAML identity provider](/guides/saml-identity-providers).
 
 Two neighbouring features are managed separately:
 
-- **SAML 2.0**: Idenplane cannot sign users in through an upstream SAML identity provider; SAML brokering is not supported. Idenplane is itself a SAML 2.0 identity provider for downstream service providers, which the console lists under **SAML Providers**
+- **Idenplane as a SAML 2.0 identity provider** for downstream service providers (the opposite direction): the console lists those under **SAML Providers**
 - **LDAP** and other external user stores live under **User Federation**, which synchronises users rather than delegating the login
+
+### Providers stored before 0.12.0
+
+Before 0.12.0 the admin API and the importers stored any `providerType`. On upgrade to 0.13.0:
+
+- a supported type stored in another case or with spaces (`OIDC`, ` OAuth2 `, `SAML`) is rewritten to `oidc`, `oauth2` or `saml` by a migration;
+- `GET /admin/upgrade/health` reports the rows the broker cannot sign in with in the `identity_provider_types` warning, as `realm/alias (type, enabled|disabled)`:
+  - **Needs configuration review**: a SAML provider without a valid SAML configuration. Every `saml` row stored before 0.13.0, when Idenplane had no SAML broker, has none: open it in the console and complete its [SAML settings](/guides/saml-identity-providers), or delete it. `samlp` and `adfs` rows (Auth0 exports) also need their type set to `saml`.
+  - **Unsupported type**: any type other than `oidc`, `oauth2` and `saml`. Change it to one the provider speaks, or delete it.
+
+An enabled provider in either list still shows a button on the login page that cannot complete a sign-in, so review these first. The check is a warning only and never blocks an upgrade.
 
 ### Configuring one
 

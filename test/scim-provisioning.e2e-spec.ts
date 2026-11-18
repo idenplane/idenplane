@@ -145,12 +145,29 @@ describe('SCIM provisioning cycle (e2e)', () => {
       'urn:ietf:params:scim:schemas:core:2.0:ServiceProviderConfig',
     ]);
     expect(config.body.patch).toEqual({ supported: true });
+    expect(config.body.changePassword).toEqual({ supported: true });
 
     const schemas = await http().get(`${BASE}/Schemas`).expect(200);
     expect(schemas.body.schemas).toEqual([LIST_SCHEMA]);
     expect(
       (schemas.body.Resources as Array<{ id: string }>).map((s) => s.id),
     ).toEqual(expect.arrayContaining([USER_SCHEMA, GROUP_SCHEMA]));
+  });
+
+  it('refuses a repeated filter with 400 invalidFilter, not 500', async () => {
+    const twice = await scim(
+      'get',
+      `/Users?filter=${encodeURIComponent('userName eq "a"')}&filter=${encodeURIComponent('userName eq "b"')}`,
+    ).expect(400);
+    expect(twice.body).toMatchObject({
+      scimType: 'invalidFilter',
+      status: '400',
+    });
+
+    // A repeated attributes list reaches the controller as one
+    // comma-joined string (the string query DTO type), which is the same
+    // list written once: valid, not an error.
+    await scim('get', '/Users?attributes=userName&attributes=id').expect(200);
   });
 
   it('runs create → get-by-filter → patch → deactivate → delete', async () => {
@@ -175,7 +192,10 @@ describe('SCIM provisioning cycle (e2e)', () => {
     );
     const id = created.body.id as string;
     expect(created.body).toMatchObject({
-      schemas: [USER_SCHEMA],
+      schemas: [USER_SCHEMA, ENTERPRISE],
+      externalId: `${userName}-object-id`,
+      displayName: 'Ada Lovelace',
+      [ENTERPRISE]: { department: 'Research', employeeNumber: '1815' },
       userName,
       active: true,
       name: { givenName: 'Ada', familyName: 'Lovelace' },
@@ -229,9 +249,14 @@ describe('SCIM provisioning cycle (e2e)', () => {
       ),
     ).expect(200);
     expect(patched.body).toMatchObject({
+      schemas: [USER_SCHEMA, ENTERPRISE],
+      externalId: 'new-object-id',
+      displayName: 'Ada King',
+      title: 'Countess',
       name: { givenName: 'Ada', familyName: 'King' },
       emails: [{ value: 'ada.king@example.com' }],
       active: true,
+      [ENTERPRISE]: { department: 'Analytics', employeeNumber: '1815' },
     });
 
     // An unknown path is refused and nothing in the request is applied.
@@ -285,7 +310,8 @@ describe('SCIM provisioning cycle (e2e)', () => {
     for (const filter of [
       'passwordHash sw "$"',
       'realmId eq "other"',
-      'userName eq "a" and active eq true',
+      '(userName eq "a")',
+      'userName eq "a" and passwordHash pr',
     ]) {
       const res = await scim(
         'get',
@@ -392,7 +418,7 @@ describe('SCIM provisioning cycle (e2e)', () => {
         path: 'members',
         value: [{ value: a }, { value: b }],
       }),
-    ).expect(200);
+    ).expect(204);
     expect(await members()).toEqual([a, b].sort());
 
     // Okta: remove by filter.
@@ -400,7 +426,7 @@ describe('SCIM provisioning cycle (e2e)', () => {
       'patch',
       `/Groups/${gid}`,
       patchOp({ op: 'remove', path: `members[value eq "${a}"]` }),
-    ).expect(200);
+    ).expect(204);
     expect(await members()).toEqual([b]);
 
     // Entra ID: remove with a value list; and rename.
@@ -411,7 +437,7 @@ describe('SCIM provisioning cycle (e2e)', () => {
         { op: 'Remove', path: 'members', value: [{ value: b }] },
         { op: 'Replace', path: 'displayName', value: 'Platform' },
       ),
-    ).expect(200);
+    ).expect(204);
     expect(await members()).toEqual([]);
 
     const byName = await scim(

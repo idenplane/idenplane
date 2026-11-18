@@ -1,14 +1,15 @@
 import { WELL_KNOWN_PROVIDERS } from '../broker/providers.js';
 
 /**
- * Identity provider types Idenplane can sign users in with. The broker
- * (src/broker) speaks OAuth 2.0 / OpenID Connect only: it sends the user to
- * `authorizationUrl`, redeems the code at `tokenUrl` and reads the profile
- * from `userinfoUrl`. There is no SAML broker — Idenplane is a SAML identity
- * provider for service providers, not a SAML service provider — so a `saml`
- * identity provider could never be used to sign in.
+ * Identity provider types Idenplane can sign users in with:
+ *
+ * - `oidc` and `oauth2`: the broker (src/broker) sends the user to
+ *   `authorizationUrl`, redeems the code at `tokenUrl` and reads the profile
+ *   from `userinfoUrl`.
+ * - `saml`: Idenplane is a SAML 2.0 service provider; everything it needs is
+ *   in `samlConfig` (see saml-config.ts) and the OAuth columns stay empty.
  */
-export const SUPPORTED_IDP_PROVIDER_TYPES = ['oidc', 'oauth2'] as const;
+export const SUPPORTED_IDP_PROVIDER_TYPES = ['oidc', 'oauth2', 'saml'] as const;
 export type IdpProviderType = (typeof SUPPORTED_IDP_PROVIDER_TYPES)[number];
 
 /** The supported type for `value` (case-insensitive), or null. */
@@ -22,16 +23,46 @@ export function supportedIdpProviderType(
     : null;
 }
 
+/** A provider type that names SAML (Keycloak `saml`, Auth0 `samlp`/`adfs`). */
+const SAML_TYPE = /saml|adfs/i;
+
+/**
+ * What a stored `providerType` means for the broker:
+ * - `supported`: `oidc`, `oauth2` or `saml`, in any case (`type` is the
+ *   canonical, lower-case value). A `saml` one still needs a valid
+ *   `samlConfig`, which the upgrade health check checks separately;
+ * - `saml`: another name for SAML (Auth0 `samlp`, `adfs`) that the broker
+ *   does not take as is: the row needs its type set to `saml` and its SAML
+ *   configuration reviewed;
+ * - `unsupported`: anything else.
+ *
+ * The upgrade health check (`identity_provider_types`) reports by this, so
+ * a change to what the broker accepts is made here.
+ */
+export type IdpProviderTypeClass =
+  | { kind: 'supported'; type: IdpProviderType }
+  | { kind: 'saml' }
+  | { kind: 'unsupported' };
+
+export function classifyIdpProviderType(value: unknown): IdpProviderTypeClass {
+  const type = supportedIdpProviderType(value);
+  if (type) return { kind: 'supported', type };
+  if (typeof value === 'string' && SAML_TYPE.test(value)) {
+    return { kind: 'saml' };
+  }
+  return { kind: 'unsupported' };
+}
+
 /** Why an identity provider of type `value` cannot be imported. */
 export function unsupportedIdpTypeReason(value: unknown): string {
   const shown = typeof value === 'string' && value ? value : '(none)';
   const supported = SUPPORTED_IDP_PROVIDER_TYPES.join(', ');
-  if (typeof value === 'string' && /saml|adfs/i.test(value)) {
+  if (typeof value === 'string' && /ws-?fed|wsfed|adfs|waad/i.test(value)) {
     return (
-      `provider type '${shown}' is SAML, and Idenplane cannot sign users in ` +
-      `through a SAML identity provider (it brokers ${supported} only). ` +
-      `If the provider also offers OpenID Connect, add it as an OIDC ` +
-      `identity provider.`
+      `provider type '${shown}' is not supported (it is WS-Federation or a ` +
+      `source-specific enterprise connection; supported: ${supported}). ADFS ` +
+      `and Entra ID also offer SAML 2.0 and OpenID Connect: add the provider ` +
+      `with one of those.`
     );
   }
   return `provider type '${shown}' is not supported (supported: ${supported}).`;

@@ -8,6 +8,7 @@ import {
 describe('SessionsCleanupService', () => {
   let service: SessionsCleanupService;
   let prisma: MockPrismaService;
+  let backchannel: { notifySessionsEnded: jest.Mock };
 
   beforeEach(() => {
     prisma = createMockPrismaService();
@@ -17,10 +18,90 @@ describe('SessionsCleanupService', () => {
     prisma.authorizationCode.deleteMany = jest.fn();
     prisma.impersonationSession.deleteMany = jest.fn();
 
-    service = new SessionsCleanupService(prisma as any);
+    backchannel = { notifySessionsEnded: jest.fn() };
+    service = new SessionsCleanupService(prisma as any, backchannel as any);
   });
 
   describe('cleanupExpiredSessions', () => {
+    const zeroCounts = () => {
+      for (const table of [
+        prisma.session,
+        prisma.loginSession,
+        prisma.refreshToken,
+        prisma.authorizationCode,
+        prisma.impersonationSession,
+        prisma.proxySession,
+      ]) {
+        table.deleteMany.mockResolvedValue({ count: 0 });
+      }
+    };
+
+    it('ends OAuth sessions gone idle and tells their clients, per realm', async () => {
+      zeroCounts();
+      const rows = [
+        {
+          id: 's-1',
+          userId: 'u-1',
+          realmId: 'r-1',
+          realmName: 'one',
+          clientIds: ['app-1'],
+        },
+        {
+          id: 's-2',
+          userId: 'u-2',
+          realmId: 'r-2',
+          realmName: 'two',
+          clientIds: ['app-2'],
+        },
+        {
+          id: 's-3',
+          userId: 'u-3',
+          realmId: 'r-1',
+          realmName: 'one',
+          clientIds: [],
+        },
+      ];
+      prisma.$queryRaw.mockResolvedValue(rows);
+
+      await service.cleanupExpiredSessions();
+
+      const sql = (prisma.$queryRaw.mock.calls[0][0] as string[]).join('?');
+      expect(sql).toContain('DELETE FROM "sessions"');
+      expect(sql).toContain('"sso_session_idle_timeout" > 0');
+      // Not past its maximum lifetime (that is the plain expiry below), has
+      // refresh tokens (an impersonation session has none), all expired.
+      expect(sql).toContain('s."expires_at" >=');
+      expect(sql).toContain('AND EXISTS (SELECT 1 FROM "refresh_tokens"');
+      expect(sql).toContain('AND NOT EXISTS (SELECT 1 FROM "refresh_tokens"');
+      expect(sql).toContain('RETURNING');
+      // Before the refresh token sweep, which deletes the tokens naming the
+      // session's clients.
+      expect(prisma.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(
+        prisma.refreshToken.deleteMany.mock.invocationCallOrder[0],
+      );
+
+      expect(backchannel.notifySessionsEnded).toHaveBeenCalledTimes(2);
+      expect(backchannel.notifySessionsEnded).toHaveBeenCalledWith(
+        { id: 'r-1', name: 'one' },
+        [
+          { id: 's-1', userId: 'u-1', clientIds: ['app-1'] },
+          { id: 's-3', userId: 'u-3', clientIds: [] },
+        ],
+      );
+      expect(backchannel.notifySessionsEnded).toHaveBeenCalledWith(
+        { id: 'r-2', name: 'two' },
+        [{ id: 's-2', userId: 'u-2', clientIds: ['app-2'] }],
+      );
+    });
+
+    it('announces nothing when no session went idle', async () => {
+      zeroCounts();
+
+      await service.cleanupExpiredSessions();
+
+      expect(backchannel.notifySessionsEnded).not.toHaveBeenCalled();
+    });
+
     it("deletes SSO sessions gone idle, by each realm's own timeout", async () => {
       prisma.session.deleteMany.mockResolvedValue({ count: 0 });
       prisma.loginSession.deleteMany.mockResolvedValue({ count: 0 });
