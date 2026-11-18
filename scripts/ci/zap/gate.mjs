@@ -10,8 +10,8 @@
 //
 //   <id>\tIGNORE\t<name>          (ZAP syntax) the whole plugin is ignored
 //   <id>\tOUTOFSCOPE\t<url regex> (ZAP syntax) the plugin, on matching URLs
-//   #@accept\t<alertRef>\t<url regex>\t<reason>
-//                                 one alert (e.g. 10055-13), on matching URLs
+//   #@accept\t<alertRef>\t<url regex>\t<reason>\t[exact evidence]
+//                                 one alert on matching URLs and optional evidence
 //
 // Every other alert, of any risk level, fails the run. Every accept and
 // ignore must say why, in rules.tsv, where it is reviewed.
@@ -25,9 +25,10 @@ const accepts = [];
 for (const raw of readFileSync(rulesFile, 'utf8').split('\n')) {
   const line = raw.replace(/\r$/, '');
   if (line.startsWith('#@accept\t')) {
-    const [, ref, url, reason] = line.split('\t');
-    if (!reason || reason.trim().length < 10) throw new Error(`accept without a reason: ${line}`);
-    accepts.push({ ref, url: new RegExp(url), reason });
+    const [, ref, url, reason, evidence] = line.split('\t');
+    if (!reason || reason.trim().length < 10)
+      throw new Error(`accept without a reason: ${line}`);
+    accepts.push({ ref, url: new RegExp(url), reason, evidence });
     continue;
   }
   if (!line.trim() || line.startsWith('#')) continue;
@@ -53,33 +54,64 @@ for (const name of reports) {
     if (ignore.has(a.pluginid)) continue;
     const ref = a.alertRef ?? a.pluginid;
     const remaining = (a.instances ?? []).filter((i) => {
-      if (outOfScope.some((o) => o.id === a.pluginid && o.url.test(i.uri))) return false;
-      const acc = accepts.find((x) => x.ref === ref && x.url.test(i.uri));
+      if (outOfScope.some((o) => o.id === a.pluginid && o.url.test(i.uri)))
+        return false;
+      const acc = accepts.find(
+        (x) =>
+          x.ref === ref &&
+          x.url.test(i.uri) &&
+          (x.evidence === undefined ||
+            (x.evidence !== '' && x.evidence === i.evidence)),
+      );
       if (acc) {
-        accepted.set(ref, { alert: a.alert, reason: acc.reason, n: (accepted.get(ref)?.n ?? 0) + 1 });
+        accepted.set(ref, {
+          alert: a.alert,
+          reason: acc.reason,
+          n: (accepted.get(ref)?.n ?? 0) + 1,
+        });
         return false;
       }
       return true;
     });
     if (remaining.length) open.push({ ...a, ref, remaining });
   }
-  out.push(`### ${name}: ${open.length ? `**${open.length} open alert(s)**` : 'no open alerts'} (${alerts.length} raised)`, '');
+  out.push(
+    `### ${name}: ${open.length ? `**${open.length} open alert(s)**` : 'no open alerts'} (${alerts.length} raised)`,
+    '',
+  );
   if (open.length) {
-    out.push('| Risk | Alert | Ref | Instances | Example |', '|---|---|---|---|---|');
-    for (const a of open.sort((x, y) => Number(y.riskcode) - Number(x.riskcode))) {
+    out.push(
+      '| Risk | Alert | Ref | Instances | Example |',
+      '|---|---|---|---|---|',
+    );
+    for (const a of open.sort(
+      (x, y) => Number(y.riskcode) - Number(x.riskcode),
+    )) {
       const ex = a.remaining[0];
-      out.push(`| ${risk[a.riskcode] ?? a.riskcode} | ${a.alert} | ${a.ref} | ${a.remaining.length} | ${`${ex.method} ${ex.uri}`.replace(/\|/g, '%7C').slice(0, 140)} |`);
+      out.push(
+        `| ${risk[a.riskcode] ?? a.riskcode} | ${a.alert} | ${a.ref} | ${a.remaining.length} | ${`${ex.method} ${ex.uri}`.replace(/\|/g, '%7C').slice(0, 140)} |`,
+      );
       failures.push(`${name}: ${a.ref} ${a.alert}`);
     }
     out.push('');
   }
 }
 if (accepted.size) {
-  out.push('### Accepted (see .zap/rules.tsv)', '', '| Ref | Alert | Instances | Why |', '|---|---|---|---|');
-  for (const [ref, v] of accepted) out.push(`| ${ref} | ${v.alert} | ${v.n} | ${v.reason} |`);
+  out.push(
+    '### Accepted (see .zap/rules.tsv)',
+    '',
+    '| Ref | Alert | Instances | Why |',
+    '|---|---|---|---|',
+  );
+  for (const [ref, v] of accepted)
+    out.push(`| ${ref} | ${v.alert} | ${v.n} | ${v.reason} |`);
   out.push('');
 }
-out.push(failures.length ? `**ZAP gate: FAILED** (${failures.length})` : '**ZAP gate: passed**');
+out.push(
+  failures.length
+    ? `**ZAP gate: FAILED** (${failures.length})`
+    : '**ZAP gate: passed**',
+);
 console.log(out.join('\n'));
 if (failures.length) {
   console.error(failures.join('\n'));
