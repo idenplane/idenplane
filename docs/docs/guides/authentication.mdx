@@ -905,8 +905,10 @@ Two neighbouring features are managed separately:
 
 Before 0.12.0 the admin API and the importers stored any `providerType`. On upgrade to 0.13.0:
 
-- a supported type stored in another case or with spaces (`OIDC`, ` OAuth2 `) is rewritten to `oidc` or `oauth2` by a migration;
-- any other row is left as it is, and `GET /admin/upgrade/health` reports it in the `identity_provider_types` warning, as `realm/alias (type, enabled|disabled)`. **SAML** rows (`saml`, `samlp`, `adfs`) are listed as needing configuration review: they were saved before 0.12.0, when Idenplane had no SAML broker, so review each one's configuration before relying on it. Other types are listed as unsupported: change them to `oidc` or `oauth2` if the provider speaks it, or delete them.
+- a supported type stored in another case or with spaces (`OIDC`, ` OAuth2 `, `SAML`) is rewritten to `oidc`, `oauth2` or `saml` by a migration;
+- `GET /admin/upgrade/health` reports the rows the broker cannot sign in with in the `identity_provider_types` warning, as `realm/alias (type, enabled|disabled)`:
+  - **Needs configuration review**: a SAML provider without a valid SAML configuration. Every `saml` row stored before 0.13.0, when Idenplane had no SAML broker, has none: open it in the console and complete its [SAML settings](/guides/saml-identity-providers), or delete it. `samlp` and `adfs` rows (Auth0 exports) also need their type set to `saml`.
+  - **Unsupported type**: any type other than `oidc`, `oauth2` and `saml`. Change it to one the provider speaks, or delete it.
 
 An enabled provider in either list still shows a button on the login page that cannot complete a sign-in, so review these first. The check is a warning only and never blocks an upgrade.
 
