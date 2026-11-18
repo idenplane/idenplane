@@ -17,7 +17,6 @@ name: Publish framework SDKs
 # npmjs.com name this repository and workflow file as its trusted publisher,
 # so the job's GitHub OIDC token is exchanged for a one-time publish
 # credential; no long-lived token is involved, and provenance is attached.
-# NPM_TOKEN is only a fallback while a package has no trusted publisher yet.
 on:
   push:
     tags: ['angular-v*', 'nextjs-v*', 'vue-v*']
@@ -81,9 +80,18 @@ jobs:
           node-version: 24
           registry-url: 'https://registry.npmjs.org'
 
-      # Trusted publishing needs npm 11.5.1 or later.
-      - name: Use npm with trusted publishing support
-        run: npm install -g npm@11.6.2
+      # Trusted publishing needs npm 11.5.1 or later. Node 24.5.0 and later
+      # bundle it, so check the bundled npm instead of installing an
+      # unpinned one over it.
+      - name: Check npm supports trusted publishing
+        run: |
+          node -e '
+            const [a, b, c] = process.argv[1].split(".").map(Number);
+            if (a < 11 || (a === 11 && (b < 5 || (b === 5 && c < 1)))) {
+              console.error(`npm ${process.argv[1]} is older than 11.5.1, which trusted publishing needs`);
+              process.exit(1);
+            }
+          ' "$(npm --version)"
 
       - name: Build the sibling idenplane-js
         working-directory: packages/idenplane-js
@@ -106,5 +114,3 @@ jobs:
       - name: Publish to npm
         working-directory: ${{ steps.pkg.outputs.dir }}
         run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
