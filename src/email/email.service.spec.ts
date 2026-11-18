@@ -599,6 +599,65 @@ describe('EmailService', () => {
     });
   });
 
+  describe('sendSmtpTestMessage', () => {
+    const config = {
+      host: 'smtp.example.com',
+      port: 587,
+      user: 'mailer',
+      password: 'pw',
+      from: 'no@example.com',
+      secure: false,
+    };
+
+    it('sends through the given SMTP settings', async () => {
+      await service.sendSmtpTestMessage(config, 'to@test.com', 'Hi', '<p>x</p>');
+
+      expect(nodemailer.createTransport).toHaveBeenCalledWith(
+        expect.objectContaining({
+          host: 'smtp.example.com',
+          port: 587,
+          secure: false,
+          auth: { user: 'mailer', pass: 'pw' },
+        }),
+      );
+      expect(mockSendMail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          from: 'no@example.com',
+          to: 'to@test.com',
+          subject: 'Hi',
+        }),
+      );
+      expect(prisma.realm.findUnique).not.toHaveBeenCalled();
+    });
+
+    it('is a 400 without a host', async () => {
+      await expect(
+        service.sendSmtpTestMessage(
+          { ...config, host: '' },
+          'to@test.com',
+          'Hi',
+          '<p>x</p>',
+        ),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(mockSendMail).not.toHaveBeenCalled();
+    });
+
+    it('is a 502 without the server reply when sending fails', async () => {
+      mockSendMail.mockRejectedValue(
+        Object.assign(new Error('connect ECONNREFUSED 10.0.0.5:587'), {
+          code: 'ECONNECTION',
+        }),
+      );
+
+      const err = await service
+        .sendSmtpTestMessage(config, 'to@test.com', 'Hi', '<p>x</p>')
+        .catch((e) => e);
+
+      expect(err).toBeInstanceOf(EmailDeliveryException);
+      expect(err.message).not.toContain('10.0.0.5');
+    });
+  });
+
   describe('safeEmailDeliveryMessage', () => {
     it.each([
       [{ code: 'EENVELOPE' }, /refused the sender or recipient/],

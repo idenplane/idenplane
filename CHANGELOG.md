@@ -12,6 +12,9 @@ For full per-commit detail, see the [GitHub Releases](https://github.com/idenpla
 ### Security
 - **Back-channel logout pins its connection to the validated IP address.** DNS rebinding can no longer switch a checked hostname to a link-local or cloud-metadata address when the connection opens. Private and loopback relying parties remain supported, redirects are never followed, response bodies are discarded, and the 10-second deadline includes DNS resolution. `BACKCHANNEL_LOGOUT_ALLOW_LINK_LOCAL=true` remains an explicit override; it does not disable pinning.
 
+### Fixed
+- **The setup wizard's SMTP test sends a test email.** **Send Test** in the wizard's email step said "Test email sent successfully!", but `POST /setup-wizard/smtp/test` only checked that a host and port were saved and sent nothing, ignoring the `to` address. It now saves the form, then sends a test message to `to` through the saved SMTP settings. It answers like the realm SMTP test: `400` when nothing is saved, and `502` with a short reason when the server refuses the message or cannot be reached. The server's own reply is logged, not returned.
+
 ### Changed
 - **The npm packages are published with npm trusted publishing only.** The publish workflows no longer pass the `NPM_TOKEN` fallback, so every release is published through the workflow's GitHub OIDC identity, with provenance. They also use the npm that Node 24 bundles instead of installing an unpinned one. Patch releases `idenplane-sdk` 2.0.1, `idenplane-angular` 2.0.1, `idenplane-nextjs` 2.0.1, `idenplane-vue` 1.1.1, `idenplane-mcp` 0.1.1 and `idenplane-cli` 1.1.1 are the first published this way; `idenplane-mcp` 0.1.1 also carries its dependency updates since 0.1.0 (zod 4 among them) and reports its real version to MCP clients instead of a hard-coded `0.1.0`.
 

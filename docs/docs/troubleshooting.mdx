@@ -261,6 +261,7 @@ Two dedicated endpoints exist:
 
 - `POST /admin/realms/{realm}/smtp/test` — sends a fixed test message to the realm's sender address using the configured provider.
 - `POST /admin/realms/{realm}/email/test` with body `{ "to": "user@example.com" }` — renders the realm's actual `test-email` theme template and sends it to the given address.
+- During first-run setup, before the realm exists, the setup wizard's **Send Test** button (`POST /setup-wizard/smtp/test` with `{ "to": "user@example.com" }`) saves the form and sends a test message to that address through the SMTP settings saved in the wizard. It answers the same way; its log line starts `Test email for setup wizard failed`.
 
 Both return `200` only when the provider accepted the message. A realm without usable email settings gets `400`; a provider that refuses the message or cannot be reached gets `502` with a short reason (the credentials were rejected, the server could not be reached, an address was refused). The provider's own error is not returned; it is in the server log, on the line starting `Test email for realm "<realm>" failed`.
 
