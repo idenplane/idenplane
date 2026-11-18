@@ -53,6 +53,50 @@ describe('scimFilterToPrismaWhereUser', () => {
     });
   });
 
+  it('maps externalId exactly (caseExact)', () => {
+    expect(scimFilterToPrismaWhereUser('externalId eq "Obj-1"', REALM)).toEqual(
+      { scimExternalId: 'Obj-1', realmId: REALM },
+    );
+  });
+
+  it('joins comparisons with and/or, "and" binding tighter', () => {
+    expect(
+      scimFilterToPrismaWhereUser(
+        'userName eq "a" and active eq true or externalId eq "x"',
+        REALM,
+      ),
+    ).toEqual({
+      OR: [
+        {
+          AND: [
+            { username: { equals: 'a', mode: 'insensitive' } },
+            { enabled: true },
+          ],
+        },
+        { scimExternalId: 'x' },
+      ],
+      realmId: REALM,
+    });
+  });
+
+  it('does not split on "and" inside a quoted value', () => {
+    expect(
+      scimFilterToPrismaWhereUser('userName eq "salt and pepper"', REALM),
+    ).toEqual({
+      username: { equals: 'salt and pepper', mode: 'insensitive' },
+      realmId: REALM,
+    });
+  });
+
+  it('refuses more than 20 joined comparisons', () => {
+    const filter = Array.from({ length: 21 }, () => 'userName eq "a"').join(
+      ' or ',
+    );
+    expect(scimTypeOf(() => scimFilterToPrismaWhereUser(filter, REALM))).toBe(
+      'invalidFilter',
+    );
+  });
+
   it('cannot widen the query to another realm', () => {
     expect(
       scimTypeOf(() =>
@@ -66,7 +110,6 @@ describe('scimFilterToPrismaWhereUser', () => {
     'phoneNumber pr',
     'displayName eq "x"',
     'title eq "x"',
-    'externalId eq "x"',
     '__proto__ eq "x"',
   ])('refuses the unsupported attribute in %s', (filter) => {
     expect(scimTypeOf(() => scimFilterToPrismaWhereUser(filter, REALM))).toBe(
@@ -75,8 +118,13 @@ describe('scimFilterToPrismaWhereUser', () => {
   });
 
   it.each([
-    'userName eq "a" and active eq true',
     'userName eq jdoe',
+    '(userName eq "a")',
+    'emails[type eq "work"].value eq "a@example.com"',
+    'userName eq "a" and',
+    'and userName eq "a"',
+    'userName eq "a" and passwordHash pr',
+    'userName eq "unterminated',
     'active eq "yes"',
     'userName',
   ])('refuses the malformed or unsupported filter %s', (filter) => {
@@ -94,6 +142,24 @@ describe('scimFilterToPrismaWhereGroup', () => {
       name: { equals: 'Admins', mode: 'insensitive' },
       realmId: REALM,
     });
+  });
+
+  it('maps externalId and members (Entra ID membership checks)', () => {
+    expect(
+      scimFilterToPrismaWhereGroup('externalId eq "grp-1"', REALM),
+    ).toEqual({ scimExternalId: 'grp-1', realmId: REALM });
+    expect(
+      scimFilterToPrismaWhereGroup('id eq "g-1" and members eq "u-1"', REALM),
+    ).toEqual({
+      AND: [{ id: 'g-1' }, { userGroups: { some: { userId: 'u-1' } } }],
+      realmId: REALM,
+    });
+    expect(
+      scimFilterToPrismaWhereGroup('members.value eq "u-1"', REALM),
+    ).toMatchObject({ userGroups: { some: { userId: 'u-1' } } });
+    expect(
+      scimTypeOf(() => scimFilterToPrismaWhereGroup('members co "u"', REALM)),
+    ).toBe('invalidFilter');
   });
 
   it('refuses other attributes', () => {

@@ -272,6 +272,21 @@ describe('UsersService', () => {
       });
     });
 
+    it('signs the user out everywhere before deleting them, so their apps are told', async () => {
+      prisma.user.findFirst.mockResolvedValue(mockUser);
+      prisma.user.delete.mockResolvedValue(mockUser);
+
+      await service.remove(mockRealm, 'user-1');
+
+      expect(sessionsService.revokeAllUserSessions).toHaveBeenCalledWith(
+        mockRealm,
+        'user-1',
+      );
+      expect(
+        sessionsService.revokeAllUserSessions.mock.invocationCallOrder[0],
+      ).toBeLessThan(prisma.user.delete.mock.invocationCallOrder[0]);
+    });
+
     it('should throw NotFoundException when user does not exist', async () => {
       prisma.user.findFirst.mockResolvedValue(null);
 

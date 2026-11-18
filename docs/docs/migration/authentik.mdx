@@ -1,0 +1,569 @@
+---
+id: authentik
+title: Migrate from Authentik
+sidebar_position: 3
+description: Complete guide to migrating users, groups, OAuth2 providers and OIDC sources from Authentik to Idenplane
+---
+
+# Migrate from Authentik
+
+This guide covers migrating users (with their passwords), groups (with their hierarchy), OAuth2/OpenID providers and OpenID Connect sources from Authentik to Idenplane.
+
+Authentik has no "export everything" command. The import file is what Authentik's REST API (`/api/v3/`) returns for users, groups, OAuth2 providers and OAuth sources, side by side, plus the password hashes, which come from Authentik's database. The importer takes the API's responses as they are; it does not connect to Authentik itself.
+
+What is **not** imported: MFA devices, flows and stages, policies, property mappings, RBAC roles, applications, and every provider type other than OAuth2/OpenID. The report names what it left out. See [Known Limitations](#known-limitations).
+
+---
+
+## Prerequisites
+
+Before starting the migration:
+
+- [Idenplane installed](/getting-started/installation) and running
+- An Idenplane admin credential with **global** (super-admin) scope: the admin API key, or a super-admin console sign-in
+- An **existing realm** in Idenplane to import into (the target realm is **required**; the importer does not create it)
+- An Authentik API token for a user who can read users, groups, providers and sources (an Authentik superuser is simplest)
+- Read access to Authentik's PostgreSQL database, if you want to carry passwords over
+- `curl` and `jq`
+
+:::note Target Realm Required
+Like the Auth0 importer, the Authentik importer imports into a realm that already exists. If the realm is missing, the response is still `200`, nothing is imported, and the report has the error `Realm '<name>' does not exist. Create it first.`
+:::
+
+---
+
+## Exporting from Authentik
+
+### Step 1: Create an API Token
+
+In the Authentik admin interface:
+
+1. Go to **Directory** > **Tokens and App passwords**
+2. Click **Create**
+3. Give it an identifier, choose the **User** it acts as (a superuser), and set **Intent** to **API**
+4. Save, then use the row's copy action to copy the token
+
+Menu names have moved between Authentik releases; check your Authentik version's documentation if you don't find them. The token is sent as `Authorization: Bearer <token>`.
+
+```bash
+export AUTHENTIK_URL="https://authentik.example.com"
+export AUTHENTIK_TOKEN="<the token>"
+```
+
+### Step 2: Download Users, Groups, Providers and Sources
+
+Authentik's list endpoints are paginated: each response is `{"pagination": {...}, "results": [...]}`. The importer accepts a section either as one such response or as a plain list. When a list has more than one page, fetch every page and combine the `results`; this helper does that for one endpoint:
+
+```bash
+# fetch_all <api path> <output file>
+fetch_all() {
+  local path=$1 out=$2 page=1 dir
+  dir=$(mktemp -d)
+  while :; do
+    curl -fsS -H "Authorization: Bearer ${AUTHENTIK_TOKEN}" \
+      "${AUTHENTIK_URL}/api/v3/${path}?page=${page}&page_size=100" \
+      > "${dir}/page-${page}.json" || return 1
+    # Stop on the last page, an empty page, or after 1,000 pages
+    jq -e '(.pagination.total_pages != null
+            and .pagination.current >= .pagination.total_pages)
+           or (.results | length) == 0' "${dir}/page-${page}.json" > /dev/null && break
+    [ "${page}" -ge 1000 ] && break
+    page=$((page + 1))
+  done
+  jq -s 'map(.results) | add // []' "${dir}"/page-*.json > "${out}"
+}
+
+fetch_all core/users/       ak-users.json
+fetch_all core/groups/      ak-groups.json
+fetch_all providers/oauth2/ ak-providers.json
+fetch_all sources/oauth/    ak-sources.json
+```
+
+Nothing in these files needs converting: the importer reads Authentik's field shapes directly (group IDs in a user's `groups`, every form of `redirect_uris`, `email: ""` for users without an address).
+
+### Step 3: Export Password Hashes from the Database
+
+Authentik's REST API does not return password hashes. To carry passwords over, read them from Authentik's PostgreSQL database (table `authentik_core_user`). With Authentik's Docker Compose setup the database service is usually `postgresql` and the database user and name `authentik`; adjust to your deployment:
+
+```bash
+docker compose exec -T postgresql \
+  psql -U authentik -d authentik -At \
+  -c "SELECT coalesce(json_object_agg(username, password), '{}') FROM authentik_core_user" \
+  > ak-passwords.json
+```
+
+The result is one JSON object, `{"<username>": "<hash>", ...}`. Treat this file like a password database: keep it off shared disks and delete it after the import.
+
+Skip this step if you'd rather have every user set a new password; users are then imported without one (see [Users Without a Password](#users-without-a-password)).
+
+### Step 4: Assemble the Import File
+
+Put the four lists side by side, and add each user's password hash:
+
+```bash
+jq -n \
+  --slurpfile users ak-users.json \
+  --slurpfile groups ak-groups.json \
+  --slurpfile providers ak-providers.json \
+  --slurpfile sources ak-sources.json \
+  --slurpfile pw ak-passwords.json '
+  {
+    users: ($users[0] | map(
+      if $pw[0][.username] then .password = $pw[0][.username] else . end)),
+    groups: $groups[0],
+    providers: $providers[0],
+    sources: $sources[0]
+  }' > authentik-export.json
+```
+
+Without the database step, drop the `--slurpfile pw ...` line and use `users: $users[0]`.
+
+The importer reads these fields (every other field in the API's output is ignored):
+
+| Section | Fields read | From |
+|---------|-------------|------|
+| `users` | `username`, `email`, `name`, `is_active`, `type`, `groups` (group pks or names), `attributes`, `password` (Django hash) | `/api/v3/core/users/` + the database |
+| `groups` | `pk`, `name`, `parent`; `is_superuser`, `roles` and `attributes` are reported, not imported | `/api/v3/core/groups/` |
+| `providers` | `name`, `client_id`, `client_secret`, `client_type`, `redirect_uris` | `/api/v3/providers/oauth2/` |
+| `sources` | `name`, `slug`, `provider_type`, `authorization_url`, `access_token_url`, `profile_url`, `oidc_jwks_url`, `oidc_well_known_url`, `consumer_key`, `consumer_secret` | `/api/v3/sources/oauth/` |
+
+Each section may be left out. A section that is neither a list nor a paginated response with a `results` list is refused with `400`, naming the section.
+
+---
+
+## Importing to Idenplane
+
+The import runs through `POST /admin/migration/authentik`, the `idenplane migrate authentik` CLI command, or the **Migration Wizard** in the admin console.
+
+### Step 1: Create the Target Realm
+
+```bash
+curl -X POST "http://localhost:3000/admin/realms" \
+  -H "x-admin-api-key: ${ADMIN_API_KEY}" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "my-realm",
+    "displayName": "My Realm",
+    "enabled": true
+  }'
+```
+
+### Step 2: Dry Run
+
+Run the import with `dryRun: true` first. It reads the target realm, checks every entity against what already exists (usernames, e-mail addresses, group names, client IDs, identity provider aliases), and returns the same report as a real import, warnings included, without writing anything:
+
+```bash
+jq '{data: ., targetRealm: "my-realm", dryRun: true}' authentik-export.json > import-dry-run.json
+
+curl -X POST "http://localhost:3000/admin/migration/authentik" \
+  -H "x-admin-api-key: ${ADMIN_API_KEY}" \
+  -H "Content-Type: application/json" \
+  -d @import-dry-run.json
+```
+
+With the CLI (after `idenplane login`):
+
+```bash
+idenplane migrate authentik --file authentik-export.json --realm my-realm --dry-run
+```
+
+### Step 3: Real Import
+
+```bash
+jq '{data: ., targetRealm: "my-realm"}' authentik-export.json > import.json
+
+curl -X POST "http://localhost:3000/admin/migration/authentik" \
+  -H "x-admin-api-key: ${ADMIN_API_KEY}" \
+  -H "Content-Type: application/json" \
+  -d @import.json
+```
+
+or `idenplane migrate authentik --file authentik-export.json --realm my-realm` (add `--json` for the raw report).
+
+The importer works in this order: groups (parents before their sub-groups), then clients (from providers), then users and their group memberships, then identity providers (from sources). Each entity is written on its own; there is no transaction around the import, so a failure part-way leaves what was already created. Running the same file again is safe: anything that already exists is skipped and not changed. Users that already exist do not get group memberships unless you ask for it with `addMembershipsToExistingUsers` (see [Cut-Over](#8-cut-over)).
+
+### Using the Admin Console
+
+Super-admins can run the same import from **Migration Wizard** in the realm's menu (`/console/realms/{realm}/migration`): choose **Authentik**, upload `authentik-export.json`, review the dry-run report, then run the import. The wizard imports into the realm you opened it from, and always does a dry run first. It has no switch for `addMembershipsToExistingUsers`; use the API or the CLI for that.
+
+### Request Size Limit
+
+`POST /admin/migration/authentik` accepts a JSON body of up to **10 MB**; a larger one is refused with `413 Payload Too Large`. The request is processed in one go, so a very large file may also hit a gateway timeout. Authentik's user objects carry many fields the importer ignores, so a file reaches 10 MB sooner than the user count suggests. Split large exports:
+
+```bash
+# Batches of 5,000 users, each with all groups, providers and sources
+jq '.users |= .[0:5000]'     authentik-export.json > batch1.json
+jq '.users |= .[5000:10000]' authentik-export.json > batch2.json
+```
+
+Keep the **full** `groups` list in every batch: a membership is only created when the group is in the same file, otherwise it is skipped with a warning. Repeating groups, providers and sources in each batch is harmless; the second time they are skipped.
+
+---
+
+## Reviewing the Migration Report
+
+The response is a report:
+
+```json
+{
+  "source": "authentik",
+  "dryRun": false,
+  "startedAt": "2026-11-17T10:00:00.000Z",
+  "completedAt": "2026-11-17T10:00:06.000Z",
+  "summary": {
+    "realms": { "created": 0, "skipped": 0, "failed": 0 },
+    "users": { "created": 1180, "skipped": 3, "failed": 0 },
+    "clients": { "created": 6, "skipped": 0, "failed": 0 },
+    "roles": { "created": 0, "skipped": 0, "failed": 0 },
+    "groups": { "created": 14, "skipped": 1, "failed": 0 },
+    "scopes": { "created": 0, "skipped": 0, "failed": 0 },
+    "identityProviders": { "created": 1, "skipped": 1, "failed": 0 }
+  },
+  "errors": [],
+  "warnings": [
+    { "entity": "user", "message": "User 'ak-outpost-1a2b' was not imported: it is an Authentik internal_service_account (outposts and API integrations), not a person." },
+    { "entity": "user", "message": "User 'jdoe2': e-mail address jdoe@example.com already belongs to user 'jdoe'; imported without an e-mail address. Resolve the duplicate and set it." },
+    { "entity": "user", "message": "User 'svc-legacy': Authentik password hasher \"bcrypt_sha256\" is not supported (bcrypt over a SHA-256 of the password); imported without a password (the user must reset it)" },
+    { "entity": "client", "message": "Client 'Grafana': redirect URI 'https://grafana\\..*/login/generic_oauth' was not imported: it uses regex matching, and Idenplane matches redirect URIs exactly. Add the exact callback URLs to the client." },
+    { "entity": "group", "message": "Group 'authentik Admins': not imported: is_superuser (Authentik admin rights; grant Idenplane admin access separately)." },
+    { "entity": "identity_provider", "message": "Identity provider 'github' was not imported: source type github is not a generic OIDC source; only OIDC sources can be imported, recreate this one manually." },
+    { "entity": "identity_provider", "message": "Identity provider 'corporate-sso' has no client secret in the export; it was imported disabled. Set the secret and enable it." },
+    { "entity": "user", "message": "MFA devices (TOTP, WebAuthn, static codes, Duo, SMS) are not in the Authentik API export and were not imported; users who had one must enrol again." }
+  ]
+}
+```
+
+### Response Fields
+
+| Field | Description |
+|-------|-------------|
+| `summary.users` | Users created; skipped because the username already exists in the realm, or because the account is a service account (with a warning); failed (each has an entry in `errors`) |
+| `summary.groups` | Groups created; skipped because a group with that name already exists in the realm (the existing group is then used for memberships and as a parent) |
+| `summary.clients` | Clients created from OAuth2 providers; skipped because the client ID already exists |
+| `summary.identityProviders` | Identity providers created from sources; skipped because the alias already exists, or because the source can't be imported (with a warning) |
+| `summary.realms`, `summary.roles`, `summary.scopes` | Always `0`: the Authentik importer creates none of these |
+| `errors[]` | `{ entity, name, error }` for each entity that failed to be written, and `group_membership` entries for memberships that could not be added (the user itself still counts as created); the realm-missing error also appears here |
+| `warnings[]` | `{ entity, message }` for everything that needs your attention; see below |
+
+In a dry run, `created` means "would be created".
+
+### Warnings and What to Do
+
+| Warning | Meaning | What to do |
+|---------|---------|------------|
+| `User '<name>' was not imported: it is an Authentik service_account ...` | Service accounts, outpost accounts and Django's `AnonymousUser` are not people who sign in | For machine access, create a client with the `client_credentials` grant |
+| `e-mail address <address> already belongs to user '<name>'; imported without an e-mail address` | An e-mail address belongs to one user per realm in Idenplane; Authentik allows duplicates | Decide which account owns the address, then set it on the other user |
+| `User attribute '<name>' was not imported for N user(s): ...` (one line per attribute and reason) | Only attributes that match a custom attribute defined in the realm, with a single value of the right type, are imported | Define the custom attributes before the import, or set values afterwards |
+| `Authentik password hasher "<name>" is not supported; imported without a password` | The hash is in a format Idenplane can't verify (see [Password Migration](#password-migration)) | The user [sets a new password](#users-without-a-password) |
+| `Authentik marks this account as having no usable password` | Django's unusable-password marker, typically on a user who only signs in through a source | Nothing, if the user signs in through an identity provider; otherwise they set a password |
+| `Authentik PBKDF2 credential is malformed` / `bcrypt password hash is malformed` | The hash could not be parsed (or a PBKDF2 hash has more than 10,000,000 iterations) | The user sets a new password |
+| `references group '<name>', which was not in the export` | The user's `groups` names a group missing from `groups` | Add the group to the file and import again; the membership is then added |
+| `N existing user(s) were not given memberships (enable addMembershipsToExistingUsers to add them)` | Users with the same username already exist in the realm, and the file lists groups they are not in. By default the importer does not touch existing users | If those accounts are the same people, import again with `addMembershipsToExistingUsers` (see [Cut-Over](#8-cut-over)) |
+| `already existed and was not changed, except: added N group membership(s)` (`would add` in a dry run) | With `addMembershipsToExistingUsers`, the user was found by username and given the memberships it was missing; none are removed | Check that the account is the same person |
+| `Group '<name>': its parent group ... imported as a top-level group` | The parent is not in the file, or failed | Add the parent group, or move the group afterwards |
+| `Group '<name>': not imported: is_superuser / RBAC role(s) / attributes` | Authentik admin rights, RBAC roles and group attributes have no automatic equivalent | Recreate them as Idenplane roles and admin access |
+| `redirect URI '<url>' was not imported: it uses regex matching` | Idenplane matches redirect URIs exactly. In the newline-separated form of older Authentik versions, a line with regex-only characters (`*`, `^`, `$`, `(`, `\|`, ...) is treated the same way | Add the exact callback URLs to the client |
+| `Client '<name>' is confidential but has no client secret in the export; it was imported disabled` | A confidential client cannot authenticate without a secret | [Regenerate its secret](#2-review-each-client) and enable it |
+| `source type <type> is not a generic OIDC source` | Only `openidconnect` sources are imported | Create the identity provider by hand |
+| `neither its slug nor its name gives an alias` | The alias must be lowercase letters, digits and hyphens | Create the identity provider by hand |
+| `Source '<name>' skipped: alias '<alias>' already used by source '<other>' in this file` | Two sources give the same alias (same slug, or names that slugify the same) | Give one of them a different slug in the file, or create it by hand |
+| `has no usable clientId, authorizationUrl, tokenUrl` | The OIDC source has no consumer key, or no `http(s)` authorization or token URL | Fill them in and import again, or create the provider by hand |
+| `Identity provider '<alias>' has no client secret in the export; it was imported disabled` | The source's `consumer_secret` was not in the file (Authentik's API may not return it; check your version) | Set the secret on the identity provider and enable it |
+| `MFA devices ... were not imported` / `Links between users and their source accounts ... were not imported` | Neither is in the API export | See [MFA Re-enrolment](#6-mfa-re-enrolment) and [Check Identity Providers](#4-check-identity-providers) |
+
+---
+
+## Password Migration
+
+### What Is Carried Over
+
+Authentik stores passwords in Django's `<hasher>$<rest>` format. Users keep their Authentik password when the hash is one of these:
+
+| Authentik hash (`password` column) | Imported as | `passwordAlgorithm` |
+|------------------------------------|-------------|---------------------|
+| `pbkdf2_sha256$<iterations>$<salt>$<hash>` (Django's default hasher) | `$pbkdf2-sha256$i=<iterations>,l=32$<base64 salt>$<hash>` | `pbkdf2-sha256` |
+| `pbkdf2_sha1$<iterations>$<salt>$<hash>` | `$pbkdf2-sha1$i=<iterations>,l=20$<base64 salt>$<hash>` | `pbkdf2-sha1` |
+| `argon2$argon2id$v=19$m=...,t=...,p=...$<salt>$<hash>` (Django's Argon2 hasher; `argon2i` and `argon2d` too) | The PHC string after the `argon2` prefix | `argon2` |
+| `bcrypt$$2b$<cost>$...` (Django's bcrypt hasher) | The bcrypt string after the `bcrypt$` prefix | `bcrypt` |
+
+The iteration count stays with each hash, so hashes made under different Authentik versions all verify. To see which hashers your users have:
+
+```bash
+jq -r '.[] | split("$")[0]' ak-passwords.json | sort | uniq -c
+```
+
+Every other hasher is not carried over: the user is imported **without a password**, with a warning naming them. That includes `bcrypt_sha256` (bcrypt over a SHA-256 of the password, which Idenplane does not compute), `scrypt` and `md5`. Django's unusable-password marker (`!` and random characters) also becomes "no password", with its own warning. A user with no `password` in the file is imported without a password and without a warning.
+
+### Upgrade to Argon2id on First Sign-In
+
+Idenplane checks an imported hash wherever a password is checked: the hosted login page, the password grant, the device login page, the account console and the admin console sign-in. On the first successful check, the hash is replaced with an Argon2id hash with Idenplane's current parameters; the user notices nothing. Imported Argon2 hashes with weaker parameters, or Argon2i/Argon2d, are replaced the same way.
+
+### Users Without a Password
+
+Users imported without a password must set a new one: the user resets it at `/realms/{realm}/forgot-password` (the realm needs working e-mail), or an administrator sets one:
+
+```bash
+curl -X PUT "http://localhost:3000/admin/realms/my-realm/users/${USER_ID}/reset-password" \
+  -H "x-admin-api-key: ${ADMIN_API_KEY}" \
+  -H "Content-Type: application/json" \
+  -d '{"password": "<new password>"}'
+```
+
+---
+
+## Concept Mapping
+
+| Authentik | Idenplane | Notes |
+|-----------|-----------|-------|
+| Brand / tenant | Realm | Not imported; you choose the target realm |
+| User (`internal`, `external`) | User | `username` → username, `email` → email (`""` → none), `is_active` → enabled (default `true`) |
+| User `name` | `firstName` + `lastName` | Split at the first space: "Mary Ann Smith" becomes first name "Mary", last name "Ann Smith" |
+| User password (Django hash) | Password hash | See [Password Migration](#password-migration) |
+| User `attributes` | Custom attribute values | Only for attributes with the same name defined in the realm, single values that pass the attribute's type check |
+| User e-mail verification | `emailVerified` | Always `false` on import (see [Post-Migration Steps](#3-e-mail-verification)) |
+| Service account, outpost account (`service_account`, `internal_service_account`) | Not imported (reported) | Use an Idenplane client with the `client_credentials` grant (its service account) |
+| Group | Group | Name, and its `parent` as the parent group |
+| Group `is_superuser`, `roles`, `attributes` | Not imported (reported) | Recreate with Idenplane roles and admin access |
+| Group membership | Group membership | Added for new users; for users that already exist only with `addMembershipsToExistingUsers`; never removed |
+| RBAC role, permission | Not imported | Recreate with Idenplane roles and policies |
+| OAuth2/OpenID provider | Client | See below |
+| Provider `client_id` / `client_secret` | Client ID / hashed client secret | The existing secret keeps working; a confidential provider without one is imported disabled |
+| Provider `client_type` | Client type | `public` → `PUBLIC`, anything else (or missing) → `CONFIDENTIAL` |
+| Provider `redirect_uris` | Redirect URIs | Strict entries and plain URLs; regex entries are left out (reported) |
+| Application (slug, launch URL, policy bindings) | Not imported | The client carries the OAuth settings |
+| SAML, Proxy, LDAP, RADIUS, SCIM, RAC providers | Not imported | Recreate by hand where Idenplane has an equivalent (for example [forward auth](/guides/forward-auth)) |
+| OAuth source, type `openidconnect` | Identity provider, type `oidc` | Alias from `slug` (or the slugified `name`); display name from `name`; `consumer_key`/`consumer_secret` → client ID/secret; `authorization_url`, `access_token_url`, `profile_url`, `oidc_jwks_url` → authorization, token, user-info and JWKS URLs; issuer from `oidc_well_known_url` |
+| Other OAuth sources (`github`, `google`, `azuread`, ...) | Not imported (reported) | Create them by hand |
+| SAML, LDAP, Plex sources | Not imported | Not part of `/sources/oauth/` |
+| Flows, stages, prompts | Not imported | Configure Idenplane's login, registration and MFA settings |
+| Policies, property mappings, scope mappings | Not imported | Use Idenplane policies, scopes and protocol mappers |
+| MFA devices (TOTP, WebAuthn, static, Duo, SMS) | Not imported (reported once) | Users enrol again |
+| User–source connections | Not imported (reported once) | Linked again on first sign-in through the provider, with `trustEmail` |
+
+---
+
+## Post-Migration Steps
+
+### 1. Verify Counts
+
+```bash
+curl -X GET "http://localhost:3000/admin/realms/my-realm/users?limit=1" \
+  -H "x-admin-api-key: ${ADMIN_API_KEY}"
+
+curl -X GET "http://localhost:3000/admin/realms/my-realm/clients" \
+  -H "x-admin-api-key: ${ADMIN_API_KEY}"
+```
+
+### 2. Review Each Client
+
+Every imported client gets:
+
+- `redirectUris` from the provider's strict entries (regex entries are in the report's warnings);
+- `grantTypes`: `authorization_code` and `refresh_token`, whatever the provider allowed. Add `client_credentials` or the device code grant where an app needs them;
+- `webOrigins`: empty. Single-page apps that call the token endpoint from the browser need their origins added;
+- its Authentik client secret, stored hashed: confidential apps can keep using the secret they have.
+
+Update a client with `PUT` (or `PATCH`) `/admin/realms/{realm}/clients/{clientId}`:
+
+```bash
+curl -X PATCH "http://localhost:3000/admin/realms/my-realm/clients/my-app" \
+  -H "x-admin-api-key: ${ADMIN_API_KEY}" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "redirectUris": ["https://app.example.com/callback"],
+    "webOrigins": ["https://app.example.com"],
+    "grantTypes": ["authorization_code", "refresh_token", "client_credentials"]
+  }'
+```
+
+**Public clients must use PKCE.** Idenplane refuses an authorization request from a `PUBLIC` client without an S256 `code_challenge`. Authentik does not require it, so check every public app before the switch.
+
+**Confidential clients without a secret** are imported **disabled**. Give each one a secret, then enable it:
+
+```bash
+curl -X POST "http://localhost:3000/admin/realms/my-realm/clients/${CLIENT_ID}/regenerate-secret" \
+  -H "x-admin-api-key: ${ADMIN_API_KEY}"
+
+curl -X PATCH "http://localhost:3000/admin/realms/my-realm/clients/${CLIENT_ID}" \
+  -H "x-admin-api-key: ${ADMIN_API_KEY}" \
+  -H "Content-Type: application/json" \
+  -d '{"enabled": true}'
+```
+
+The response to `regenerate-secret` has the new `clientSecret`, shown only once. You can do the same for every client if you'd rather rotate secrets at migration.
+
+### 3. E-mail Verification
+
+Imported users have `emailVerified: false`. If the realm has `requireEmailVerification` on, every imported user with an e-mail address is stopped at sign-in until they verify it. Either leave the setting off (the default) until users have migrated, or mark the addresses you trust as verified:
+
+```bash
+curl -X PATCH "http://localhost:3000/admin/realms/my-realm/users/${USER_ID}" \
+  -H "x-admin-api-key: ${ADMIN_API_KEY}" \
+  -H "Content-Type: application/json" \
+  -d '{"emailVerified": true}'
+```
+
+### 4. Check Identity Providers
+
+Only `openidconnect` sources are imported, as `oidc` identity providers with `trustEmail` off. The alias is the source's slug (or, without one, its name made lower-case with hyphens), so the callback URL to register at the upstream provider is `https://<idenplane>/realms/{realm}/broker/{alias}/callback`. The importer carries over the client ID and secret, the authorization and token URLs, the user-info URL (`profile_url`) and JWKS URL (`oidc_jwks_url`), and an issuer taken from `oidc_well_known_url` (the URL without `/.well-known/openid-configuration`, so without any trailing slash the real issuer has; it is stored for reference, and the broker does not check tokens against it). Without a user-info URL, the broker derives one from the token URL by replacing `/token` with `/userinfo`, which fits some providers and not others. For each imported provider:
+
+1. Check the URLs, and set `userinfoUrl` if the source had no profile URL
+2. Set the client secret if it was imported disabled, then enable it
+3. Register the callback URL at the upstream provider
+4. Decide on `trustEmail` (below)
+
+```bash
+curl -X PUT "http://localhost:3000/admin/realms/my-realm/identity-providers/corporate-sso" \
+  -H "x-admin-api-key: ${ADMIN_API_KEY}" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "clientSecret": "<secret>",
+    "enabled": true
+  }'
+```
+
+Links between users and their source accounts are not imported. When a migrated user first signs in through a provider, Idenplane links the existing account only if the provider has `trustEmail` on and says the e-mail address is verified; otherwise the sign-in creates a **second** account. Turn `trustEmail` on for providers whose verified e-mail addresses you trust before users sign in through them. Sources of other types (GitHub, Google, Entra ID, ...) need to be created by hand; see [Identity Providers](/guides/authentication#identity-providers).
+
+### 5. Update Applications: Issuer and Endpoints
+
+Authentik gives each application its own issuer; Idenplane has one issuer per realm. Every app must be pointed at the new issuer, and tokens are signed with the realm's keys, so tokens issued by Authentik are not accepted by Idenplane (users sign in once more after the switch).
+
+| Authentik | Idenplane |
+|-----------|-----------|
+| Issuer `https://<authentik>/application/o/<app-slug>/` | `https://<idenplane>/realms/{realm}` |
+| `.../application/o/<app-slug>/.well-known/openid-configuration` | `.../realms/{realm}/.well-known/openid-configuration` |
+| `.../application/o/authorize/` | `.../realms/{realm}/protocol/openid-connect/auth` |
+| `.../application/o/token/` | `.../realms/{realm}/protocol/openid-connect/token` |
+| `.../application/o/userinfo/` | `.../realms/{realm}/protocol/openid-connect/userinfo` |
+| `.../application/o/<app-slug>/end-session/` | `.../realms/{realm}/protocol/openid-connect/logout` |
+
+Apps that use discovery only need the new issuer URL, client ID and secret. Take the exact endpoint URLs from the realm's discovery document.
+
+**The `sub` claim changes.** Idenplane users get new IDs, so the `sub` in Idenplane's tokens is not the `sub` Authentik issued. An app that stores users by `sub` must match them again by e-mail address or username (`preferred_username`) on their first sign-in, or be given a mapping from old to new IDs.
+
+### 6. MFA Re-enrolment
+
+MFA devices are not imported. Users who had TOTP, WebAuthn or other devices in Authentik sign in with their password only until they enrol again in Idenplane. If MFA must stay mandatory, turn on the realm's MFA requirement (`mfaRequired`, **Realm settings** > **Security**): on the hosted login page, a user without a second factor is then sent to the authenticator-app (TOTP) setup page after their password, and gets no session until they finish it. The password grant refuses such a user (`MFA setup required`) until they have enrolled through the browser. Tell users in advance.
+
+### 7. Test Sign-In
+
+Before switching any app, sign in with a few migrated users on the hosted login page (`/realms/{realm}/protocol/openid-connect/auth`) with a test client, including:
+
+- a user with a PBKDF2 hash and, if you have any, one with an Argon2 or bcrypt hash;
+- a user who was imported without a password: sign-in fails with the usual invalid-credentials message until they use **forgot password** or an administrator sets one;
+- a user who signs in through each imported identity provider;
+- a public client (PKCE) and a confidential client.
+
+The password grant verifies imported hashes too, so a client with `password` in its `grantTypes` can script the check:
+
+```bash
+curl -s -X POST "http://localhost:3000/realms/my-realm/protocol/openid-connect/token" \
+  -d grant_type=password -d client_id=test-client \
+  -d username=alice -d password='<alice password>'
+```
+
+### 8. Cut-Over
+
+A re-import never updates what already exists: changes made in Authentik after an import (a new password, a new e-mail address, a disabled account) only reach Idenplane for users that were not there yet. Group memberships of users that already exist are not changed either, unless you set `addMembershipsToExistingUsers: true` in the request (`--add-memberships-to-existing-users` in the CLI). The report then says how many existing users were left out.
+
+:::warning Adding memberships to existing users
+With `addMembershipsToExistingUsers`, a user that already exists gets the memberships from the file that they are missing (none are removed). The match is **by username only**: in a realm that already has users, a local account that only shares a username with an Authentik user gets that user's groups, and the roles of an Idenplane group with the same name (such as `admins`). Use it only when every existing account with a matching username is the same person, typically when re-importing into a realm the import itself filled. Run a dry run with the option first and read every `would add` line.
+:::
+
+For a clean switch:
+
+1. Rehearse: import into a scratch realm, test, then delete it (`DELETE /admin/realms/{realm}`)
+2. Announce a change freeze, or a short window where users cannot change their password in Authentik
+3. Export again (Steps 2-4), dry-run, and import into the empty production realm
+4. Switch apps to Idenplane's issuer (step 5), one at a time if you can
+5. Keep Authentik running, read-only, until every app has moved
+
+### 9. Rollback
+
+The import reads a file and never touches Authentik, so Authentik keeps working throughout. To roll back, point apps back at Authentik's issuer and endpoints. Changes users make in Idenplane after the switch (new passwords, new accounts, MFA enrolments) do not flow back. To start the Idenplane side over, delete the realm and import again; there is no "undo import" endpoint.
+
+---
+
+## Known Limitations
+
+- **Passwords:** Django's `pbkdf2_sha256`, `pbkdf2_sha1`, `argon2` and `bcrypt` hashers are carried over. `bcrypt_sha256`, `scrypt` and older hashers are not.
+- **Re-import:** an existing username, group name, client ID or identity provider alias is skipped and left unchanged. Missing group memberships of existing users are added only with `addMembershipsToExistingUsers`, matched by username.
+- **E-mail addresses:** one user per address in a realm. A later user with an address already taken is imported without it, with a warning.
+- **Users:** service and outpost accounts are skipped. `name` is split at the first space. `emailVerified` is always `false`. Attributes are imported only into custom attributes defined in the realm. `path`, avatars and source connections are not imported.
+- **Groups:** name and parent. `is_superuser`, RBAC roles and attributes are reported, not imported. An existing group of the same name is reused as is, parent included.
+- **Clients:** only OAuth2/OpenID providers. `grantTypes` is always `authorization_code` and `refresh_token`, `webOrigins` is empty, and regex redirect URIs are left out. Signing keys, token lifetimes, scope mappings, `sub` mode and consent settings are not imported.
+- **Identity providers:** only `openidconnect` sources; `trustEmail` is off; additional scopes and claim mappings are not imported.
+- **Not imported at all:** MFA devices and user-source links (each reported once), flows, stages, prompts, policies, property mappings, RBAC roles, applications, brands, outposts, SAML/Proxy/LDAP/RADIUS/SCIM providers, non-OAuth sources, sessions, tokens, consents.
+- **Size:** 10 MB request body; split larger exports.
+
+---
+
+## API Reference
+
+### POST /admin/migration/authentik
+
+Import Authentik REST API responses (users, groups, OAuth2 providers, OAuth sources) into an existing realm.
+
+**Request:**
+
+```json
+{
+  "data": {
+    "users": [/* /api/v3/core/users/ results, with password hashes */],
+    "groups": [/* /api/v3/core/groups/ results */],
+    "providers": [/* /api/v3/providers/oauth2/ results */],
+    "sources": [/* /api/v3/sources/oauth/ results */]
+  },
+  "dryRun": false,
+  "targetRealm": "my-realm"
+}
+```
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `data` | object | Yes | The four sections; each is optional, and each may be a list or a whole paginated API response |
+| `dryRun` | boolean | No | Report what would happen without writing anything (default: `false`) |
+| `addMembershipsToExistingUsers` | boolean | No | Also add the file's group memberships to users that already exist in the realm, matched by username (default: `false`; see [Cut-Over](#8-cut-over)) |
+| `targetRealm` | string | Yes | Name of an existing realm |
+
+**Responses:**
+
+| Status | Description |
+|--------|-------------|
+| 200 | The migration report. Also returned when the target realm doesn't exist; the error is in `errors` |
+| 400 | `data` missing or not an object, a section that is not a list (the message names it), or `targetRealm` missing |
+| 401 | Missing or invalid admin credentials |
+| 403 | The admin has no global (super-admin) scope |
+| 413 | Request body over 10 MB |
+
+The same endpoint family imports [Keycloak](./keycloak.mdx) (`/admin/migration/keycloak`), [Auth0](./auth0.mdx) (`/admin/migration/auth0`) and Zitadel (`/admin/migration/zitadel`).
+
+---
+
+## Next Steps
+
+<div style={{display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1rem', marginTop: '2rem'}}>
+
+[**Authentication Guide**](/guides/authentication)
+Learn about OAuth 2.0 and OIDC authentication flows
+
+[**Authorization Guide**](/guides/authorization)
+Understand RBAC and access control policies
+
+[**API Reference**](/api)
+Complete REST API documentation with examples
+
+[**React SDK**](/guides/sdks/react-sdk)
+Integrate Idenplane into your React application
+
+</div>
+
+---
+
+<p align="center">
+  <a href="https://idenplane.com">idenplane.com</a> &middot;
+  <a href="https://github.com/idenplane/idenplane">GitHub</a> &middot;
+  <a href="https://discord.gg/idenplane">Discord</a>
+</p>

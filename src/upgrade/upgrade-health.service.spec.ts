@@ -199,6 +199,106 @@ describe('UpgradeHealthService admin MFA checks', () => {
   });
 });
 
+describe('UpgradeHealthService.checkIdentityProviderTypes', () => {
+  let samlConfig: Record<string, unknown>;
+  beforeAll(async () => {
+    const { makeFakeIdp } =
+      await import('../broker/saml/__mocks__/fake-saml-idp.js');
+    samlConfig = {
+      entityId: 'https://sts.windows.net/tenant/',
+      ssoUrl: 'https://login.microsoftonline.com/tenant/saml2',
+      signingCertificates: [(await makeFakeIdp()).certificatePem],
+    };
+  });
+
+  const build = async (findMany: jest.Mock) => {
+    const { UpgradeHealthService } =
+      await import('./upgrade-health.service.js');
+    return new UpgradeHealthService({
+      identityProvider: { findMany },
+    } as never);
+  };
+  const idp = (
+    alias: string,
+    providerType: string,
+    enabled = true,
+    config: unknown = null,
+  ) => ({
+    alias,
+    providerType,
+    samlConfig: config,
+    enabled,
+    realm: { name: 'demo' },
+  });
+
+  it('passes for oidc and oauth2 in any case, and saml with a valid configuration', async () => {
+    const svc = await build(
+      jest
+        .fn()
+        .mockResolvedValue([
+          idp('google', 'oidc'),
+          idp('github', 'oauth2'),
+          idp('legacy', 'OIDC'),
+          idp('entra', 'saml', true, samlConfig),
+        ]),
+    );
+    await expect(svc.checkIdentityProviderTypes()).resolves.toMatchObject({
+      name: 'identity_provider_types',
+      status: 'pass',
+    });
+  });
+
+  it('reports SAML rows without a valid configuration for review, apart from unsupported types', async () => {
+    const svc = await build(
+      jest
+        .fn()
+        .mockResolvedValue([
+          idp('google', 'oidc'),
+          idp('entra', 'saml', true, samlConfig),
+          idp('corp-saml', 'saml'),
+          idp('half-done', 'saml', true, { entityId: 'x' }),
+          idp('upper', 'SAML', true, samlConfig),
+          idp('adfs', 'adfs', false),
+          idp('ldap', 'ldap'),
+        ]),
+    );
+    const check = await svc.checkIdentityProviderTypes();
+    expect(check.status).toBe('warn');
+    expect(check.message).toContain(
+      '4 SAML identity provider(s) need configuration review',
+    );
+    expect(check.message).toContain(
+      '1 identity provider(s) have a type the broker does not support',
+    );
+    expect(check.details).toBe(
+      'Needs configuration review: demo/corp-saml (saml, enabled), ' +
+        'demo/half-done (saml, enabled), demo/upper (SAML, enabled), ' +
+        'demo/adfs (adfs, disabled); ' +
+        'Unsupported type: demo/ldap (ldap, enabled)',
+    );
+    expect(check.details).not.toContain('google');
+    expect(check.details).not.toContain('entra');
+  });
+
+  it('a SAML-only install is not told its providers are unsupported', async () => {
+    const svc = await build(
+      jest.fn().mockResolvedValue([idp('corp-saml', 'saml')]),
+    );
+    const check = await svc.checkIdentityProviderTypes();
+    expect(check.status).toBe('warn');
+    expect(check.message).toContain('need configuration review');
+    expect(check.message).not.toContain('does not support');
+  });
+
+  it('only warns, never fails, when the query errors', async () => {
+    const svc = await build(jest.fn().mockRejectedValue(new Error('boom')));
+    await expect(svc.checkIdentityProviderTypes()).resolves.toMatchObject({
+      name: 'identity_provider_types',
+      status: 'warn',
+    });
+  });
+});
+
 describe('UpgradeHealthService.checkInvalidPolicies', () => {
   const build = async (findMany: jest.Mock) => {
     const { UpgradeHealthService } =

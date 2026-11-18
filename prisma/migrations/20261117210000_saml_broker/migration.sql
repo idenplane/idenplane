@@ -68,3 +68,12 @@ ALTER TABLE "saml_broker_requests" ADD CONSTRAINT "saml_broker_requests_identity
 -- AddForeignKey
 ALTER TABLE "saml_broker_assertion_ids" ADD CONSTRAINT "saml_broker_assertion_ids_identity_provider_id_fkey" FOREIGN KEY ("identity_provider_id") REFERENCES "identity_providers"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
+-- A `saml` row stored before 0.12.0 in another case ('SAML') gets the
+-- canonical type, so the console shows its SAML settings to complete. Its
+-- saml_config is left as it is: until it holds a valid configuration the
+-- broker refuses the sign-in, and GET /admin/upgrade/health
+-- (identity_provider_types) lists the row for review.
+UPDATE "identity_providers"
+   SET "provider_type" = 'saml'
+ WHERE lower(btrim("provider_type")) = 'saml'
+   AND "provider_type" <> 'saml';

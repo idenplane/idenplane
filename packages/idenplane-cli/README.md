@@ -130,6 +130,7 @@ Every command accepts `--json` to print machine-readable output instead of a tab
 | `migrate keycloak` | Import from a Keycloak realm export JSON |
 | `migrate auth0` | Import from an Auth0 Management API export |
 | `migrate zitadel` | Import from a hand-assembled Zitadel Management API export |
+| `migrate authentik` | Import from Authentik REST API responses (`--file <path> --realm <name>`; `--add-memberships-to-existing-users` to also update existing users' groups) |
 | `upgrade` | Run pre-flight checks then apply database migrations |
 | `upgrade:status` | View upgrade audit history |
 | `completion <shell>` | Output a shell completion script (bash, zsh, fish) |

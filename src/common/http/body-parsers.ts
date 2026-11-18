@@ -18,8 +18,11 @@ import { SCIM_CONTENT_TYPE } from '../../scim/types/scim.types.js';
  *
  * Size limits: {@link JSON_BODY_LIMIT} (body-parser's default) everywhere,
  * except the import endpoints ({@link isImportRequest}), which take whole
- * realm and user exports and get {@link IMPORT_JSON_BODY_LIMIT}. A larger
- * body is answered with 413. Keeping the small limit everywhere else bounds
+ * realm and user exports and get {@link IMPORT_JSON_BODY_LIMIT}, and SCIM
+ * ({@link isScimRequest}), which gets {@link SCIM_JSON_BODY_LIMIT}: a PUT
+ * of a group lists every member, and that is the `maxPayloadSize` the
+ * ServiceProviderConfig advertises for Bulk. A larger body is answered
+ * with 413. Keeping the small limit everywhere else bounds
  * what any unauthenticated request can make the server buffer and parse;
  * the import endpoints are admin-only, but the body is read before the
  * admin guard runs, so the larger limit is kept to these routes.
@@ -33,6 +36,17 @@ export const JSON_BODY_LIMIT = '100kb';
 
 /** The JSON body limit of realm import and user migration. */
 export const IMPORT_JSON_BODY_LIMIT = '10mb';
+
+/**
+ * The JSON body limit of the SCIM endpoints, in bytes; equal to the
+ * ServiceProviderConfig's `bulk.maxPayloadSize`.
+ */
+export const SCIM_JSON_BODY_LIMIT = 1024 * 1024;
+
+/** The SCIM endpoints, `/scim/v2/...`. */
+export function isScimRequest(req: Pick<Request, 'url'>): boolean {
+  return /^\/scim\/v2\//i.test(req.url ?? '');
+}
 
 /**
  * `POST /admin/realms/import` and `POST /admin/migration/{keycloak,auth0,
@@ -53,6 +67,7 @@ export function registerBodyParsers(app: NestExpressApplication): void {
     type: JSON_MEDIA_TYPES,
     limit: IMPORT_JSON_BODY_LIMIT,
   });
+  const scim = json({ type: JSON_MEDIA_TYPES, limit: SCIM_JSON_BODY_LIMIT });
   // The name is load-bearing: NestJS looks for a middleware called
   // `jsonParser` to decide not to add its own (see above).
   app.use(function jsonParser(
@@ -60,7 +75,12 @@ export function registerBodyParsers(app: NestExpressApplication): void {
     res: Response,
     next: NextFunction,
   ): void {
-    (isImportRequest(req) ? imports : standard)(req, res, next);
+    const parser = isImportRequest(req)
+      ? imports
+      : isScimRequest(req)
+        ? scim
+        : standard;
+    parser(req, res, next);
   });
 }
 

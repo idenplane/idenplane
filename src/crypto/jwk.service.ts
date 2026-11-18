@@ -80,11 +80,13 @@ export class JwkService {
     privateKeyPem: string,
     kid: string,
     expiresInSeconds: number,
+    /** The `typ` header: `JWT` unless the token type is explicitly typed. */
+    typ = 'JWT',
   ): Promise<string> {
     const privateKey = await this.privateKeys.get(privateKeyPem);
 
     return new SignJWT(payload)
-      .setProtectedHeader({ alg: 'RS256', kid, typ: 'JWT' })
+      .setProtectedHeader({ alg: 'RS256', kid, typ })
       .setIssuedAt()
       .setExpirationTime(`${expiresInSeconds}s`)
       .setJti(randomUUID())

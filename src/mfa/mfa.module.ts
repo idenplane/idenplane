@@ -5,11 +5,17 @@ import { MfaController } from './mfa.controller.js';
 import { StepUpCoreModule } from '../step-up/step-up-core.module.js';
 import { LoginCoreModule } from '../login/login-core.module.js';
 import { SessionsModule } from '../sessions/sessions.module.js';
+import { WebAuthnCoreModule } from '../webauthn/webauthn-core.module.js';
 
 @Global()
 @Module({
   controllers: [MfaController],
-  imports: [StepUpCoreModule, LoginCoreModule, SessionsModule],
+  imports: [
+    StepUpCoreModule,
+    LoginCoreModule,
+    SessionsModule,
+    WebAuthnCoreModule,
+  ],
   providers: [MfaService, RecoveryCodeRewrapService],
   exports: [MfaService],
 })

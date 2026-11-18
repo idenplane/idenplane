@@ -294,6 +294,11 @@ const sidebars: SidebarsConfig = {
           id: 'migration/auth0',
           label: 'From Auth0',
         },
+        {
+          type: 'doc',
+          id: 'migration/authentik',
+          label: 'From Authentik',
+        },
       ],
     },
     {

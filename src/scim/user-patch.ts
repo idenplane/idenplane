@@ -4,11 +4,25 @@
  * operation here, and writes the result once, so a request either applies
  * in full or not at all.
  *
- * Attributes of the SCIM User schema (core or enterprise extension) that
- * have no column here (displayName, title, phoneNumbers, department, ...)
- * are accepted and ignored, as POST and PUT ignore them: Entra ID and Okta
- * send them on every sync, and refusing them would fail the whole user.
- * Names outside the schema are refused with `invalidPath`.
+ * The same engine reads the body of a POST or PUT ({@link userStateFromResource}):
+ * a full representation is a path-less `replace` onto an empty user, so
+ * both verbs and PATCH read every attribute the same way.
+ *
+ * What is stored:
+ * - userName, active, name.givenName/familyName and the primary email, in
+ *   the user's own columns;
+ * - externalId, in its own column;
+ * - password, write-only: the service checks it against the realm policy,
+ *   hashes it, and never returns it;
+ * - displayName, nickName, profileUrl, title, userType, preferredLanguage,
+ *   locale, timezone, the other name parts, phoneNumbers, addresses and the
+ *   enterprise extension (employeeNumber, costCenter, organization,
+ *   division, department, manager), in the SCIM profile (see user-profile.ts).
+ *
+ * ims, photos, entitlements, roles and x509Certificates are accepted and
+ * ignored: Entra ID and Okta can send them, and refusing them would fail
+ * the whole user. In a PATCH, names outside the schema are refused with
+ * `invalidPath`; in a POST or PUT body they are ignored.
  */
 
 import { scimBadRequest } from './scim-errors.js';
@@ -19,7 +33,19 @@ import {
   matchesValueFilter,
   parsePatchPath,
   type ScimPatchPath,
+  type ScimValueFilter,
 } from './patch-request.js';
+import {
+  ENTERPRISE_STRINGS,
+  MAX_MULTI_VALUES,
+  MAX_PROFILE_TEXT,
+  MULTI_VALUED,
+  PROFILE_NAME_PARTS,
+  PROFILE_STRINGS,
+  type MultiValuedSpec,
+  type ScimMultiValue,
+  type ScimProfile,
+} from './user-profile.js';
 import type {
   NormalizedScimPatchOperation,
   ScimOperation,
@@ -32,52 +58,66 @@ export interface ScimUserState {
   firstName: string | null;
   lastName: string | null;
   enabled: boolean;
+  externalId?: string | null;
+  profile?: ScimProfile;
+  /**
+   * A new password this request sets. Write-only: never loaded from the
+   * user, never returned.
+   */
+  password?: string;
+}
+
+/** `patch`: a PATCH request. `resource`: the body of a POST or PUT. */
+type Mode = 'patch' | 'resource';
+
+interface Context {
+  state: Required<Omit<ScimUserState, 'password'>> &
+    Pick<ScimUserState, 'password'>;
+  mode: Mode;
 }
 
 /**
- * Core User attributes with no column here. Writes to them are accepted and
- * dropped. `phoneNumbers` is deliberately among them: `User.phoneNumber` is
- * the SMS MFA factor and must never be set by provisioning.
+ * Core User attributes with no storage here. Writes to them are accepted and
+ * dropped.
  */
-const UNSTORED_USER_ATTRIBUTES = new Set([
-  'externalid',
-  'displayname',
-  'nickname',
-  'profileurl',
-  'title',
-  'usertype',
-  'preferredlanguage',
-  'locale',
-  'timezone',
-  'password',
-  'phonenumbers',
+const IGNORED_USER_ATTRIBUTES = new Set([
   'ims',
   'photos',
-  'addresses',
   'entitlements',
   'roles',
   'x509certificates',
 ]);
 
-/** Sub-attributes of `name` that are not stored. */
-const UNSTORED_NAME_PARTS = new Set([
-  'formatted',
-  'middlename',
-  'honorificprefix',
-  'honorificsuffix',
-]);
-
 /** Attributes a client may not write (RFC 7643 readOnly). */
 const READ_ONLY_USER_ATTRIBUTES = new Set(['id', 'meta', 'groups']);
 
+/** Longest password accepted (as CryptoService.hashPassword). */
+export const MAX_SCIM_PASSWORD_LENGTH = 1024;
+
 const isPlainObject = (v: unknown): v is Record<string, unknown> =>
   typeof v === 'object' && v !== null && !Array.isArray(v);
+
+function contextFor(current: ScimUserState, mode: Mode): Context {
+  return {
+    mode,
+    state: {
+      username: current.username,
+      email: current.email,
+      firstName: current.firstName,
+      lastName: current.lastName,
+      enabled: current.enabled,
+      externalId: current.externalId ?? null,
+      profile: structuredClone(current.profile ?? {}),
+      password: current.password,
+    },
+  };
+}
 
 export function applyUserPatch(
   current: ScimUserState,
   operations: NormalizedScimPatchOperation[],
 ): ScimUserState {
-  const next: ScimUserState = { ...current };
+  const ctx = contextFor(current, 'patch');
   for (const operation of operations) {
     if (operation.path === undefined) {
       if (!isPlainObject(operation.value)) {
@@ -86,22 +126,61 @@ export function applyUserPatch(
           `An ${operation.op} without a "path" needs an object "value"`,
         );
       }
-      applyObject(next, operation.op, operation.value);
+      applyObject(ctx, operation.op, operation.value);
+    } else if (operation.path.toLowerCase() === ENTERPRISE_USER_URN) {
+      // The whole extension: `{"path": "urn:...:enterprise:2.0:User",
+      // "value": {"department": "..."}}`.
+      if (operation.op === 'remove') {
+        delete ctx.state.profile.enterprise;
+      } else if (isPlainObject(operation.value)) {
+        applyEnterpriseObject(ctx, operation.op, operation.value);
+      } else {
+        throw scimBadRequest(
+          'invalidValue',
+          'The enterprise extension must be an object',
+        );
+      }
     } else {
       applyPath(
-        next,
+        ctx,
         operation.op,
         parsePatchPath(operation.path),
         operation.value,
       );
     }
   }
-  return next;
+  return ctx.state;
+}
+
+/**
+ * The user a POST or PUT body describes. Every stored attribute the body
+ * leaves out is empty, as RFC 7644 §3.5.1 replaces; `base` gives the values
+ * that are kept when absent: `active` (a PUT without it does not disable
+ * the user) and `userName` (checked by the caller).
+ */
+export function userStateFromResource(
+  body: Record<string, unknown>,
+  base: { username: string; enabled: boolean },
+): ScimUserState {
+  const ctx = contextFor(
+    {
+      username: base.username,
+      enabled: base.enabled,
+      email: null,
+      firstName: null,
+      lastName: null,
+      externalId: null,
+      profile: {},
+    },
+    'resource',
+  );
+  applyObject(ctx, 'replace', body);
+  return ctx.state;
 }
 
 /** A no-path add/replace: each key is an attribute path. */
 function applyObject(
-  state: ScimUserState,
+  ctx: Context,
   op: ScimOperation,
   value: Record<string, unknown>,
 ): void {
@@ -111,24 +190,61 @@ function applyObject(
       // Read-only or structural; ignored in a value object, as in PUT.
       continue;
     }
-    if (lower === CORE_USER_URN && isPlainObject(val)) {
-      applyObject(state, op, val);
+    if (lower === CORE_USER_URN) {
+      if (isPlainObject(val)) applyObject(ctx, op, val);
       continue;
     }
-    if (lower === ENTERPRISE_USER_URN) continue;
-    applyPath(state, op, parsePatchPath(key), val);
+    if (lower === ENTERPRISE_USER_URN) {
+      if (isPlainObject(val)) applyEnterpriseObject(ctx, op, val);
+      else if (val !== null && val !== undefined) {
+        throw scimBadRequest(
+          'invalidValue',
+          'The enterprise extension must be an object',
+        );
+      }
+      continue;
+    }
+    let path: ScimPatchPath;
+    try {
+      path = parsePatchPath(key);
+    } catch (error) {
+      if (ctx.mode === 'resource') continue; // not an attribute name
+      throw error;
+    }
+    applyPath(ctx, op, path, val);
+  }
+}
+
+function applyEnterpriseObject(
+  ctx: Context,
+  op: ScimOperation,
+  value: Record<string, unknown>,
+): void {
+  for (const [key, val] of Object.entries(value)) {
+    let path: ScimPatchPath;
+    try {
+      path = parsePatchPath(key);
+    } catch (error) {
+      if (ctx.mode === 'resource') continue;
+      throw error;
+    }
+    applyEnterprise(ctx, op, { ...path, schema: ENTERPRISE_USER_URN }, val);
   }
 }
 
 function applyPath(
-  state: ScimUserState,
+  ctx: Context,
   op: ScimOperation,
   path: ScimPatchPath,
   value: unknown,
 ): void {
   if (path.schema !== undefined) {
-    if (path.schema === ENTERPRISE_USER_URN) return; // not stored
+    if (path.schema === ENTERPRISE_USER_URN) {
+      applyEnterprise(ctx, op, path, value);
+      return;
+    }
     if (path.schema !== CORE_USER_URN) {
+      if (ctx.mode === 'resource') return;
       throw scimBadRequest(
         'invalidPath',
         `Unknown schema in path: ${path.schema}`,
@@ -136,6 +252,7 @@ function applyPath(
     }
   }
 
+  const { state } = ctx;
   const { attribute } = path;
   if (attribute === 'emails') {
     applyEmails(state, op, path, value);
@@ -146,8 +263,37 @@ function applyPath(
     applyName(state, op, path.subAttribute, value);
     return;
   }
-  if (UNSTORED_USER_ATTRIBUTES.has(attribute)) return;
+  if (attribute === 'password') {
+    if (path.filter) throw notMultiValued('password');
+    if (path.subAttribute) throw noSubAttribute('password');
+    applyPassword(ctx, op, value);
+    return;
+  }
+  if (attribute === 'externalid') {
+    if (path.filter) throw notMultiValued('externalId');
+    if (path.subAttribute) throw noSubAttribute('externalId');
+    state.externalId =
+      op === 'remove' ? null : profileString(value, 'externalId');
+    return;
+  }
+  if (Object.hasOwn(PROFILE_STRINGS, attribute)) {
+    const name = PROFILE_STRINGS[attribute];
+    if (path.filter) throw notMultiValued(name);
+    if (path.subAttribute) throw noSubAttribute(name);
+    setOrDelete(
+      state.profile,
+      name,
+      op === 'remove' ? null : profileString(value, name),
+    );
+    return;
+  }
+  if (Object.hasOwn(MULTI_VALUED, attribute)) {
+    applyMultiValued(state.profile, MULTI_VALUED[attribute], op, path, value);
+    return;
+  }
+  if (IGNORED_USER_ATTRIBUTES.has(attribute)) return;
   if (READ_ONLY_USER_ATTRIBUTES.has(attribute)) {
+    if (ctx.mode === 'resource') return; // RFC 7644 §3.5.1: ignored in PUT
     throw scimBadRequest('mutability', `"${attribute}" is read-only`);
   }
   if (attribute === 'username' || attribute === 'active') {
@@ -160,6 +306,10 @@ function applyPath(
       );
     }
     if (attribute === 'active') {
+      // `"active": null` in a PUT body keeps the current state.
+      if (ctx.mode === 'resource' && (value === null || value === undefined)) {
+        return;
+      }
       state.enabled = coerceScimBoolean(value, 'active');
     } else {
       if (typeof value !== 'string' || value.trim() === '') {
@@ -172,14 +322,90 @@ function applyPath(
     }
     return;
   }
+  if (ctx.mode === 'resource') return;
   throw scimBadRequest(
     'invalidPath',
     `"${attribute}" is not an attribute of the User schema`,
   );
 }
 
+/**
+ * `password` (RFC 7643 §4.1.1): write-only. An add or replace sets it; it
+ * cannot be removed (that would leave a provisioned user without a way to
+ * sign in that the client chose). The value's strength is checked against
+ * the realm's policy by the service.
+ */
+function applyPassword(ctx: Context, op: ScimOperation, value: unknown): void {
+  if (op === 'remove') {
+    throw scimBadRequest('invalidValue', '"password" cannot be removed');
+  }
+  if (ctx.mode === 'resource' && (value === null || value === undefined)) {
+    return; // a PUT without a password keeps the current one
+  }
+  if (typeof value !== 'string' || value === '') {
+    throw scimBadRequest(
+      'invalidValue',
+      '"password" must be a non-empty string',
+    );
+  }
+  if (value.length > MAX_SCIM_PASSWORD_LENGTH) {
+    throw scimBadRequest(
+      'invalidValue',
+      `"password" must not exceed ${MAX_SCIM_PASSWORD_LENGTH} characters`,
+    );
+  }
+  ctx.state.password = value;
+}
+
+/** The enterprise extension (RFC 7643 §4.3). */
+function applyEnterprise(
+  ctx: Context,
+  op: ScimOperation,
+  path: ScimPatchPath,
+  value: unknown,
+): void {
+  const { profile } = ctx.state;
+  const enterprise = (profile.enterprise ??= {});
+  const { attribute } = path;
+  if (path.filter) throw notMultiValued(attribute);
+
+  if (Object.hasOwn(ENTERPRISE_STRINGS, attribute)) {
+    const name = ENTERPRISE_STRINGS[attribute];
+    if (path.subAttribute) throw noSubAttribute(name);
+    setOrDelete(
+      enterprise,
+      name,
+      op === 'remove' ? null : profileString(value, name),
+    );
+    return;
+  }
+  if (attribute === 'manager') {
+    // Standard: `{"value": "<id>"}`. Entra ID sends the id as a bare
+    // string, and an empty string or `{"value": ""}` to clear it.
+    if (path.subAttribute !== undefined && path.subAttribute !== 'value') {
+      if (path.subAttribute === 'displayname') return; // readOnly
+      throw scimBadRequest(
+        'invalidPath',
+        `"manager.${path.subAttribute}" is not supported`,
+      );
+    }
+    let id: unknown = value;
+    if (op === 'remove') id = null;
+    else if (path.subAttribute === undefined && isPlainObject(value)) {
+      id = value['value'];
+    }
+    setOrDelete(enterprise, 'manager', profileString(id, 'manager.value'));
+    return;
+  }
+  if (ctx.mode === 'resource') return;
+  throw scimBadRequest(
+    'invalidPath',
+    `"${attribute}" is not an attribute of the enterprise User extension`,
+  );
+}
+
 function applyName(
-  state: ScimUserState,
+  state: Context['state'],
   op: ScimOperation,
   sub: string | undefined,
   value: unknown,
@@ -191,8 +417,10 @@ function applyName(
   if (op === 'remove') {
     state.firstName = null;
     state.lastName = null;
+    delete state.profile.name;
     return;
   }
+  if (value === null || value === undefined) return;
   if (!isPlainObject(value)) {
     throw scimBadRequest('invalidValue', '"name" must be an object');
   }
@@ -202,14 +430,22 @@ function applyName(
   }
 }
 
-function setNamePart(state: ScimUserState, part: string, value: unknown) {
-  if (UNSTORED_NAME_PARTS.has(part)) return;
-  if (part !== 'givenname' && part !== 'familyname') {
+function setNamePart(state: Context['state'], part: string, value: unknown) {
+  if (part === 'givenname') {
+    state.firstName = optionalString(value, 'name.givenName');
+    return;
+  }
+  if (part === 'familyname') {
+    state.lastName = optionalString(value, 'name.familyName');
+    return;
+  }
+  if (!Object.hasOwn(PROFILE_NAME_PARTS, part)) {
     throw scimBadRequest('invalidPath', `"name.${part}" is not supported`);
   }
-  const text = optionalString(value, `name.${part}`);
-  if (part === 'givenname') state.firstName = text;
-  else state.lastName = text;
+  const name = PROFILE_NAME_PARTS[part];
+  const parts = (state.profile.name ??= {});
+  setOrDelete(parts, name, profileString(value, `name.${name}`));
+  if (Object.keys(parts).length === 0) delete state.profile.name;
 }
 
 /**
@@ -219,7 +455,7 @@ function setNamePart(state: ScimUserState, part: string, value: unknown) {
  * "home"`) targets a value this server does not keep and is ignored.
  */
 function applyEmails(
-  state: ScimUserState,
+  state: Context['state'],
   op: ScimOperation,
   path: ScimPatchPath,
   value: unknown,
@@ -271,6 +507,10 @@ function applyEmails(
     state.email = optionalString(value, 'emails.value');
     return;
   }
+  if (value === null || value === undefined) {
+    if (op === 'replace') state.email = null;
+    return;
+  }
   const list = Array.isArray(value) ? value : [value];
   if (list.length === 0) {
     if (op === 'replace') state.email = null;
@@ -291,6 +531,201 @@ function applyEmails(
       }
     }) ?? emails[0];
   state.email = optionalString(chosen['value'], 'emails.value');
+}
+
+/**
+ * `phoneNumbers` and `addresses`: lists of values, each told apart by its
+ * `type`. The forms clients send:
+ *   replace  path "phoneNumbers", value [...]                   the list
+ *   add      path "phoneNumbers", value [...]                   adds, or
+ *            updates the value of the same type
+ *   add      path 'phoneNumbers[type eq "work"].value'          (Entra ID)
+ *            sets that value, creating the work number if there is none
+ *   remove   path 'phoneNumbers[type eq "work"]'                drops it
+ *   remove   path "phoneNumbers"                                drops all
+ */
+function applyMultiValued(
+  profile: ScimProfile,
+  spec: MultiValuedSpec,
+  op: ScimOperation,
+  path: ScimPatchPath,
+  value: unknown,
+): void {
+  const label = spec.key;
+  let list: ScimMultiValue[] = (profile[spec.key] ?? []).map((v) => ({
+    ...v,
+  }));
+  const sub =
+    path.subAttribute === undefined
+      ? undefined
+      : canonicalSub(spec, path.subAttribute, label);
+
+  if (path.filter) {
+    const filter = path.filter;
+    if (!Object.hasOwn(spec.subs, filter.attribute)) {
+      throw scimBadRequest(
+        'invalidPath',
+        `Cannot filter ${label} on "${filter.attribute}"`,
+      );
+    }
+    const matches = list.filter((item) => matchesItem(filter, item));
+    if (op === 'remove') {
+      if (sub) for (const item of matches) delete item[sub];
+      else list = list.filter((item) => !matches.includes(item));
+    } else {
+      let targets = matches;
+      if (targets.length === 0) {
+        if (
+          filter.operator !== 'eq' ||
+          filter.value === null ||
+          filter.value === undefined
+        ) {
+          throw scimBadRequest(
+            'noTarget',
+            `No value of ${label} matches the filter`,
+          );
+        }
+        // Entra ID writes `phoneNumbers[type eq "work"].value` for a number
+        // the user does not have yet: the filter describes the new value.
+        const created: ScimMultiValue = {
+          [spec.subs[filter.attribute]]:
+            typeof filter.value === 'boolean'
+              ? filter.value
+              : String(filter.value),
+        };
+        list.push(created);
+        targets = [created];
+      }
+      for (const item of targets) {
+        if (sub) setSub(item, sub, value, label);
+        else {
+          if (!isPlainObject(value)) {
+            throw scimBadRequest(
+              'invalidValue',
+              `A value of ${label} must be an object`,
+            );
+          }
+          Object.assign(item, normalizeItem(spec, value, label));
+        }
+      }
+    }
+  } else if (sub) {
+    if (op === 'remove') for (const item of list) delete item[sub];
+    else {
+      if (list.length === 0) list.push({});
+      for (const item of list) setSub(item, sub, value, label);
+    }
+  } else if (op === 'remove' || value === null || value === undefined) {
+    list = [];
+  } else {
+    const items = (Array.isArray(value) ? value : [value]).map((v) => {
+      if (!isPlainObject(v)) {
+        throw scimBadRequest(
+          'invalidValue',
+          `Each value of ${label} must be an object`,
+        );
+      }
+      return normalizeItem(spec, v, label);
+    });
+    if (op === 'replace') list = items;
+    else {
+      for (const item of items) {
+        const type = typeof item['type'] === 'string' ? item['type'] : null;
+        const same =
+          type === null
+            ? -1
+            : list.findIndex(
+                (v) =>
+                  typeof v['type'] === 'string' &&
+                  v['type'].toLowerCase() === type.toLowerCase(),
+              );
+        if (same === -1) list.push(item);
+        else list[same] = { ...list[same], ...item };
+      }
+    }
+  }
+
+  list = list.filter(hasContent);
+  if (list.length > MAX_MULTI_VALUES) {
+    throw scimBadRequest(
+      'invalidValue',
+      `At most ${MAX_MULTI_VALUES} values of ${label} are kept`,
+    );
+  }
+  if (list.length === 0) delete profile[spec.key];
+  else profile[spec.key] = list;
+}
+
+function canonicalSub(spec: MultiValuedSpec, sub: string, label: string) {
+  if (!Object.hasOwn(spec.subs, sub)) {
+    throw scimBadRequest('invalidPath', `"${label}.${sub}" is not supported`);
+  }
+  return spec.subs[sub];
+}
+
+/** A filter on a stored value; names in the filter are lowercased. */
+function matchesItem(filter: ScimValueFilter, item: ScimMultiValue): boolean {
+  const lowered: Record<string, string | boolean> = {};
+  for (const [k, v] of Object.entries(item)) lowered[k.toLowerCase()] = v;
+  return matchesValueFilter(filter, lowered);
+}
+
+function normalizeItem(
+  spec: MultiValuedSpec,
+  raw: Record<string, unknown>,
+  label: string,
+): ScimMultiValue {
+  const item: ScimMultiValue = {};
+  for (const [key, val] of Object.entries(raw)) {
+    const lower = key.toLowerCase();
+    if (!Object.hasOwn(spec.subs, lower)) continue; // e.g. "display" on addresses
+    setSub(item, spec.subs[lower], val, label);
+  }
+  return item;
+}
+
+function setSub(
+  item: ScimMultiValue,
+  sub: string,
+  value: unknown,
+  label: string,
+): void {
+  if (value === null || value === undefined || value === '') {
+    delete item[sub];
+    return;
+  }
+  if (sub === 'primary') {
+    item[sub] = coerceScimBoolean(value, `${label}.primary`);
+    return;
+  }
+  const text = profileString(value, `${label}.${sub}`);
+  if (text === null) delete item[sub];
+  else item[sub] = text;
+}
+
+/** A value with more than its `type`/`primary` flags. */
+const hasContent = (item: ScimMultiValue) =>
+  Object.keys(item).some((k) => k !== 'type' && k !== 'primary');
+
+function setOrDelete<T extends object>(
+  target: T,
+  key: keyof T,
+  value: string | null,
+): void {
+  if (value === null) delete target[key];
+  else (target as Record<keyof T, unknown>)[key] = value;
+}
+
+/** A profile string: null for null/empty, capped in length. */
+function profileString(value: unknown, attribute: string): string | null {
+  const text = optionalString(value, attribute);
+  if (text !== null && text.length > MAX_PROFILE_TEXT) {
+    throw scimBadRequest(
+      'invalidValue',
+      `"${attribute}" must not exceed ${MAX_PROFILE_TEXT} characters`,
+    );
+  }
+  return text;
 }
 
 function optionalString(value: unknown, attribute: string): string | null {

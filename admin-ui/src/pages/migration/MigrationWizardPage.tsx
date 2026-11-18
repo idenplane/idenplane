@@ -26,7 +26,7 @@ const SOURCES: { id: MigrationSource; name: string; description: string }[] = [
   {
     id: 'authentik',
     name: 'Authentik',
-    description: 'Import from a hand-assembled Authentik REST API export (Users/Groups/Providers/Sources).',
+    description: 'Import Authentik REST API responses (users, groups, OAuth2 providers, OAuth sources) in one JSON file.',
   },
 ];
 

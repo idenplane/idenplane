@@ -354,6 +354,8 @@ export const EXPORT_MODELS = {
     excluded: {
       id: ID,
       realmId: REALM_ID,
+      scimExternalId:
+        "SCIM provisioning state: the IdP's id for the group, written again by its next sync",
       createdAt: CREATED,
       updatedAt: UPDATED,
     },
@@ -826,6 +828,10 @@ export const EXPORT_MODELS = {
       phoneNumber: 'enrolled SMS factor (encrypted); users enrol again',
       passwordChangedAt: 'credential state',
       lockedUntil: 'brute-force runtime state',
+      scimExternalId:
+        "SCIM provisioning state: the IdP's id for the user, written again by its next sync",
+      scimProfile:
+        'SCIM provisioning state (profile attributes as the IdP sent them), written again by its next sync',
       createdAt: CREATED,
       updatedAt: UPDATED,
     },

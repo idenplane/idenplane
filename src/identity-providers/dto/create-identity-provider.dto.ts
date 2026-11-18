@@ -19,10 +19,13 @@ export const namesSaml = (o: { providerType?: unknown }): boolean =>
 const oauthField = (o: CreateIdentityProviderDto, value: unknown): boolean =>
   !namesSaml(o) || value !== undefined;
 
+/** The alias rule: it is a path segment of the broker's callback URL. */
+export const IDP_ALIAS_PATTERN = /^[a-z0-9-]+$/;
+
 export class CreateIdentityProviderDto {
   @ApiProperty()
   @IsString()
-  @Matches(/^[a-z0-9-]+$/, {
+  @Matches(IDP_ALIAS_PATTERN, {
     message: 'alias must be lowercase alphanumeric with hyphens',
   })
   alias!: string;

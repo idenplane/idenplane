@@ -227,7 +227,7 @@ Each table lists the STRIDE category (S spoofing, T tampering, R repudiation, I 
 | | Threat | Mitigation | Residual risk |
 |---|---|---|---|
 | E | Malicious plugin | Plugins load only from the local `plugins/` directory and installed packages; admin plugin routes are super-admin only | A plugin runs with full server privileges; there is no sandbox |
-| S | SSRF through admin- or client-configured URLs | Webhooks and the SMS webhook use `safe-http-client` (DNS pinning, private ranges blocked); back-channel logout and audit streams no longer follow redirects | Back-channel logout, audit streams and broker calls do not use the SSRF guard |
+| S | SSRF through admin- or client-configured URLs | Webhooks and the SMS webhook use `safe-http-client` (DNS pinning, private ranges blocked); back-channel logout and audit streams no longer follow redirects. Back-channel logout (0.13.0) refuses link-local and cloud-metadata targets, by literal and by every resolved address (`assertNotLinkLocalTarget`; opt-in `BACKCHANNEL_LOGOUT_ALLOW_LINK_LOCAL`). It deliberately allows private and loopback addresses: an admin-registered RP on the operator's network is legitimate | Back-channel logout can reach private and loopback hosts, and is not DNS-pinned, so DNS rebinding can still reach the metadata address. Audit streams and broker calls do not use the SSRF guard |
 | T | Forged webhook deliveries | HMAC-SHA256 signatures; secrets encrypted at rest | — |
 | I | Event data to third parties | Admin-event redaction of sensitive fields | Receivers get PII by design |
 | I | User IPs to a geo-IP service | Off unless adaptive auth or continuous verification is on | Sent over plain HTTP to ip-api.com |
@@ -248,5 +248,6 @@ The highest residual risks, all tracked in the [ASVS assessment](./asvs-assessme
 1. Installs upgraded to 0.11.0 that have not turned on the admin MFA requirement. `/admin/upgrade/health` warns and names the admins without a second factor.
 2. Clients still on the legacy wildcard redirect URI opt-in (`allowInsecureWildcardRedirectUris`, set by the 0.11.0 upgrade on clients that had `/*` entries). `/admin/upgrade/health` lists them.
 3. Realms created before 0.10.0 with brute-force protection or events still off. `/admin/upgrade/health` lists them.
-4. SSRF guard not applied to every outbound call; geo-IP over plain HTTP.
-5. The SSO idle timeout is off by default (`ssoSessionIdleTimeout`, since 0.12.0), and offline sessions have none: an offline token lives for `offlineTokenLifespan` from sign-in.
+4. Identity providers stored before 0.12.0 with a type the broker does not use (SAML, others). `/admin/upgrade/health` lists them (`identity_provider_types`); an enabled one shows a login button that cannot complete a sign-in.
+5. SSRF guard not applied to every outbound call; geo-IP over plain HTTP.
+6. The SSO idle timeout is off by default (`ssoSessionIdleTimeout`, since 0.12.0), and offline sessions have none: an offline token lives for `offlineTokenLifespan` from sign-in.

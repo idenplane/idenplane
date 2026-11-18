@@ -3,8 +3,10 @@ import {
   IMPORT_JSON_BODY_LIMIT,
   JSON_BODY_LIMIT,
   SAML_ACS_FORM_BODY_LIMIT,
+  SCIM_JSON_BODY_LIMIT,
   isImportRequest,
   isSamlAcsRequest,
+  isScimRequest,
 } from './body-parsers.js';
 
 describe('isImportRequest', () => {
@@ -64,5 +66,26 @@ describe('isSamlAcsRequest', () => {
   it('the form limits cover a maximal SAMLResponse only on the ACS', () => {
     expect(FORM_BODY_LIMIT).toBe('100kb');
     expect(SAML_ACS_FORM_BODY_LIMIT).toBe('600kb');
+  });
+});
+
+describe('isScimRequest', () => {
+  it.each([
+    '/scim/v2/acme/Groups/g-1',
+    '/scim/v2/acme/Bulk',
+    '/SCIM/v2/acme/Users?x=1',
+  ])('%s gets the SCIM limit', (url) => {
+    expect(isScimRequest({ url })).toBe(true);
+  });
+
+  it.each(['/scim', '/admin/realms/acme/scim/tokens', '/x/scim/v2/acme/Users'])(
+    '%s keeps the default limit',
+    (url) => {
+      expect(isScimRequest({ url })).toBe(false);
+    },
+  );
+
+  it('is 1 MiB, the Bulk maxPayloadSize', () => {
+    expect(SCIM_JSON_BODY_LIMIT).toBe(1024 * 1024);
   });
 });

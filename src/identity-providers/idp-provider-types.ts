@@ -23,6 +23,36 @@ export function supportedIdpProviderType(
     : null;
 }
 
+/** A provider type that names SAML (Keycloak `saml`, Auth0 `samlp`/`adfs`). */
+const SAML_TYPE = /saml|adfs/i;
+
+/**
+ * What a stored `providerType` means for the broker:
+ * - `supported`: `oidc`, `oauth2` or `saml`, in any case (`type` is the
+ *   canonical, lower-case value). A `saml` one still needs a valid
+ *   `samlConfig`, which the upgrade health check checks separately;
+ * - `saml`: another name for SAML (Auth0 `samlp`, `adfs`) that the broker
+ *   does not take as is: the row needs its type set to `saml` and its SAML
+ *   configuration reviewed;
+ * - `unsupported`: anything else.
+ *
+ * The upgrade health check (`identity_provider_types`) reports by this, so
+ * a change to what the broker accepts is made here.
+ */
+export type IdpProviderTypeClass =
+  | { kind: 'supported'; type: IdpProviderType }
+  | { kind: 'saml' }
+  | { kind: 'unsupported' };
+
+export function classifyIdpProviderType(value: unknown): IdpProviderTypeClass {
+  const type = supportedIdpProviderType(value);
+  if (type) return { kind: 'supported', type };
+  if (typeof value === 'string' && SAML_TYPE.test(value)) {
+    return { kind: 'saml' };
+  }
+  return { kind: 'unsupported' };
+}
+
 /** Why an identity provider of type `value` cannot be imported. */
 export function unsupportedIdpTypeReason(value: unknown): string {
   const shown = typeof value === 'string' && value ? value : '(none)';

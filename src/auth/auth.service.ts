@@ -52,6 +52,8 @@ import {
   sessionExpiresAt,
   type SessionLifetimeSettings,
 } from '../sessions/session-lifetime.js';
+import { deleteSessionsReturning } from '../sessions/delete-sessions.js';
+import { BackchannelLogoutService } from '../tokens/backchannel-logout.service.js';
 
 export interface TokenResponse {
   access_token: string;
@@ -261,6 +263,7 @@ export class AuthService {
     @Optional() private readonly stepUpService?: StepUpService,
     @Optional() private readonly pluginManager?: PluginManagerService,
     @Optional() private readonly smsOtp?: SmsOtpService,
+    @Optional() private readonly backchannelLogout?: BackchannelLogoutService,
   ) {}
 
   /**
@@ -824,15 +827,20 @@ export class AuthService {
    * the revocation. Ending the session closes that window: the winner's
    * insert then fails (the session is gone, which issueTokens reports as
    * invalid_grant), or, if it already ran, the token goes with the session.
+   *
+   * The session's clients get a back-channel logout token: a reuse is a
+   * security event, and an RP still holding the session must end it too.
    */
   private async endSessionOnRefreshTokenReuse(
+    realm: Realm,
     sessionId: string,
   ): Promise<void> {
     await this.prisma.refreshToken.updateMany({
       where: { sessionId },
       data: { revoked: true },
     });
-    await this.prisma.session.deleteMany({ where: { id: sessionId } });
+    const ended = await deleteSessionsReturning(this.prisma, [sessionId]);
+    this.backchannelLogout?.notifySessionsEnded(realm, ended);
   }
 
   private async handleRefreshTokenGrant(
@@ -879,7 +887,7 @@ export class AuthService {
       storedToken.session.expiresAt < now
     ) {
       if (storedToken?.revoked && storedToken.session) {
-        await this.endSessionOnRefreshTokenReuse(storedToken.sessionId);
+        await this.endSessionOnRefreshTokenReuse(realm, storedToken.sessionId);
       }
       void this.eventsService.recordLoginEvent({
         realmId: realm.id,
@@ -974,7 +982,7 @@ export class AuthService {
       data: { revoked: true },
     });
     if (count === 0) {
-      await this.endSessionOnRefreshTokenReuse(storedToken.sessionId);
+      await this.endSessionOnRefreshTokenReuse(realm, storedToken.sessionId);
       void this.eventsService.recordLoginEvent({
         realmId: realm.id,
         type: LoginEventType.TOKEN_REFRESH_ERROR,
@@ -1081,7 +1089,7 @@ export class AuthService {
         err !== null &&
         (err as { code?: string }).code === 'P2025';
       if (isPrismaNotFound) {
-        await this.revokeReplayedCode(code, client, code_verifier);
+        await this.revokeReplayedCode(realm, code, client, code_verifier);
         throw new OAuthTokenError(
           'invalid_grant',
           'Invalid or expired authorization code',
@@ -1926,6 +1934,7 @@ export class AuthService {
    * anyone end the user's session.
    */
   private async revokeReplayedCode(
+    realm: Realm,
     code: string,
     client: { id: string; clientType: string },
     codeVerifier: string | undefined,
@@ -1953,9 +1962,13 @@ export class AuthService {
         ) === replayed.codeChallenge;
       if (!proven) return;
     }
-    await this.prisma.session.deleteMany({
-      where: { id: replayed.sessionId },
-    });
+    const ended = await deleteSessionsReturning(this.prisma, [
+      replayed.sessionId,
+    ]);
+    // The client that replayed the code is told too: it may be the
+    // attacker's copy of the client, but the genuine one shares its
+    // registration and must drop the session.
+    this.backchannelLogout?.notifySessionsEnded(realm, ended);
     this.logger.warn(
       `Authorization code replayed by client ${client.id}; revoked the tokens issued from it`,
     );
@@ -2024,9 +2037,9 @@ export class AuthService {
       // PostgreSQL broke by aborting this side) must not fail the sign-in;
       // the user's next sign-in trims again.
       try {
-        await this.prisma.session.deleteMany({
-          where: { id: { in: evictIds } },
-        });
+        const evicted = await deleteSessionsReturning(this.prisma, evictIds);
+        // The clients holding an evicted session still think it is live.
+        this.backchannelLogout?.notifySessionsEnded(realm, evicted);
       } catch (err) {
         this.logger.warn(
           `Could not evict ${evictIds.length} old session(s) of user ${session.data.userId}: ${String(err)}`,

@@ -11,7 +11,7 @@ import {
 } from '@nestjs/common';
 import { ApiExcludeController } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
-import type { Realm } from '@prisma/client';
+import type { Realm, User } from '@prisma/client';
 import { RealmGuard } from '../common/guards/realm.guard.js';
 import { CurrentRealm } from '../common/decorators/current-realm.decorator.js';
 import { Public } from '../common/decorators/public.decorator.js';
@@ -42,6 +42,13 @@ import { escapeHtml } from '../common/utils/html-escape.util.js';
 import { resolveClientIp } from '../common/utils/proxy-ip.util.js';
 import { SESSION_COOKIE } from '../authn-core/cookies.js';
 import { SessionsService } from '../sessions/sessions.service.js';
+import { BruteForceService } from '../brute-force/brute-force.service.js';
+
+/** The outcome of re-entering the current password on the account page. */
+type CurrentPasswordCheck = 'ok' | 'wrong' | 'locked';
+
+const ACCOUNT_LOCKED_MESSAGE =
+  'Your account is temporarily locked after too many failed attempts. Please try again later.';
 
 @ApiExcludeController()
 @Controller('realms/:realmName/account')
@@ -65,7 +72,36 @@ export class AccountController {
     private readonly emailService: EmailService,
     private readonly smsOtp: SmsOtpService,
     private readonly sessions: SessionsService,
+    private readonly bruteForce: BruteForceService,
   ) {}
+
+  /**
+   * Checks the password a signed-in user re-enters to confirm a sensitive
+   * change (new password, adding or removing a phone, turning off the
+   * authenticator app, requesting or cancelling account deletion).
+   *
+   * It counts exactly like a sign-in, so a stolen session cannot be used to
+   * guess the password at the IP rate limit alone: while the account is
+   * locked the password is not checked at all; a wrong password is a login
+   * failure towards the realm's lockout; a right one clears the failures,
+   * as a completed sign-in does. An empty field is not a guess and is not
+   * counted.
+   */
+  private async checkCurrentPassword(
+    realm: Realm,
+    user: User,
+    password: string | undefined,
+    req: Request,
+  ): Promise<CurrentPasswordCheck> {
+    if (this.bruteForce.checkLocked(realm, user).locked) return 'locked';
+    if (!password || !user.passwordHash) return 'wrong';
+    if (!(await this.passwords.verifyUserPassword(user, password))) {
+      await this.bruteForce.recordFailure(realm, user.id, resolveClientIp(req));
+      return 'wrong';
+    }
+    await this.bruteForce.resetFailures(realm.id, user.id);
+    return 'ok';
+  }
 
   /** Set a fresh CSRF cookie and return the token for embedding in the form. */
   private setCsrfCookie(realm: Realm, res: Response): string {
@@ -315,13 +351,15 @@ export class AccountController {
       );
     }
 
-    const valid = await this.passwords.verifyUserPassword(
+    const check = await this.checkCurrentPassword(
+      realm,
       user,
       currentPassword,
+      req,
     );
-    if (!valid) {
+    if (check !== 'ok') {
       return res.redirect(
-        `/realms/${realm.name}/account?error=${encodeURIComponent('Current password is incorrect.')}`,
+        `/realms/${realm.name}/account?error=${encodeURIComponent(check === 'locked' ? ACCOUNT_LOCKED_MESSAGE : 'Current password is incorrect.')}`,
       );
     }
 
@@ -346,12 +384,14 @@ export class AccountController {
       data: { passwordHash, passwordChangedAt: new Date() },
     });
 
-    // Record password history
+    // Record password history, with the replaced hash if it was not in it
+    // yet (an imported password, say).
     await this.passwordPolicyService.recordHistory(
       user.id,
       realm.id,
       passwordHash,
       realm.passwordHistoryCount,
+      user,
     );
 
     // Sign out everywhere else: whoever knew the old password may hold a
@@ -702,18 +742,20 @@ export class AccountController {
       }
       if (!enrollmentToken) {
         if (user.passwordHash) {
-          const valid =
-            !!body['currentPassword'] &&
-            (await this.passwords.verifyUserPassword(
-              user,
-              body['currentPassword'],
-            ));
-          if (!valid) {
+          const check = await this.checkCurrentPassword(
+            realm,
+            user,
+            body['currentPassword'],
+            req,
+          );
+          if (check !== 'ok') {
             return this.smsSetupRedirect(
               realm,
               res,
               'error',
-              'Password is incorrect.',
+              check === 'locked'
+                ? ACCOUNT_LOCKED_MESSAGE
+                : 'Password is incorrect.',
             );
           }
         } else if (
@@ -894,10 +936,14 @@ export class AccountController {
         'Your second factor can only be changed by an administrator for this account.',
       );
     }
-    const valid =
-      !!body['currentPassword'] &&
-      (await this.passwords.verifyUserPassword(user, body['currentPassword']));
-    if (!valid) return accountError('Password is incorrect.');
+    const check = await this.checkCurrentPassword(
+      realm,
+      user,
+      body['currentPassword'],
+      req,
+    );
+    if (check === 'locked') return accountError(ACCOUNT_LOCKED_MESSAGE);
+    if (check !== 'ok') return accountError('Password is incorrect.');
 
     await this.mfaService.disableSms(user.id);
     return res.redirect(
@@ -944,13 +990,15 @@ export class AccountController {
       );
     }
 
-    const valid = await this.passwords.verifyUserPassword(
+    const check = await this.checkCurrentPassword(
+      realm,
       user,
       currentPassword,
+      req,
     );
-    if (!valid) {
+    if (check !== 'ok') {
       return res.redirect(
-        `/realms/${realm.name}/account?error=${encodeURIComponent('Password is incorrect.')}`,
+        `/realms/${realm.name}/account?error=${encodeURIComponent(check === 'locked' ? ACCOUNT_LOCKED_MESSAGE : 'Password is incorrect.')}`,
       );
     }
 
@@ -1048,13 +1096,15 @@ export class AccountController {
       );
     }
 
-    const valid = await this.passwords.verifyUserPassword(
+    const check = await this.checkCurrentPassword(
+      realm,
       user,
       currentPassword,
+      req,
     );
-    if (!valid) {
+    if (check !== 'ok') {
       return res.redirect(
-        `/realms/${realm.name}/account/delete-account?error=${encodeURIComponent('Password is incorrect.')}`,
+        `/realms/${realm.name}/account/delete-account?error=${encodeURIComponent(check === 'locked' ? ACCOUNT_LOCKED_MESSAGE : 'Password is incorrect.')}`,
       );
     }
 
@@ -1100,13 +1150,15 @@ export class AccountController {
       );
     }
 
-    const valid = await this.passwords.verifyUserPassword(
+    const check = await this.checkCurrentPassword(
+      realm,
       user,
       currentPassword,
+      req,
     );
-    if (!valid) {
+    if (check !== 'ok') {
       return res.redirect(
-        `/realms/${realm.name}/account/delete-account?error=${encodeURIComponent('Password is incorrect.')}`,
+        `/realms/${realm.name}/account/delete-account?error=${encodeURIComponent(check === 'locked' ? ACCOUNT_LOCKED_MESSAGE : 'Password is incorrect.')}`,
       );
     }
 
