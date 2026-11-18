@@ -9,6 +9,15 @@ For full per-commit detail, see the [GitHub Releases](https://github.com/idenpla
 
 ## [Unreleased]
 
+## [0.13.1] - 2026-11-18
+
+Security and SMTP fixes following 0.13.0. Upgrade to close the documented DNS-rebinding gap in back-channel logout.
+
+### Before you upgrade
+- No new database migrations or configuration changes are required when upgrading from 0.13.0. Private and loopback back-channel logout URLs continue to work.
+- `BACKCHANNEL_LOGOUT_ALLOW_LINK_LOCAL=true` still deliberately permits link-local and metadata destinations; leave it unset unless your deployment requires them.
+- The setup wizard now actually sends its SMTP test message. An unreachable or refusing mail server returns `502` instead of a false success.
+
 ### Security
 - **Back-channel logout pins its connection to the validated IP address.** DNS rebinding can no longer switch a checked hostname to a link-local or cloud-metadata address when the connection opens. Private and loopback relying parties remain supported, redirects are never followed, response bodies are discarded, and the 10-second deadline includes DNS resolution. `BACKCHANNEL_LOGOUT_ALLOW_LINK_LOCAL=true` remains an explicit override; it does not disable pinning.
 
@@ -879,7 +888,8 @@ The foundation release: core IAM server with OAuth, OIDC, SAML, MFA, and the ini
 - `removeUserRealmRoles` returning 200 instead of 204
 - Login error messages never displayed on failed login
 
-[Unreleased]: https://github.com/idenplane/idenplane/compare/v0.13.0...HEAD
+[Unreleased]: https://github.com/idenplane/idenplane/compare/v0.13.1...HEAD
+[0.13.1]: https://github.com/idenplane/idenplane/releases/tag/v0.13.1
 [0.13.0]: https://github.com/idenplane/idenplane/releases/tag/v0.13.0
 [0.12.0]: https://github.com/idenplane/idenplane/releases/tag/v0.12.0
 [0.11.1]: https://github.com/idenplane/idenplane/releases/tag/v0.11.1
