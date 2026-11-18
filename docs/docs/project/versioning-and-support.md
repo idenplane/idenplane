@@ -37,7 +37,7 @@ The chart in `helm/idenplane` has its own SemVer `version`. Its `appVersion` is 
 
 | Version | Security fixes |
 |---|---|
-| The latest release (today 0.12.0) | Yes |
+| The latest release (today 0.13.0) | Yes |
 | Every earlier release, including earlier patches of the same minor | No. Upgrade to the latest release. |
 
 Fixes are released as a new version cut from `main`. There are no maintenance branches and no backports to older minors. With one maintainer and minor releases that have come days or weeks apart, a support window for older lines is not something the project can honestly offer yet. If that changes, this page will say so before it applies.
@@ -92,6 +92,7 @@ Each value below comes from the release's tag in the repository or from its CI r
 
 | Server | Helm chart | `idenplane-sdk` tested in CI | Node.js | PostgreSQL | Redis | Kubernetes (CI) |
 |---|---|---|---|---|---|---|
+| 0.13.0 | 0.9.0 | 2.0.0 | 24 | 16 tested, 17 in the chart; image has 16, 17 and 18 clients | 7, not tested at runtime | 1.37.0 (kind) |
 | 0.12.0 | 0.8.0 | 2.0.0 | 24 | 16 tested, 17 in the chart; image has 16, 17 and 18 clients | 7, not tested at runtime | 1.37.0 (kind) |
 | 0.11.1 | 0.7.1 | 2.0.0 | 24 | 16 tested, 17 in the chart; image has 16, 17 and 18 clients | 7, not tested at runtime | 1.37.0 (kind) |
 | 0.11.0 | 0.7.0 | 2.0.0 | 24 | 16 tested, 17 in the chart; image has 16, 17 and 18 clients | 7, not tested at runtime | 1.37.0 (kind) |
