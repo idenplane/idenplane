@@ -94,6 +94,7 @@ const CLIENT = { clientId: 'my-app', redirectUris: ['https://app.example/cb'] };
 describe('SetupWizardService', () => {
   let crypto: Record<string, jest.Mock>;
   let jwk: { generateRsaKeyPair: jest.Mock };
+  let email: { sendSmtpTestMessage: jest.Mock };
 
   const build = (state: WizardState) => {
     const { prisma, db } = createPrisma(state);
@@ -101,6 +102,7 @@ describe('SetupWizardService', () => {
       prisma as never,
       crypto as never,
       jwk as never,
+      email as never,
     );
     return { service, prisma, db };
   };
@@ -112,7 +114,11 @@ describe('SetupWizardService', () => {
       generateSecret: jest.fn(() => 'plain-secret'),
       encryptSecret: jest.fn((v?: string) => (v ? `enc:${v}` : v)),
       encrypt: jest.fn((v: string) => `enc:${v}`),
+      decryptSecret: jest.fn((v?: string) =>
+        v?.startsWith('enc:') ? v.slice(4) : v,
+      ),
     };
+    email = { sendSmtpTestMessage: jest.fn(async () => undefined) };
     jwk = {
       generateRsaKeyPair: jest.fn(async () => ({
         kid: 'kid',
@@ -126,7 +132,7 @@ describe('SetupWizardService', () => {
     ['saveAdminAccount', (s) => s.saveAdminAccount(ADMIN)],
     ['saveRealmSettings', (s) => s.saveRealmSettings(REALM)],
     ['saveSmtpConfig', (s) => s.saveSmtpConfig(SMTP)],
-    ['testSmtp', (s) => s.testSmtp()],
+    ['testSmtp', (s) => s.testSmtp('admin@example.com')],
     ['saveClient', (s) => s.saveClient(CLIENT)],
     ['markSdkGenerated', (s) => s.markSdkGenerated()],
     ['completeWizard', (s) => s.completeWizard()],
@@ -188,6 +194,60 @@ describe('SetupWizardService', () => {
         expect(prisma.client.create).not.toHaveBeenCalled();
       },
     );
+  });
+
+  describe('testSmtp', () => {
+    it('sends a test email to the given address with the saved settings and the decrypted password', async () => {
+      const { service } = build(
+        row({
+          smtpConfig: {
+            host: 'smtp.example.com',
+            port: 465,
+            user: 'mailer',
+            password: 'enc:pw',
+            from: 'no@example.com',
+            secure: true,
+          },
+        }),
+      );
+
+      await expect(service.testSmtp('admin@example.com')).resolves.toEqual({
+        success: true,
+        message: 'Test email sent to admin@example.com',
+      });
+      expect(email.sendSmtpTestMessage).toHaveBeenCalledWith(
+        {
+          host: 'smtp.example.com',
+          port: 465,
+          user: 'mailer',
+          password: 'pw',
+          from: 'no@example.com',
+          secure: true,
+        },
+        'admin@example.com',
+        expect.any(String),
+        expect.any(String),
+      );
+    });
+
+    it('is a 400 and sends nothing before SMTP settings are saved', async () => {
+      const { service } = build(row());
+
+      await expect(service.testSmtp('admin@example.com')).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
+      expect(email.sendSmtpTestMessage).not.toHaveBeenCalled();
+    });
+
+    it('passes a delivery failure through', async () => {
+      const { service } = build(
+        row({ smtpConfig: { host: 'smtp.example.com', port: 587 } }),
+      );
+      const failure = new Error('502 from the email service');
+      email.sendSmtpTestMessage.mockRejectedValue(failure);
+
+      await expect(service.testSmtp('admin@example.com')).rejects.toBe(failure);
+    });
   });
 
   describe('completeWizard', () => {

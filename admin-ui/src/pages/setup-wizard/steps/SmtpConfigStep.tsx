@@ -38,8 +38,16 @@ export default function SmtpConfigStep() {
     },
   });
 
+  // The server tests the saved settings, so save what is in the form first:
+  // otherwise an edit made after the last save would go untested.
   const testEmailMutation = useMutation({
-    mutationFn: () => testSmtp({ to: testEmailTo }),
+    mutationFn: async () => {
+      const saved = await saveSmtpConfig(form);
+      if (saved.smtpConfig) {
+        setSmtpConfig(saved.smtpConfig);
+      }
+      return testSmtp({ to: testEmailTo });
+    },
     onSuccess: () => {
       setTestSuccess(true);
     },
@@ -71,6 +79,14 @@ export default function SmtpConfigStep() {
   );
 
   const handleTestEmail = useCallback(() => {
+    if (!form.host) {
+      setLocalError('SMTP host is required to send a test email.');
+      return;
+    }
+    if (!isValidEmail(form.from)) {
+      setLocalError('A valid sender email address is required.');
+      return;
+    }
     if (!testEmailTo || !isValidEmail(testEmailTo)) {
       setLocalError('Please enter a valid email address for the test.');
       return;
@@ -78,7 +94,7 @@ export default function SmtpConfigStep() {
     setTestSuccess(false);
     setLocalError(null);
     testEmailMutation.mutate();
-  }, [testEmailTo, testEmailMutation]);
+  }, [form.host, form.from, testEmailTo, testEmailMutation]);
 
   const handleSkip = useCallback(() => {
     // No SMTP config needed, just proceed
