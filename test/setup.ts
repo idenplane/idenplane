@@ -21,7 +21,10 @@ import { RequestInputPipe } from '../src/common/pipes/request-input.pipe';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { GlobalExceptionFilter } from '../src/common/filters/http-exception.filter';
-import { registerBodyParsers } from '../src/common/http/body-parsers';
+import {
+  registerBodyParsers,
+  registerFormBodyParser,
+} from '../src/common/http/body-parsers';
 import { CacheService } from '../src/cache/cache.service';
 import { useRealmCacheOf } from './helpers/realm-cache';
 import type { NestExpressApplication } from '@nestjs/platform-express';
@@ -111,6 +114,7 @@ export async function createTestApp(
 
   applySecurityHeaders(app);
   registerBodyParsers(app as NestExpressApplication);
+  registerFormBodyParser(app as NestExpressApplication);
   app.use(cookieParser());
 
   app.useGlobalPipes(

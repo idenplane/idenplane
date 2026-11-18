@@ -8,6 +8,10 @@ import {
   supportedIdpProviderType,
   unsupportedIdpTypeReason,
 } from '../../identity-providers/idp-provider-types.js';
+import {
+  SAML_UNUSED_OAUTH_COLUMNS,
+  validateSamlConfig,
+} from '../../identity-providers/saml-config.js';
 
 /**
  * Import of a version 1 realm export: the mapping the import has always
@@ -84,6 +88,7 @@ interface ImportedIdp {
   trustEmail?: boolean;
   linkOnly?: boolean;
   syncUserProfile?: boolean;
+  samlConfig?: unknown;
 }
 
 interface ImportedScopeAssignment {
@@ -318,7 +323,8 @@ export async function importV1(
   }
 
   // 5. Create identity providers of a type the broker supports; skip the
-  // rest (SAML, unknown types) with a warning instead of storing them.
+  // rest (unknown types, SAML ones with unusable settings) with a warning
+  // instead of storing them.
   const warnings: string[] = [];
   const idps: Array<ImportedIdp & { providerType: IdpProviderType }> = [];
   for (const idp of section<ImportedIdp>(payload, 'identityProviders')) {
@@ -329,9 +335,38 @@ export async function importV1(
       );
       continue;
     }
+    if (providerType === 'saml') {
+      const checked = validateSamlConfig(idp.samlConfig);
+      if (!checked.ok) {
+        warnings.push(
+          `identity provider '${idp.alias}': not imported, its SAML settings are incomplete or unusable (${checked.errors.join('; ')})`,
+        );
+        continue;
+      }
+      idps.push({ ...idp, providerType, samlConfig: checked.config });
+      continue;
+    }
     idps.push({ ...idp, providerType });
   }
   for (const idp of idps) {
+    if (idp.providerType === 'saml') {
+      await tx.identityProvider.create({
+        data: {
+          realmId: realm.id,
+          alias: idp.alias,
+          displayName: idp.displayName ?? null,
+          enabled: idp.enabled ?? true,
+          providerType: 'saml',
+          ...SAML_UNUSED_OAUTH_COLUMNS,
+          clientSecret: encryptSecret(''),
+          samlConfig: idp.samlConfig as Prisma.InputJsonValue,
+          trustEmail: idp.trustEmail ?? false,
+          linkOnly: idp.linkOnly ?? false,
+          syncUserProfile: idp.syncUserProfile ?? true,
+        },
+      });
+      continue;
+    }
     await tx.identityProvider.create({
       data: {
         realmId: realm.id,

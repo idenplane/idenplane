@@ -38,6 +38,7 @@ describe('BrokerController', () => {
       themeRender as any,
       loginFlow as any,
       flowRuntime as any,
+      {} as any,
     );
   });
 

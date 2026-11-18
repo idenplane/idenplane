@@ -9,6 +9,13 @@ import {
 import ConfirmDialog from '../../components/ConfirmDialog';
 import PasswordInput from '../../components/PasswordInput';
 import { useCanWriteRealm } from '../../hooks/usePermissions';
+import SamlIdpFields from './SamlIdpFields';
+import {
+  emptySamlForm,
+  previewSpEndpoints,
+  samlConfigFromForm,
+  samlFormFromConfig,
+} from './samlForm';
 
 export default function IdpDetailPage() {
   const canWrite = useCanWriteRealm();
@@ -39,6 +46,8 @@ export default function IdpDetailPage() {
     linkOnly: false,
     syncUserProfile: true,
   });
+  const [samlForm, setSamlForm] = useState(emptySamlForm);
+  const isSaml = form.providerType === 'saml';
 
   // Seed the editable form from fetched data when the loaded IdP changes.
   // Adjusting state during render (vs. an effect) avoids an extra render pass.
@@ -61,11 +70,22 @@ export default function IdpDetailPage() {
       linkOnly: idp.linkOnly,
       syncUserProfile: idp.syncUserProfile,
     });
+    setSamlForm(samlFormFromConfig(idp.samlConfig));
   }
 
   const updateMutation = useMutation({
     mutationFn: () =>
-      updateIdentityProvider(name!, alias!, {
+      isSaml
+        ? updateIdentityProvider(name!, alias!, {
+            displayName: form.displayName || undefined,
+            providerType: form.providerType,
+            enabled: form.enabled,
+            trustEmail: form.trustEmail,
+            linkOnly: form.linkOnly,
+            syncUserProfile: form.syncUserProfile,
+            samlConfig: samlConfigFromForm(samlForm),
+          })
+        : updateIdentityProvider(name!, alias!, {
         displayName: form.displayName || undefined,
         providerType: form.providerType,
         clientId: form.clientId,
@@ -169,14 +189,7 @@ export default function IdpDetailPage() {
               >
                 <option value="oidc">OpenID Connect</option>
                 <option value="oauth2">OAuth 2.0</option>
-                {/* Older versions let SAML be chosen, but the broker only
-                    signs in over OpenID Connect / OAuth 2.0: such an IdP
-                    never worked and must be switched to save. */}
-                {!['oidc', 'oauth2'].includes(form.providerType) && (
-                  <option value={form.providerType} disabled>
-                    {form.providerType.toUpperCase()} (not supported)
-                  </option>
-                )}
+                <option value="saml">SAML 2.0</option>
               </select>
             </div>
             <div className="flex items-end gap-2 pb-1">
@@ -194,7 +207,19 @@ export default function IdpDetailPage() {
           </div>
         </div>
 
-        {/* OIDC Configuration */}
+        {isSaml ? (
+          <div className="space-y-4 border-t border-line pt-4">
+            <h2 className="text-lg font-semibold text-fg">SAML 2.0 Configuration</h2>
+            <SamlIdpFields
+              realmName={name!}
+              form={samlForm}
+              onChange={setSamlForm}
+              sp={idp.samlSp ?? previewSpEndpoints(window.location.origin, name!, idp.alias)}
+              preview={!idp.samlSp}
+              disabled={!canWrite}
+            />
+          </div>
+        ) : (
         <div className="space-y-4 border-t border-line pt-4">
           <h2 className="text-lg font-semibold text-fg">OIDC Configuration</h2>
 
@@ -292,6 +317,7 @@ export default function IdpDetailPage() {
             </div>
           </div>
         </div>
+        )}
 
         {/* Behavior */}
         <div className="space-y-3 border-t border-line pt-4">
@@ -334,8 +360,8 @@ export default function IdpDetailPage() {
           </div>
         )}
         {updateMutation.isError && (
-          <div className="rounded-md bg-danger-soft p-3 text-sm text-danger-fg">
-            Failed to update identity provider.
+          <div role="alert" className="rounded-md bg-danger-soft p-3 text-sm text-danger-fg">
+            {(updateMutation.error as Error)?.message || 'Failed to update identity provider.'}
           </div>
         )}
 

@@ -50,7 +50,7 @@ Idenplane fills that gap with a complete, self-hosted solution with Docker Compo
 | **WebAuthn / Passkeys** | FIDO2 passwordless authentication with biometric support |
 | **Multi-Factor Authentication** | TOTP-based 2FA with QR provisioning and recovery codes |
 | **Adaptive / Risk-Based Auth** | Impossible travel detection, IP reputation, device fingerprinting |
-| **Social Login** | Broker external OpenID Connect and OAuth 2.0 identity providers (SAML identity providers cannot be brokered) |
+| **Social Login** | Broker external OpenID Connect, OAuth 2.0 and SAML 2.0 identity providers |
 | **LDAP User Federation** | Sync users from LDAP/Active Directory |
 | **Custom Auth Flows (experimental)** | Configurable multi-step authentication with branching; runs at login when the server sets `AUTH_FLOW_RUNTIME_ENABLED=true` |
 | **Single Sign-On** | Browser-based SSO across all clients |

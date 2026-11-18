@@ -894,19 +894,21 @@ Idenplane can delegate authentication to an external provider, so users sign in 
 
 ### What this covers
 
-These endpoints handle **OpenID Connect** providers — Okta, Auth0, Microsoft Entra, Google, another Keycloak or Idenplane, anything that speaks OIDC. `providerType` is `oidc` (the default) or `oauth2` (a plain OAuth 2.0 provider such as GitHub); the broker treats both the same way. Any other value, `saml` included, is refused with `400`.
+These endpoints handle **OpenID Connect** providers — Okta, Auth0, Microsoft Entra, Google, another Keycloak or Idenplane, anything that speaks OIDC — and **SAML 2.0** identity providers. `providerType` is `oidc` (the default), `oauth2` (a plain OAuth 2.0 provider such as GitHub; the broker treats it like `oidc`) or `saml`. Any other value is refused with `400`. A `saml` provider takes its settings in `samlConfig` instead of the OAuth fields: see [Sign in with a SAML identity provider](/guides/saml-identity-providers).
 
 Two neighbouring features are managed separately:
 
-- **SAML 2.0**: Idenplane cannot sign users in through an upstream SAML identity provider; SAML brokering is not supported. Idenplane is itself a SAML 2.0 identity provider for downstream service providers, which the console lists under **SAML Providers**
+- **Idenplane as a SAML 2.0 identity provider** for downstream service providers (the opposite direction): the console lists those under **SAML Providers**
 - **LDAP** and other external user stores live under **User Federation**, which synchronises users rather than delegating the login
 
 ### Providers stored before 0.12.0
 
 Before 0.12.0 the admin API and the importers stored any `providerType`. On upgrade to 0.13.0:
 
-- a supported type stored in another case or with spaces (`OIDC`, ` OAuth2 `) is rewritten to `oidc` or `oauth2` by a migration;
-- any other row is left as it is, and `GET /admin/upgrade/health` reports it in the `identity_provider_types` warning, as `realm/alias (type, enabled|disabled)`. **SAML** rows (`saml`, `samlp`, `adfs`) are listed as needing configuration review: they were saved before 0.12.0, when Idenplane had no SAML broker, so review each one's configuration before relying on it. Other types are listed as unsupported: change them to `oidc` or `oauth2` if the provider speaks it, or delete them.
+- a supported type stored in another case or with spaces (`OIDC`, ` OAuth2 `, `SAML`) is rewritten to `oidc`, `oauth2` or `saml` by a migration;
+- `GET /admin/upgrade/health` reports the rows the broker cannot sign in with in the `identity_provider_types` warning, as `realm/alias (type, enabled|disabled)`:
+  - **Needs configuration review**: a SAML provider without a valid SAML configuration. Every `saml` row stored before 0.13.0, when Idenplane had no SAML broker, has none: open it in the console and complete its [SAML settings](/guides/saml-identity-providers), or delete it. `samlp` and `adfs` rows (Auth0 exports) also need their type set to `saml`.
+  - **Unsupported type**: any type other than `oidc`, `oauth2` and `saml`. Change it to one the provider speaks, or delete it.
 
 An enabled provider in either list still shows a button on the login page that cannot complete a sign-in, so review these first. The check is a warning only and never blocks an upgrade.
 

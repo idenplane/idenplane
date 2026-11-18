@@ -48,7 +48,7 @@
 # Hosted pages (login, consent, account, device, broker callback) are HTML
 # endpoints that also appear in the OpenAPI document, so the API scan
 # expected JSON from them.
-#@accept	100001	(/realms/[^/]+/(broker/[^/]+/callback|device|protocol/openid-connect/auth)/?(\?.*)?$|/themes/)	Browser-facing endpoints return HTML and theme assets return CSS/images by design; the scanner expected JSON from them.
+#@accept	100001	(/realms/[^/]+/(broker/[^/]+/callback|broker/[^/]+/saml/(start|acs|complete|metadata)|device|protocol/openid-connect/auth)/?(\?.*)?$|/themes/)	Browser-facing endpoints (including the SAML broker's start, ACS and complete pages) return HTML, SAML metadata is XML, and theme assets return CSS/images, by design; the scanner expected JSON from them.
 
 # CSP form-action is deliberately absent on hosted pages: Chrome applies it
 # to the redirect after a form POST, so the login form's 302 to the client's

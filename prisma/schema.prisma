@@ -390,15 +390,15 @@ model Client {
   enabled        Boolean    @default(true)
   requireConsent Boolean    @default(false) @map("require_consent")
 
-  redirectUris           String[] @map("redirect_uris")
-  webOrigins             String[] @map("web_origins")
-  grantTypes             String[] @default(["authorization_code"]) @map("grant_types")
-  postLogoutRedirectUris String[] @default([]) @map("post_logout_redirect_uris")
+  redirectUris                      String[] @map("redirect_uris")
+  webOrigins                        String[] @map("web_origins")
+  grantTypes                        String[] @default(["authorization_code"]) @map("grant_types")
+  postLogoutRedirectUris            String[] @default([]) @map("post_logout_redirect_uris")
   /// INSECURE, for migration only. Since 0.11.0 redirect URIs match exactly
   /// (RFC 9700). When true, a registered entry ending in `/*` still matches
   /// any path below it, as before 0.11.0. Set by the 0.11.0 migration on
   /// clients that already had such an entry; see src/common/redirect-uri.utils.ts.
-  allowInsecureWildcardRedirectUris Boolean @default(false) @map("allow_insecure_wildcard_redirect_uris")
+  allowInsecureWildcardRedirectUris Boolean  @default(false) @map("allow_insecure_wildcard_redirect_uris")
 
   // Backchannel logout
   backchannelLogoutUri             String? @map("backchannel_logout_uri")
@@ -983,20 +983,72 @@ model IdentityProvider {
   linkOnly        Boolean @default(false) @map("link_only")
   syncUserProfile Boolean @default(true) @map("sync_user_profile")
 
-  // Unused for sign-in: no code acts on it. Idenplane cannot broker a SAML
-  // identity provider (the broker is OIDC/OAuth 2.0 only); it is a SAML IdP
-  // for service providers (see SamlServiceProvider). Kept so existing data and
-  // realm exports stay valid.
+  // The settings of a `saml` provider (Idenplane as a SAML service provider;
+  // see src/broker/saml/saml-broker-config.ts for the shape and its checks).
+  // Null for `oidc` and `oauth2` providers. A `saml` provider leaves the OAuth
+  // columns above empty: the broker never reads them for it.
   samlConfig Json? @map("saml_config")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  realm               Realm               @relation(fields: [realmId], references: [id], onDelete: Cascade)
+  realm               Realm                   @relation(fields: [realmId], references: [id], onDelete: Cascade)
   federatedIdentities FederatedIdentity[]
+  samlRequests        SamlBrokerRequest[]
+  samlAssertionIds    SamlBrokerAssertionId[]
 
   @@unique([realmId, alias])
   @@map("identity_providers")
+}
+
+/// A SAML sign-in through a `saml` identity provider, from the redirect to
+/// the provider until the browser that started it finishes it (once).
+///
+/// - `startHandle`: the one-time link the broker hands out; the browser that
+///   follows it gets the binding cookie and the AuthnRequest.
+/// - `requestId`: the AuthnRequest's ID, the only InResponseTo accepted.
+/// - `relayState`: the short random RelayState sent with the request.
+/// - `bindingHash`: SHA-256 of the binding cookie; only that browser can
+///   finish the sign-in.
+/// - `result`: the identity the ACS verified, until `/complete` takes it.
+model SamlBrokerRequest {
+  id                 String    @id @default(uuid())
+  identityProviderId String    @map("identity_provider_id")
+  startHandle        String    @unique @map("start_handle")
+  requestId          String?   @unique @map("request_id")
+  relayState         String?   @unique @map("relay_state")
+  bindingHash        String?   @map("binding_hash")
+  state              Json
+  result             Json?
+  startedAt          DateTime? @map("started_at")
+  verifiedAt         DateTime? @map("verified_at")
+  expiresAt          DateTime  @map("expires_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  identityProvider IdentityProvider @relation(fields: [identityProviderId], references: [id], onDelete: Cascade)
+
+  @@index([expiresAt])
+  @@index([identityProviderId])
+  @@map("saml_broker_requests")
+}
+
+/// Every assertion ID a `saml` identity provider sent that the ACS accepted,
+/// kept until the assertion could no longer pass the time checks. The unique
+/// (provider, assertion ID) index is the replay check.
+model SamlBrokerAssertionId {
+  id                 String   @id @default(uuid())
+  identityProviderId String   @map("identity_provider_id")
+  assertionId        String   @map("assertion_id")
+  expiresAt          DateTime @map("expires_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  identityProvider IdentityProvider @relation(fields: [identityProviderId], references: [id], onDelete: Cascade)
+
+  @@unique([identityProviderId, assertionId])
+  @@index([expiresAt])
+  @@map("saml_broker_assertion_ids")
 }
 
 // ─── FEDERATED IDENTITIES ────────────────────────────────

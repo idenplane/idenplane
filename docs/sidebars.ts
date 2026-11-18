@@ -152,6 +152,11 @@ const sidebars: SidebarsConfig = {
         },
         {
           type: 'doc',
+          id: 'guides/saml-identity-providers',
+          label: 'SAML Identity Providers',
+        },
+        {
+          type: 'doc',
           id: 'guides/authorization',
           label: 'Authorization',
         },

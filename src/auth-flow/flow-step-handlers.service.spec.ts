@@ -4,6 +4,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { FlowStepHandlers } from './flow-step-handlers.service.js';
+import { FederatedLinkConflictException } from '../broker/broker.service.js';
 import { PasskeyUserMismatchError } from '../webauthn/webauthn.service.js';
 import type { RuntimeStep } from './flow-graph.js';
 
@@ -197,6 +198,55 @@ describe('FlowStepHandlers', () => {
         await handlers.social(realm, social, input(), alice as never),
       ).toEqual({ kind: 'user_mismatch' });
       expect(broker.resolveFederatedUser).not.toHaveBeenCalled();
+    });
+
+    it('fails the step cleanly when the account is linked to the provider with another subject', async () => {
+      broker.resolveFederatedUser.mockRejectedValueOnce(
+        new FederatedLinkConflictException('Google'),
+      );
+      const before = await handlers.social(realm, social, input(), null);
+      expect(before).toMatchObject({ kind: 'failed' });
+      expect((before as { message: string }).message).toMatch(
+        /already linked to Google through a different Google account/,
+      );
+      broker.belongsToUser.mockRejectedValueOnce(
+        new FederatedLinkConflictException('Google'),
+      );
+      expect(
+        (await handlers.social(realm, social, input(), alice as never)).kind,
+      ).toBe('failed');
+    });
+
+    it('takes a SAML identity the ACS verified, without an OAuth code', async () => {
+      broker.resolveFederatedUser.mockResolvedValue({
+        id: 'u-alice',
+        enabled: true,
+      });
+      const verified = {
+        idp: { alias: 'google' },
+        external: { sub: 'name-id' },
+      };
+      const out = await handlers.social(
+        realm,
+        social,
+        input({ code: undefined, verified }),
+        null,
+      );
+      expect(out).toMatchObject({ kind: 'passed', userId: 'u-alice' });
+      expect(broker.fetchExternalIdentity).not.toHaveBeenCalled();
+      expect(
+        (
+          await handlers.social(
+            realm,
+            social,
+            input({
+              code: undefined,
+              verified: { ...verified, idp: { alias: 'other' } },
+            }),
+            null,
+          )
+        ).kind,
+      ).toBe('failed');
     });
   });
 

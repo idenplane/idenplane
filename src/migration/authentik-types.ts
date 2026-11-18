@@ -80,7 +80,7 @@ export interface AuthentikOAuthSource {
   name: string;
   /** URL-safe identifier; becomes the identity provider alias. */
   slug?: string;
-  /** Only 'openidconnect'/'oidc' sources are imported; other types are skipped with a warning. */
+  /** Only 'openidconnect'/'oidc' sources are imported; SAML sources (no signing certificate in the export) and social ones are skipped with a warning. */
   provider_type?: string;
   authorization_url?: string | null;
   access_token_url?: string | null;

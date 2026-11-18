@@ -83,6 +83,13 @@ export interface ZitadelIdp {
     authorizationEndpoint?: string;
     tokenEndpoint?: string;
   };
+  /** A SAML IdP: its metadata (XML, base64-encoded in the export). */
+  samlConfig?: {
+    metadataXml?: string;
+    /** e.g. 'SAML_BINDING_POST' | 'SAML_BINDING_REDIRECT' */
+    binding?: string;
+    withSignedRequest?: boolean;
+  };
 }
 
 export interface ZitadelExport {

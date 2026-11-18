@@ -12,9 +12,9 @@ import {
 
 /**
  * Identity provider rows stored before 0.12.0 may carry a supported type in
- * another case (`OIDC`), which the 0.13.0 migration lower-cases, or a type
- * the broker does not sign in with (`SAML`, anything else), which
- * GET /admin/upgrade/health reports for review.
+ * another case (`OIDC`, `SAML`), which the 0.13.0 migrations lower-case, a
+ * SAML type with no SAML configuration, or a type the broker does not sign
+ * in with: GET /admin/upgrade/health reports the last two for review.
  */
 describe('Identity provider types from before 0.12.0 (e2e)', () => {
   let app: INestApplication<App>;
@@ -25,6 +25,10 @@ describe('Identity provider types from before 0.12.0 (e2e)', () => {
   const MIGRATION = join(
     process.cwd(),
     'prisma/migrations/20261117130000_identity_provider_type_case/migration.sql',
+  );
+  const SAML_MIGRATION = join(
+    process.cwd(),
+    'prisma/migrations/20261117210000_saml_broker/migration.sql',
   );
 
   const store = (alias: string, providerType: string, enabled = true) =>
@@ -110,5 +114,27 @@ describe('Identity provider types from before 0.12.0 (e2e)', () => {
     expect(unsupported).toContain(`${REALM}/directory (ldap, enabled)`);
     expect(check?.details).not.toContain(`${REALM}/upper-oidc`);
     expect(check?.details).not.toContain(`${REALM}/canonical`);
+  });
+
+  it('the SAML broker migration gives SAML rows the canonical type, and they stay listed for review', async () => {
+    // Only the statement that rewrites types: the rest of the migration
+    // creates tables that already exist.
+    const sql = readFileSync(SAML_MIGRATION, 'utf-8');
+    const update = sql.slice(sql.indexOf('UPDATE "identity_providers"')).trim();
+    await ctx.prisma.$executeRawUnsafe(update);
+
+    expect(await typeOf('corp-saml')).toBe('saml');
+    expect(await typeOf('old-adfs')).toBe('adfs');
+    expect(await typeOf('directory')).toBe('ldap');
+
+    const res = await request(app.getHttpServer())
+      .get('/admin/upgrade/health')
+      .set('x-admin-api-key', TEST_ADMIN_API_KEY)
+      .expect(200);
+    const check = (
+      res.body.checks as Array<{ name: string; details?: string }>
+    ).find((c) => c.name === 'identity_provider_types');
+    // No SAML configuration yet: still to review, now as `saml`.
+    expect(check?.details).toContain(`${REALM}/corp-saml (saml, enabled)`);
   });
 });

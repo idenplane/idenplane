@@ -346,11 +346,12 @@ Auth0 connections are migrated as identity providers based on strategy:
 | `oauth2` | `oauth2`, with the connection's `authorizationURL` and `tokenURL` |
 | `google-oauth2`, `windowslive` | `oidc`, with Google's or Microsoft's endpoints filled in |
 | `github` | `oauth2`, with GitHub's endpoints filled in |
-| `samlp`, `adfs`, `waad` and every other strategy | Not imported: listed in `warnings` |
+| `samlp` | `saml`, from the IdP metadata in the connection's `metadataXml` (see below) |
+| `adfs`, `waad` and every other strategy | Not imported: listed in `warnings` |
 | `auth0` | Skipped (database connections) |
 
-:::warning SAML connections are not imported
-Idenplane brokers OpenID Connect and OAuth 2.0 identity providers only; it cannot sign users in through a SAML IdP. A `samlp` or `adfs` connection is skipped, counted in `summary.identityProviders.skipped`, and named in `warnings` with the reason. If the IdP behind the connection also speaks OpenID Connect (ADFS and Entra ID do), create an OIDC provider for it instead.
+:::note SAML connections
+A `samlp` connection is imported as a [SAML identity provider](/guides/saml-identity-providers) when the export carries the IdP's metadata (`options.metadataXml`): the IdP entity ID, SSO URL and signing certificates come from it, and `signSAMLRequest` and `protocolBinding` from the connection. Auth0 keeps no IdP entity ID outside the metadata, so a connection without it is skipped with a warning naming what is missing; add that IdP in the admin console from its metadata. Either way, register Idenplane's SP metadata at the IdP: its entity ID and ACS URL are new. `adfs` (WS-Federation) and `waad` connections are not imported; ADFS and Entra ID also speak SAML 2.0 and OpenID Connect.
 :::
 
 A connection is imported only with everything the broker needs: a client ID and `http(s)` authorization and token URLs. One without them is skipped with a warning naming the missing fields. Imported providers keep `trustEmail` off; a connection exported without its client secret is imported **disabled**, with a warning, until you set the secret.
@@ -555,7 +556,7 @@ curl -X POST "http://localhost:3000/admin/realms" \
 
 **Cause:** Database connections are skipped automatically.
 
-**Solution:** Database connections don't map to identity providers. OIDC, OAuth 2.0, Google, Microsoft account and GitHub connections are imported; every other strategy, SAML (`samlp`, `adfs`) included, is skipped. `warnings` names each skipped connection and why. Check the `strategy` field in your export.
+**Solution:** Database connections don't map to identity providers. OIDC, OAuth 2.0, Google, Microsoft account and GitHub connections are imported, and `samlp` connections whose export carries the IdP metadata; every other strategy (`adfs`, `waad`, …) is skipped. `warnings` names each skipped connection and why. Check the `strategy` field in your export.
 
 ### Wildcard Origins Stripped
 

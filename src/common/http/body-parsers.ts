@@ -1,6 +1,6 @@
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import type { NextFunction, Request, Response } from 'express';
-import { json } from 'express';
+import { json, urlencoded } from 'express';
 import { SCIM_CONTENT_TYPE } from '../../scim/types/scim.types.js';
 
 /**
@@ -81,5 +81,45 @@ export function registerBodyParsers(app: NestExpressApplication): void {
         ? scim
         : standard;
     parser(req, res, next);
+  });
+}
+
+/** The form body limit of every endpoint but the SAML broker's ACS. */
+export const FORM_BODY_LIMIT = '100kb';
+
+/**
+ * The form body limit of a SAML ACS: a SAMLResponse may be up to 512 KB
+ * (MAX_SAML_RESPONSE_LENGTH), plus the RelayState and form encoding.
+ */
+export const SAML_ACS_FORM_BODY_LIMIT = '600kb';
+
+/** `POST /realms/{realm}/broker/{alias}/saml/acs`, also under a version prefix. */
+const SAML_ACS_PATH =
+  /^(?:\/api\/v\d+)?\/realms\/[^/]+\/broker\/[^/]+\/saml\/acs\/?$/i;
+
+export function isSamlAcsRequest(
+  req: Pick<Request, 'method' | 'url'>,
+): boolean {
+  if (req.method !== 'POST') return false;
+  return SAML_ACS_PATH.test((req.url ?? '').split('?')[0]);
+}
+
+/**
+ * Replaces NestJS's URL-encoded parser (same options: `extended`, 100 KB),
+ * giving only the SAML ACS the larger limit. The name is load-bearing, as
+ * for `jsonParser`.
+ */
+export function registerFormBodyParser(app: NestExpressApplication): void {
+  const standard = urlencoded({ extended: true, limit: FORM_BODY_LIMIT });
+  const samlAcs = urlencoded({
+    extended: true,
+    limit: SAML_ACS_FORM_BODY_LIMIT,
+  });
+  app.use(function urlencodedParser(
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ): void {
+    (isSamlAcsRequest(req) ? samlAcs : standard)(req, res, next);
   });
 }
