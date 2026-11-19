@@ -14,6 +14,7 @@ import { CryptoModule } from './crypto/crypto.module.js';
 import { SecretsAtRestModule } from './secrets-at-rest/secrets-at-rest.module.js';
 import { RealmsModule } from './realms/realms.module.js';
 import { SetupWizardModule } from './setup-wizard/setup-wizard.module.js';
+import { InstanceBootstrapModule } from './bootstrap/instance-bootstrap.module.js';
 import { UsersModule } from './users/users.module.js';
 import { ClientsModule } from './clients/clients.module.js';
 import { MtlsAdminModule } from './mtls-admin/mtls-admin.module.js';
@@ -134,6 +135,7 @@ import { MetricsInterceptor } from './metrics/metrics.interceptor.js';
     AdminRbacModule,
     RealmsModule,
     SetupWizardModule,
+    InstanceBootstrapModule,
     UsersModule,
     ClientsModule,
     MtlsAdminModule,
