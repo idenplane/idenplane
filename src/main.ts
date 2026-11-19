@@ -123,8 +123,8 @@ function checkUsageRetentionConfig(): void {
     loadUsageRetention(process.env);
   } catch (err) {
     if (err instanceof UsageRetentionConfigError) {
-      console.error(`FATAL: ${err.message}`);
-      process.exit(1);
+      // Thrown, so the reason is logged like every other startup failure.
+      throw new Error(`FATAL: ${err.message}`, { cause: err });
     }
     throw err;
   }
