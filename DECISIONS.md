@@ -14,7 +14,7 @@ The subset of these with the broadest relevance for contributors is written up a
 - The server is AGPL-3.0, and the maintainer also licenses it commercially and runs it as a hosted service. Without a CLA, an outside contribution could only be used under the AGPL, so it could not be part of either.
 - A license, not an assignment: contributors keep their copyright, and the CLA commits the maintainer to keep their contributions available under the open-source license too. The text is adapted from the Apache Software Foundation's individual and corporate CLAs, which are widely used and understood.
 - The check uses only the GitHub API from a workflow in this repository. The hosted CLA Assistant would keep the signatures with a third party. The `contributor-assistant/github-action` is archived, and its maintained fork calls its vendor's API on every run.
-- Contributions merged before this date are not covered; see the pull request that added the CLA for the list.
+- Contributions merged before this date are not covered; #1912 lists them.
 
 See [ADR-011](https://idenplane.com/docs/contributing/adrs).
 

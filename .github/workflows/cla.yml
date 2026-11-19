@@ -3,9 +3,11 @@ name: CLA
 ## Contributor License Agreement check (CLA.md, CONTRIBUTING.md).
 ##
 ## Sets the commit status `license/cla` on every pull request to dev or main:
-##  - success when everyone who has to sign the CLA has signed it, or when the
+##  - success when everyone who has to sign the CLA has signed it, when the
 ##    pull request only changes the MIT-licensed trees (packages/,
-##    terraform-provider-idenplane/), which do not need it;
+##    terraform-provider-idenplane/), which do not need it, or when it is
+##    the dev -> main promotion, whose commits were checked on their way
+##    into dev;
 ##  - failure otherwise, with a comment on the pull request that says who has
 ##    not signed and how to sign.
 ## A contributor signs by commenting the sentence in SIGN_PHRASE on the pull
@@ -123,6 +125,18 @@ jobs:
           }
 
           # ---- Does this pull request need the CLA? -------------------------
+          # The dev -> main promotion only carries commits that were merged
+          # into dev through pull requests, and were checked there. Checking
+          # them again would name contributors whose only pull request
+          # changed the MIT packages, and long promotions exceed the 250
+          # commits the API lists.
+          HEAD_REPO=$(jq -r '.head.repo.full_name // ""' <<<"$PR_JSON")
+          HEAD_REF=$(jq -r '.head.ref' <<<"$PR_JSON")
+          if [ "$HEAD_REPO" = "$REPO" ] && [ "$HEAD_REF" = "dev" ] && [ "$BASE" = "main" ]; then
+            set_status success "Not required: promotion of dev, checked when merged into dev"
+            exit 0
+          fi
+
           # Renames count with their old path too: moving a server file into
           # packages/ still changes the server.
           FILES=$(gh api --paginate "$API/pulls/$PR/files?per_page=100" \
