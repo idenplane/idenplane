@@ -52,6 +52,26 @@ export interface ImportOptions {
   overwrite?: boolean;
 }
 
+/** What a version-2 import reports. */
+export interface RealmImportSummary {
+  realmName: string;
+  version: 2;
+  clientsImported: number;
+  rolesImported: number;
+  groupsImported: number;
+  scopesImported: number;
+  idpsImported: number;
+  usersImported: number;
+  flowsImported: number;
+  warnings: string[];
+}
+
+/** A validated version-2 import, ready to write in a transaction. */
+export interface PreparedRealmImport {
+  realmName: string;
+  write: (tx: Prisma.TransactionClient) => Promise<RealmImportSummary>;
+}
+
 type Item = Record<string, unknown>;
 type Tx = Prisma.TransactionClient;
 
@@ -332,6 +352,52 @@ export class RealmImportService {
     realmName: string,
     options: ImportOptions,
   ) {
+    const prepared = await this.prepareV2(payload, realmName);
+    return this.inTransaction(realmName, options, prepared.write);
+  }
+
+  /**
+   * Validates a version-2 document and does the slow work (key generation,
+   * secret hashing) up front. `write` then creates the realm in the caller's
+   * transaction, so several realms (and whatever else the caller writes)
+   * commit or roll back together. The realm must not exist: `write` never
+   * replaces one. After the caller commits, it calls refreshAfterImport().
+   * Used by instance bootstrap (BOOTSTRAP_FILE).
+   */
+  async prepareV2Import(payload: unknown): Promise<PreparedRealmImport> {
+    if (!isRecord(payload) || !isRecord(payload['realm'])) {
+      throw new BadRequestException(
+        'Invalid import format: missing version or realm',
+      );
+    }
+    if (formatOf(payload['version']) !== 2) {
+      throw new BadRequestException(
+        `Unsupported export version ${JSON.stringify(payload['version'])}; only version 2 is accepted here`,
+      );
+    }
+    const realmName = payload['realm']['name'];
+    if (typeof realmName !== 'string' || !realmName) {
+      throw invalid([{ path: 'realm.name', message: 'must be a string' }]);
+    }
+    return this.prepareV2(payload, realmName);
+  }
+
+  /** Clears what a committed import makes stale (the CORS allow-list). */
+  async refreshAfterImport(): Promise<void> {
+    await this.cache
+      .invalidateCorsOrigins()
+      .catch((err: unknown) =>
+        this.logger.warn(
+          `Realm imported, but the CORS cache could not be invalidated: ${String(err)}`,
+        ),
+      );
+    this.corsOrigins.invalidateLocalCache();
+  }
+
+  private async prepareV2(
+    payload: Item,
+    realmName: string,
+  ): Promise<PreparedRealmImport> {
     const checked = validateV2Import(payload);
     if (checked.problems.length) throw invalid(checked.problems);
 
@@ -344,10 +410,19 @@ export class RealmImportService {
       );
     }
 
-    const summary = await this.inTransaction(realmName, options, (tx) =>
-      this.writeV2(tx, payload, checked, keyPair, clientSecrets),
-    );
-    return { realmName, version: 2, ...summary };
+    return {
+      realmName,
+      write: async (tx) => {
+        const summary = await this.writeV2(
+          tx,
+          payload,
+          checked,
+          keyPair,
+          clientSecrets,
+        );
+        return { realmName, version: 2, ...summary };
+      },
+    };
   }
 
   /** Encrypt a secret of kind `encrypted` for this instance. */

@@ -9,8 +9,14 @@ For full per-commit detail, see the [GitHub Releases](https://github.com/idenpla
 
 ## [Unreleased]
 
+### Added
+- **Unattended bootstrap: a new instance can come up fully set up from configuration.** Set `BOOTSTRAP_FILE` to a mounted JSON document, or `BOOTSTRAP_JSON` to the document itself. At the first start of a fresh instance (setup wizard never completed or skipped, no realm but `master`), the realms it lists are created and the setup wizard is closed, in one transaction under the wizard's own lock. Each realm is a realm export document (version 2), so clients, SMTP, roles, groups, scopes and users are declared the same way an export carries them. Any string may reference a secret as `${env:NAME}`, and a user may carry an `initialPassword`. The whole document is validated first: for example, a confidential client without a secret, a client secret under 32 characters, or a default password is refused, and no value from the document is ever logged. A bootstrap that fails stops the server before it listens and writes nothing, so the instance is never reported ready half-configured; the next start retries from scratch. Replicas and `WEB_CONCURRENCY` workers starting together apply it exactly once. Later starts never apply it again, even if it changed, and an instance that already has realms is left untouched with a warning. The Helm chart exposes it as `bootstrap.*` (rendered into a Secret, or `bootstrap.existingSecret`), with a `helm test` that checks the wizard is closed. A new CI job builds the image and checks the behaviour with plain `docker run`. See [Unattended Bootstrap](https://idenplane.com/deployment/unattended-bootstrap).
+
 ### Changed
 - **Contributions to the server need a signed Contributor License Agreement.** Idenplane is AGPL-3.0, and the maintainer also offers the server under a commercial license and as a hosted service. Contributors now sign the [CLA](CLA.md), adapted from the Apache Software Foundation's, once, by a comment on their pull request. They keep their copyright and grant the maintainer a license that includes relicensing. The CLA commits the maintainer to keep every contribution he distributes available under the open-source license too. Pull requests that only change the MIT-licensed `packages/` or `terraform-provider-idenplane/` do not need it. A new `license/cla` status (`.github/workflows/cla.yml`) checks every pull request to `dev` and `main` and records signatures in the `cla-signatures` branch. See [CONTRIBUTING.md](CONTRIBUTING.md#contributor-license-agreement). Nothing changes for people who run Idenplane.
+
+### Fixed
+- **Helm: `backups.enabled` now mounts the backup volume on its own.** The volume was only mounted when `persistence.enabled` or `volumeMounts` was also set, so upgrade backups were otherwise written to the container filesystem.
 
 ## [0.13.1] - 2026-11-18
 
