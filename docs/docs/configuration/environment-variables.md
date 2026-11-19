@@ -221,6 +221,14 @@ Live session events (`/realms/{realm}/session-events` WebSockets) are fanned out
 |----------|---------|----------|-------------|
 | `LEADER_ELECTION` | on | No | Set to `off` to make every instance run every job (a single instance, or a connection pooler in transaction mode, which cannot hold the lock). |
 
+### Instance usage
+
+The [Instance Usage API](/api/usage) records one row per active user and month (month, realm id, user id). It keeps them for a limited time, so the ids of deleted users are not kept for ever.
+
+| Variable | Default | Required | Description |
+|----------|---------|----------|-------------|
+| `USAGE_ACTIVITY_RETENTION_MONTHS` | `13` | No | Whole months of monthly activity kept before the current month; older months are deleted every hour by the scheduled-job leader, in small batches. `1` to `1200`, or `off` to keep every month. The current and the previous month are never deleted. Any other value stops the server at startup. The default keeps the last closed month and the same month a year earlier. A pruned month is reported with `period.pruned: true`. |
+
 ---
 
 ## Redis (Optional)

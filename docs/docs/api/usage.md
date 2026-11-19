@@ -45,10 +45,15 @@ curl "http://localhost:3000/admin/system/usage?month=2026-10" \
     "start": "2026-10-01T00:00:00.000Z",
     "end": "2026-11-01T00:00:00.000Z",
     "closed": true,
-    "complete": true
+    "complete": true,
+    "pruned": false
   },
   "tracking": {
     "since": "2026-09-14T08:12:44.120Z"
+  },
+  "retention": {
+    "months": 13,
+    "oldestMonth": "2025-10"
   },
   "totals": {
     "realms": 2,
@@ -87,8 +92,11 @@ curl "http://localhost:3000/admin/system/usage?month=2026-10" \
 | `generatedAt` | When the report was computed. |
 | `period.start`, `period.end` | The month's boundaries in UTC: `start` included, `end` excluded. |
 | `period.closed` | The month is over, so its count no longer changes. |
-| `period.complete` | Activity was recorded for the whole month. See [Incomplete months](#incomplete-months). |
+| `period.complete` | Activity was recorded for the whole month. See [Incomplete months](#incomplete-months). Always `false` for a pruned month. |
+| `period.pruned` | The month is older than the retention and its activity has been deleted. Its counts are then `0` because they are gone, not because nobody was active. See [Retention](#retention-and-privacy). |
 | `tracking.since` | When this instance started recording activity. |
+| `retention.months` | `USAGE_ACTIVITY_RETENTION_MONTHS`: whole months kept before the current one, or `null` when pruning is off. |
+| `retention.oldestMonth` | The oldest month still kept (`YYYY-MM`); every month before it is pruned. `null` when nothing has been or will be pruned. |
 | `totals.realms` | Realms that exist now. |
 | `totals.users` | User accounts now, in every realm, service accounts excluded. |
 | `totals.monthlyActiveUsers` | Distinct users who were active in the month, in every realm. |
@@ -102,6 +110,10 @@ A user is active in a month when, in that month (UTC), at least one of these hap
 
 - **An interactive sign-in** that ends in an SSO session: password, passkey, magic link, a custom auth flow, or a sign-in through an identity provider (OpenID Connect, SAML, social). This is the moment the session is created, after the second factor if there is one.
 - **OAuth tokens issued for the user**: the authorization code, device code, password and `mfa_otp` grants, forward-auth, and **every token refresh**, offline tokens included. A user who stays signed in to an application through refresh tokens is active in every month the application refreshes.
+
+  :::note Background refreshes count
+  A refresh counts even when no person is looking at the screen. A mobile or desktop app that refreshes its tokens in the background (to sync, or to keep a session alive) makes its user active in every month it does so, even if the user never opens it. This is how hosted identity services commonly count monthly active users. If you bill on this number, refresh only when the app is actually used, or tell your customers that a signed-in, background-refreshing app counts.
+  :::
 - **A SAML assertion issued for the user** to a SAML service provider, also when it comes from an SSO session that started in an earlier month.
 - **A request to a forward-auth protected application** with the user's proxy session, also when the session started in an earlier month.
 
@@ -124,7 +136,17 @@ The report reads the month's rows through the table's primary key and does not r
 
 **Not affected by event settings.** Login events are deleted after the realm's retention (30 days by default) and are not written at all in a realm with events turned off. Usage does not depend on them: a month can be billed long after it ended.
 
-**Deleted users and realms.** The rows have no foreign keys. A user deleted after being active still counts for the months they were active, and so does a deleted realm, shown with `deleted: true`. A row holds only the month, the realm id and the user id; once the user is deleted, the id no longer leads to any personal data. Rows are not deleted automatically; there is one per active user per month.
+**Deleted users and realms.** The rows have no foreign keys. A user deleted after being active still counts for the months they were active, and so does a deleted realm, shown with `deleted: true`, until those months are pruned.
+
+## Retention and privacy
+
+**What is stored.** One row per active user and month: the month, the realm id, the user id and when the user was first seen in the month. No name, email, IP address or device.
+
+**How long.** Months older than `USAGE_ACTIVITY_RETENTION_MONTHS` (default `13`) are deleted automatically. With `N`, the current month and the `N` whole months before it are kept. The default of 13 keeps the last closed month together with the same month a year earlier, and every closed month for over a year, which covers year-over-year comparisons and billing questions about the past year. Keep your own invoices or a copy of each month's report for longer-term records. `off` keeps every month. The minimum is `1`, so the current and the previous month are never deleted; any other value stops the server at startup. See the [environment variables](../configuration/environment-variables.md#instance-usage).
+
+**After a user is deleted.** Their user id stays in the rows of the months they were active, so those months keep counting them, until the months are pruned. The id no longer leads to any personal data once the user is deleted. With pruning `off`, it is kept indefinitely.
+
+**How pruning runs.** Every hour, on one instance only (the scheduled-job leader), in batches of 5000 rows, each its own short statement, so it never holds a long lock. Pruning first records the first month kept, so a pruned month is reported as `period.pruned: true` even half-way through, and still after the retention is raised or turned off: a deleted month cannot come back. Asking for a pruned month is not an error; the report says it is pruned.
 
 ## Incomplete months
 

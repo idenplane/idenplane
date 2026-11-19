@@ -2,6 +2,7 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { APP_VERSION } from '../versioning/app-version.js';
 import { monthOf, parseMonth } from './usage-period.js';
+import { UsageRetentionService } from './usage-retention.service.js';
 
 export interface RealmUsage {
   /** The realm id. Activity outlives a deleted realm, so it may be gone. */
@@ -34,12 +35,31 @@ export interface InstanceUsage {
      * Activity was recorded for the whole month. False for a month that
      * starts before recording did (`tracking.since`): its count is a
      * lower bound, backfilled from the login events still retained.
+     * Always false for a pruned month.
      */
     complete: boolean;
+    /**
+     * The month is older than the activity retention and has been (or is
+     * being) deleted: its counts are not available, which is not the same
+     * as no activity.
+     */
+    pruned: boolean;
   };
   tracking: {
     /** When this instance started recording activity; null if unknown. */
     since: string | null;
+  };
+  retention: {
+    /**
+     * Whole months kept before the current one
+     * (USAGE_ACTIVITY_RETENTION_MONTHS); null when pruning is off.
+     */
+    months: number | null;
+    /**
+     * YYYY-MM: the oldest month whose activity is kept; every month before
+     * it is pruned. Null when nothing has been or will be pruned.
+     */
+    oldestMonth: string | null;
   };
   totals: {
     /** Realms that exist now. */
@@ -61,7 +81,10 @@ export interface InstanceUsage {
  */
 @Injectable()
 export class UsageService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly retention: UsageRetentionService,
+  ) {}
 
   async getUsage(month?: string, now = new Date()): Promise<InstanceUsage> {
     const current = monthOf(now);
@@ -93,7 +116,7 @@ export class UsageService {
       }),
       this.prisma.usageTracking.findUnique({
         where: { id: 1 },
-        select: { trackingSince: true },
+        select: { trackingSince: true, prunedBefore: true },
       }),
     ]);
 
@@ -125,6 +148,18 @@ export class UsageService {
     rows.push(...deleted);
 
     const since = tracking?.trackingSince ?? null;
+    // The later of what the setting prunes now and what was pruned before
+    // (a month pruned under a shorter retention stays gone).
+    const cutoffs = [
+      this.retention.cutoff(now),
+      tracking?.prunedBefore ?? null,
+    ].filter((d): d is Date => d !== null);
+    const keptFrom =
+      cutoffs.length > 0
+        ? new Date(Math.max(...cutoffs.map((d) => d.getTime())))
+        : null;
+    const pruned =
+      keptFrom !== null && period.start.getTime() < keptFrom.getTime();
     return {
       version: APP_VERSION,
       generatedAt: now.toISOString(),
@@ -133,9 +168,17 @@ export class UsageService {
         start: period.start.toISOString(),
         end: period.end.toISOString(),
         closed: period.end.getTime() <= now.getTime(),
-        complete: since !== null && since.getTime() <= period.start.getTime(),
+        complete:
+          !pruned &&
+          since !== null &&
+          since.getTime() <= period.start.getTime(),
+        pruned,
       },
       tracking: { since: since ? since.toISOString() : null },
+      retention: {
+        months: this.retention.retentionMonths,
+        oldestMonth: keptFrom ? monthOf(keptFrom).month : null,
+      },
       totals: {
         realms: realms.length,
         users: rows.reduce((sum, r) => sum + r.users, 0),

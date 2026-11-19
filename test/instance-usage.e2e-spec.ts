@@ -8,6 +8,7 @@ import {
   type SeededRealm,
   type TestContext,
 } from './setup';
+import { UsageRetentionService } from '../src/usage/usage-retention.service';
 
 /**
  * E2E for GET /admin/system/usage: the instance-wide monthly active users
@@ -45,7 +46,9 @@ describe('Instance usage (e2e)', () => {
         end: string;
         closed: boolean;
         complete: boolean;
+        pruned: boolean;
       };
+      retention: { months: number | null; oldestMonth: string | null };
       tracking: { since: string | null };
       totals: { realms: number; users: number; monthlyActiveUsers: number };
       realms: RealmRow[];
@@ -197,6 +200,50 @@ describe('Instance usage (e2e)', () => {
       expect.objectContaining({ month: lastMonth, closed: true }),
     );
     expect(rowOf(body, seeded.realm.id)?.monthlyActiveUsers).toBe(1);
+  });
+
+  it('prunes months older than the retention and reports them as pruned', async () => {
+    const retention = app.get(UsageRetentionService);
+    const months = retention.retentionMonths;
+    expect(months).toBe(13); // the default
+    const monthStart = (offset: number) =>
+      new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - offset, 1));
+    const label = (d: Date) =>
+      `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}`;
+    const tooOld = monthStart(months! + 1);
+    const oldestKept = monthStart(months!);
+    const oldUser = randomUUID();
+    const keptUser = randomUUID();
+    await ctx.prisma.userMonthlyActivity.createMany({
+      data: [
+        { month: tooOld, realmId: seeded.realm.id, userId: oldUser },
+        { month: oldestKept, realmId: seeded.realm.id, userId: keptUser },
+      ],
+    });
+
+    expect(await retention.prune()).toBeGreaterThanOrEqual(1);
+
+    const left = await ctx.prisma.userMonthlyActivity.findMany({
+      where: { userId: { in: [oldUser, keptUser] } },
+    });
+    expect(left.map((r) => r.userId)).toEqual([keptUser]);
+
+    const pruned = await usage(`?month=${label(tooOld)}`);
+    expect(pruned.period).toEqual(
+      expect.objectContaining({ pruned: true, complete: false }),
+    );
+    expect(pruned.retention).toEqual({
+      months,
+      oldestMonth: label(oldestKept),
+    });
+    const kept = await usage(`?month=${label(oldestKept)}`);
+    expect(kept.period.pruned).toBe(false);
+    expect(rowOf(kept, seeded.realm.id)?.monthlyActiveUsers).toBe(1);
+
+    // The current and previous months are untouched.
+    const current = await usage();
+    expect(current.period.pruned).toBe(false);
+    expect(rowOf(current, seeded.realm.id)?.monthlyActiveUsers).toBe(1);
   });
 
   it('keeps the activity of a deleted realm, and totals add up', async () => {

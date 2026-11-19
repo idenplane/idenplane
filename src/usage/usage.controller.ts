@@ -33,7 +33,8 @@ export class UsageController {
       'Monthly active users (distinct users who authenticated in the calendar month, UTC), ' +
       'user accounts and realms, for the whole instance and per realm. Defaults to the ' +
       'current month; pass `month=YYYY-MM` for a past one. Counted from a dedicated ' +
-      'activity table, not from login events, so event settings and retention do not affect it.',
+      'activity table, not from login events, so event settings and retention do not affect it. ' +
+      'Months older than USAGE_ACTIVITY_RETENTION_MONTHS (default 13) are deleted and reported with period.pruned = true.',
   })
   @ApiResponse({ status: 200, type: InstanceUsageDto })
   @ApiResponse({

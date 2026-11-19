@@ -2719,11 +2719,12 @@ model ProxySession {
 /// UsageActivityRecorder (`INSERT ... ON CONFLICT DO NOTHING`), at the points
 /// where a user gets an SSO session, OAuth tokens or a SAML assertion.
 ///
-/// Deliberately no foreign keys and no retention: deleting a user or a realm
-/// does not erase activity that already happened in a month, and the login
-/// event retention setting does not apply. A deleted user leaves only its
-/// opaque id here. The primary key serves both the conflict check and the
-/// per-realm count of a month (an index-only scan).
+/// Deliberately no foreign keys: deleting a user or a realm does not erase
+/// activity that already happened in a month, and the login event retention
+/// does not apply. A deleted user leaves only its opaque id here, until the
+/// month is pruned (USAGE_ACTIVITY_RETENTION_MONTHS, UsageRetentionService).
+/// The primary key serves the conflict check, the per-realm count of a month
+/// and the pruning of old months.
 model UserMonthlyActivity {
   /// First day of the month, UTC.
   month       DateTime @db.Date
@@ -2739,8 +2740,12 @@ model UserMonthlyActivity {
 /// written by the migration that created the table. A month that starts
 /// before it is reported as incomplete.
 model UsageTracking {
-  id            Int      @id @default(1)
-  trackingSince DateTime @map("tracking_since")
+  id            Int       @id @default(1)
+  trackingSince DateTime  @map("tracking_since")
+  /// Every month before this one has been pruned (first day of a month).
+  /// Only moves forward, so a month pruned under an earlier retention is
+  /// still reported as pruned after the setting is raised or turned off.
+  prunedBefore  DateTime? @map("pruned_before") @db.Date
 
   @@map("usage_tracking")
 }

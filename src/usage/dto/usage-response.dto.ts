@@ -28,6 +28,32 @@ export class UsagePeriodDto {
       'Activity was recorded for the whole month. False when the month starts before tracking.since: the count is then a lower bound.',
   })
   complete!: boolean;
+
+  @ApiProperty({
+    description:
+      'The month is older than the activity retention and has been deleted: its counts are not available (not the same as no activity). Then complete is false.',
+  })
+  pruned!: boolean;
+}
+
+export class UsageRetentionDto {
+  @ApiProperty({
+    type: Number,
+    nullable: true,
+    example: 13,
+    description:
+      'Whole months kept before the current one (USAGE_ACTIVITY_RETENTION_MONTHS); null when pruning is off',
+  })
+  months!: number | null;
+
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    example: '2025-10',
+    description:
+      'YYYY-MM: the oldest month whose activity is kept; null when nothing has been or will be pruned',
+  })
+  oldestMonth!: string | null;
 }
 
 export class UsageTrackingDto {
@@ -93,6 +119,9 @@ export class InstanceUsageDto implements InstanceUsage {
 
   @ApiProperty({ type: UsageTrackingDto })
   tracking!: UsageTrackingDto;
+
+  @ApiProperty({ type: UsageRetentionDto })
+  retention!: UsageRetentionDto;
 
   @ApiProperty({ type: UsageTotalsDto })
   totals!: UsageTotalsDto;

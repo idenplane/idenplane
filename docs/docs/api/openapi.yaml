@@ -2240,7 +2240,9 @@ paths:
         impersonation and admin console sign-ins do not count. Counted from a
         dedicated activity table, not from login events, so event settings and
         retention do not affect it, and users and realms deleted later still
-        count. Server-wide: the admin API key or a super-admin.
+        count. Activity older than USAGE_ACTIVITY_RETENTION_MONTHS (default 13)
+        is deleted; such a month is reported with period.pruned true, not as
+        an error. Server-wide: the admin API key or a super-admin.
       operationId: getInstanceUsage
       security:
         - admin-api-key: []
@@ -3083,7 +3085,7 @@ components:
     # ── Instance usage ──────────────────────────────────────────────────────────
     InstanceUsage:
       type: object
-      required: [version, generatedAt, period, tracking, totals, realms]
+      required: [version, generatedAt, period, tracking, retention, totals, realms]
       properties:
         version:
           type: string
@@ -3094,7 +3096,7 @@ components:
           format: date-time
         period:
           type: object
-          required: [month, start, end, closed, complete]
+          required: [month, start, end, closed, complete, pruned]
           properties:
             month:
               type: string
@@ -3116,8 +3118,14 @@ components:
               type: boolean
               description: >-
                 Activity was recorded for the whole month. False when the
-                month starts before tracking.since: the count is then a lower
-                bound.
+                month starts before tracking.since (the count is then a lower
+                bound) or when the month is pruned.
+            pruned:
+              type: boolean
+              description: >-
+                The month is older than the activity retention and its
+                activity has been deleted: its counts are not available, which
+                is not the same as no activity.
         tracking:
           type: object
           required: [since]
@@ -3127,6 +3135,24 @@ components:
               format: date-time
               nullable: true
               description: When this instance started recording activity
+        retention:
+          type: object
+          required: [months, oldestMonth]
+          properties:
+            months:
+              type: integer
+              nullable: true
+              example: 13
+              description: >-
+                Whole months kept before the current one
+                (USAGE_ACTIVITY_RETENTION_MONTHS); null when pruning is off
+            oldestMonth:
+              type: string
+              nullable: true
+              example: '2025-10'
+              description: >-
+                YYYY-MM: the oldest month whose activity is kept; null when
+                nothing has been or will be pruned
         totals:
           type: object
           required: [realms, users, monthlyActiveUsers]

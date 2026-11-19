@@ -12,6 +12,7 @@ describe('UsageService', () => {
     usageTracking: { findUnique: jest.Mock };
   };
   let service: UsageService;
+  let retention: { retentionMonths: number | null; cutoff: jest.Mock };
 
   beforeEach(() => {
     prisma = {
@@ -37,10 +38,15 @@ describe('UsageService', () => {
       usageTracking: {
         findUnique: jest.fn().mockResolvedValue({
           trackingSince: new Date('2026-06-15T09:00:00.000Z'),
+          prunedBefore: null,
         }),
       },
     };
-    service = new UsageService(prisma as never);
+    retention = {
+      retentionMonths: 13,
+      cutoff: jest.fn().mockReturnValue(new Date('2025-10-01T00:00:00.000Z')),
+    };
+    service = new UsageService(prisma as never, retention as never);
   });
 
   it('reports the current UTC month by default', async () => {
@@ -54,7 +60,9 @@ describe('UsageService', () => {
       end: '2026-12-01T00:00:00.000Z',
       closed: false,
       complete: true,
+      pruned: false,
     });
+    expect(usage.retention).toEqual({ months: 13, oldestMonth: '2025-10' });
     expect(prisma.userMonthlyActivity.groupBy).toHaveBeenCalledWith({
       by: ['realmId'],
       where: { month: new Date('2026-11-01T00:00:00.000Z') },
@@ -112,6 +120,7 @@ describe('UsageService', () => {
       end: '2026-11-01T00:00:00.000Z',
       closed: true,
       complete: true,
+      pruned: false,
     });
     expect(prisma.userMonthlyActivity.groupBy).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -130,6 +139,37 @@ describe('UsageService', () => {
     const usage = await service.getUsage(undefined, now);
     expect(usage.period.complete).toBe(false);
     expect(usage.tracking.since).toBeNull();
+  });
+
+  it('flags a month older than the retention as pruned, not as zero', async () => {
+    const usage = await service.getUsage('2025-09', now);
+    expect(usage.period.pruned).toBe(true);
+    expect(usage.period.complete).toBe(false);
+    // The oldest kept month is not pruned.
+    const kept = await service.getUsage('2025-10', now);
+    expect(kept.period.pruned).toBe(false);
+  });
+
+  it('keeps reporting months pruned under an earlier, shorter retention', async () => {
+    retention.retentionMonths = null;
+    retention.cutoff.mockReturnValue(null);
+    prisma.usageTracking.findUnique.mockResolvedValue({
+      trackingSince: new Date('2024-01-01T00:00:00.000Z'),
+      prunedBefore: new Date('2026-03-01T00:00:00.000Z'),
+    });
+
+    const usage = await service.getUsage('2026-02', now);
+    expect(usage.period.pruned).toBe(true);
+    expect(usage.retention).toEqual({ months: null, oldestMonth: '2026-03' });
+    expect((await service.getUsage('2026-03', now)).period.pruned).toBe(false);
+  });
+
+  it('prunes nothing with retention off and no earlier prune', async () => {
+    retention.retentionMonths = null;
+    retention.cutoff.mockReturnValue(null);
+    const usage = await service.getUsage('2020-01', now);
+    expect(usage.period.pruned).toBe(false);
+    expect(usage.retention).toEqual({ months: null, oldestMonth: null });
   });
 
   it('refuses a future month', async () => {
