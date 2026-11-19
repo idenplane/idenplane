@@ -2235,7 +2235,8 @@ paths:
         Monthly active users (distinct users who authenticated in the calendar
         month, UTC), user accounts and realms, for the whole instance and per
         realm. A user is active when they sign in, get OAuth tokens (refreshes
-        included) or get a SAML assertion in the month; service accounts,
+        included), get a SAML assertion or use a forward-auth protected
+        application in the month; service accounts,
         impersonation and admin console sign-ins do not count. Counted from a
         dedicated activity table, not from login events, so event settings and
         retention do not affect it, and users and realms deleted later still

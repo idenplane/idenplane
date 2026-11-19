@@ -103,6 +103,7 @@ A user is active in a month when, in that month (UTC), at least one of these hap
 - **An interactive sign-in** that ends in an SSO session: password, passkey, magic link, a custom auth flow, or a sign-in through an identity provider (OpenID Connect, SAML, social). This is the moment the session is created, after the second factor if there is one.
 - **OAuth tokens issued for the user**: the authorization code, device code, password and `mfa_otp` grants, forward-auth, and **every token refresh**, offline tokens included. A user who stays signed in to an application through refresh tokens is active in every month the application refreshes.
 - **A SAML assertion issued for the user** to a SAML service provider, also when it comes from an SSO session that started in an earlier month.
+- **A request to a forward-auth protected application** with the user's proxy session, also when the session started in an earlier month.
 
 Each user is counted once per month, however often they sign in, and in the realm they belong to.
 
@@ -117,7 +118,7 @@ This is not the same number as the realm dashboard's "active users", which count
 
 ## How it is counted
 
-Activity is recorded in its own table (`user_monthly_activity`): one row per user and month, written the first time the user is active in the month. Recording happens at the three points listed above, whether or not the realm records login events. Each server process remembers which users it has already written this month, so a busy instance writes about one row per user per month, not one per request. A failure to write is logged and never fails the sign-in; the user's next sign-in or refresh writes it again.
+Activity is recorded in its own table (`user_monthly_activity`): one row per user and month, written the first time the user is active in the month. Recording happens at the points listed above, whether or not the realm records login events. Each server process remembers which users it has already written this month, so a busy instance writes about one row per user per month, not one per request. A failure to write is logged and never fails the sign-in; the user's next sign-in or refresh writes it again.
 
 The report reads the month's rows through the table's primary key and does not read login events, so it costs the same however many events the instance keeps.
 

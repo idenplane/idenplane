@@ -11,7 +11,7 @@ export const RECORDED_CACHE_LIMIT = 100_000;
 
 /**
  * Records that a user authenticated, for the monthly active users of
- * GET /admin/system/usage. Called at the three places a user is let in:
+ * GET /admin/system/usage. Called at the four places a user is let in:
  *
  * - SessionIssuer.issue: every interactive sign-in that ends in an SSO
  *   session (password, passkey, magic link, a brokered OIDC / SAML / social
@@ -19,8 +19,10 @@ export const RECORDED_CACHE_LIMIT = 100_000;
  * - AuthService.issueTokens with a session: every OAuth grant that issues a
  *   user's tokens (authorization code, refresh, device code, password,
  *   mfa_otp, forward-auth's code redemption).
- * - SamlIdpService.createSamlResponse: a SAML assertion for a user, also
+ * - SamlIdpController.completeSamlLogin: a SAML assertion for a user, also
  *   when it is served from an existing SSO session.
+ * - ProxyAuthService.validateSession: a forward-auth request with a live
+ *   proxy session, which can outlive the month it was created in.
  *
  * Not counted: service accounts (client_credentials issues no session),
  * impersonation, and admin console sign-ins (their own path).
