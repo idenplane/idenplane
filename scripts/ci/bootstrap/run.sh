@@ -109,9 +109,15 @@ check app-b
 no_secrets_in_logs app-a app-b
 
 ci_log "2. a restart changes nothing"
+# docker logs keeps the output of the first run, which may or may not be
+# the one that applied it: compare the counts before and after.
+count_applied() { docker logs app-a 2>&1 | grep -c 'Instance bootstrapped from' || true; }
+count_complete() { docker logs app-a 2>&1 | grep -c 'Setup is already complete; BOOTSTRAP_FILE' || true; }
+applied_before="$(count_applied)"; complete_before="$(count_complete)"
 docker restart app-a >/dev/null
 ci_app_wait app-a
-[ "$(docker logs app-a 2>&1 | grep -c 'Instance bootstrapped from')" = 1 ] || { echo "::error::bootstrap applied again on restart"; exit 1; }
+[ "$(count_applied)" = "$applied_before" ] || { echo "::error::bootstrap applied again on restart"; exit 1; }
+[ "$(count_complete)" = "$((complete_before + 1))" ] || { echo "::error::the restart did not report setup complete"; exit 1; }
 check app-a
 
 ci_log "3. an invalid BOOTSTRAP_JSON stops the container and writes nothing"
