@@ -143,11 +143,10 @@ spec:
         - name: bootstrap
           secret:
             secretName: {{ include "idenplane.bootstrapSecretName" . }}
-            # Only the file BOOTSTRAP_FILE names; owner-readable only.
+            # Only the file BOOTSTRAP_FILE names, from a Secret that may hold others.
             items:
               - key: {{ include "idenplane.bootstrapFileKey" . }}
                 path: {{ include "idenplane.bootstrapFileKey" . }}
-            defaultMode: 0400
         {{- end }}
         {{- if .Values.persistence.enabled }}
         - name: themes-storage
