@@ -16,13 +16,13 @@ You accept and agree to the following terms and conditions for Your Contribution
 
 ### 1. Definitions
 
-"Maintainer" shall mean Idenplane, the company that owns and maintains the Idenplane project, and its successors and assigns under section 9.
+"Maintainer" shall mean Islam Awad (GitHub account [@Islamawad132](https://github.com/Islamawad132)), the maintainer of the Idenplane project, and his successors and assigns under section 9.
 
 "You" (or "Your") shall mean the copyright owner or legal entity authorized by the copyright owner that is making this Agreement with the Maintainer. For legal entities, the entity making a Contribution and all other entities that control, are controlled by, or are under common control with that entity are considered to be a single Contributor. For the purposes of this definition, "control" means (i) the power, direct or indirect, to cause the direction or management of such entity, whether by contract or otherwise, or (ii) ownership of fifty percent (50%) or more of the outstanding shares, or (iii) beneficial ownership of such entity.
 
 "Work" shall mean the Idenplane software and documentation, as published in the repository at https://github.com/idenplane/idenplane and in other repositories of the GitHub organization `idenplane` that refer to this Agreement.
 
-"Contribution" shall mean any original work of authorship, including any modifications or additions to an existing work, that is intentionally submitted by You to the Maintainer for inclusion in, or documentation of, the Work. For the purposes of this definition, "submitted" means any form of electronic, verbal, or written communication sent to the Maintainer or its representatives, including but not limited to communication on electronic mailing lists, source code control systems (including pull requests), and issue tracking systems that are managed by, or on behalf of, the Maintainer for the purpose of discussing and improving the Work, but excluding communication that is conspicuously marked or otherwise designated in writing by You as "Not a Contribution."
+"Contribution" shall mean any original work of authorship, including any modifications or additions to an existing work, that is intentionally submitted by You to the Maintainer for inclusion in, or documentation of, the Work. For the purposes of this definition, "submitted" means any form of electronic, verbal, or written communication sent to the Maintainer or his representatives, including but not limited to communication on electronic mailing lists, source code control systems (including pull requests), and issue tracking systems that are managed by, or on behalf of, the Maintainer for the purpose of discussing and improving the Work, but excluding communication that is conspicuously marked or otherwise designated in writing by You as "Not a Contribution."
 
 "Submission Date" shall mean the date on which You submit a Contribution.
 
@@ -38,7 +38,7 @@ Subject to the terms and conditions of this Agreement, You hereby grant to the M
 
 ### 4. Open-source availability of Your Contributions
 
-If the Maintainer includes Your Contribution in a version of the Work that it distributes or makes available, it will also make Your Contribution available, as part of that version, under the open-source license that applied on the Submission Date to the part of the Work You contributed to. On the date of version 1.0 of this Agreement, that license is the GNU Affero General Public License, version 3 only, for the Idenplane server and the other parts of the repository without their own license, and the MIT License for the SDKs and client packages under `packages/` and for `terraform-provider-idenplane/`. This section does not oblige the Maintainer to include, keep, or continue to distribute any Contribution.
+If the Maintainer includes Your Contribution in a version of the Work that he distributes or makes available, he will also make Your Contribution available, as part of that version, under the open-source license that applied on the Submission Date to the part of the Work You contributed to. On the date of version 1.0 of this Agreement, that license is the GNU Affero General Public License, version 3 only, for the Idenplane server and the other parts of the repository without their own license, and the MIT License for the SDKs and client packages under `packages/` and for `terraform-provider-idenplane/`. This section does not oblige the Maintainer to include, keep, or continue to distribute any Contribution.
 
 ### 5. Your representations
 
@@ -60,7 +60,7 @@ You agree to notify the Maintainer of any facts or circumstances of which You be
 
 ### 9. Transfer
 
-The Maintainer may assign or transfer this Agreement, and the rights granted under it, to a legal entity that controls it, that it controls, that is under common control with it, or that takes over the maintenance of the Work, provided that the assignee is bound by section 4. This Agreement continues to bind You towards such an assignee.
+The Maintainer may assign or transfer this Agreement, and the rights granted under it, to a legal entity that he controls or that takes over the maintenance of the Work, provided that the assignee is bound by section 4. This Agreement continues to bind You towards such an assignee.
 
 ### 10. How You sign
 
