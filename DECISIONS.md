@@ -6,6 +6,20 @@ The subset of these with the broadest relevance for contributors is written up a
 
 ---
 
+## 2026-11-19: A contributor license agreement for the server
+
+**Decision**: Contributors sign the [Idenplane CLA](CLA.md) before their first pull request that changes the server is merged. Pull requests that only change the MIT-licensed `packages/` and `terraform-provider-idenplane/` do not need it. A workflow (`.github/workflows/cla.yml`) checks every pull request and records signatures in the `cla-signatures` branch. `GOVERNANCE.md` and `CONTRIBUTING.md` describe it.
+
+**Rationale**:
+- The server is AGPL-3.0, and the maintainer also licenses it commercially and runs it as a hosted service. Without a CLA, an outside contribution could only be used under the AGPL, so it could not be part of either.
+- A license, not an assignment: contributors keep their copyright, and the CLA commits the maintainer to keep their contributions available under the open-source license too. The text is adapted from the Apache Software Foundation's individual and corporate CLAs, which are widely used and understood.
+- The check uses only the GitHub API from a workflow in this repository. The hosted CLA Assistant would keep the signatures with a third party. The `contributor-assistant/github-action` is archived, and its maintained fork calls its vendor's API on every run.
+- Contributions merged before this date are not covered; #1912 lists them.
+
+See [ADR-011](https://idenplane.com/docs/contributing/adrs).
+
+---
+
 ## 2026-11-13: PostgreSQL is the only supported database
 
 **Decision**: Support PostgreSQL 16+ only. Remove the MySQL and SQLite schema variants, switch scripts and the unused database-provider layer.
