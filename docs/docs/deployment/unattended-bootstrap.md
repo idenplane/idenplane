@@ -144,7 +144,7 @@ This compose file brings up a fully configured instance on a VM in one command. 
 }
 ```
 
-`idenplane.env` holds the secrets. Generate each value with `openssl rand -hex 32`, keep the file readable by its owner only (`chmod 600`), and never commit it:
+`.env` holds the secrets. Generate each value with `openssl rand`, keep the file readable by its owner only (`chmod 600`), and never commit it:
 
 ```bash
 POSTGRES_PASSWORD=<openssl rand -hex 24>
@@ -163,7 +163,7 @@ services:
     image: postgres:17-alpine
     environment:
       POSTGRES_USER: idenplane
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set in idenplane.env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set in .env}
       POSTGRES_DB: idenplane
     volumes:
       - pgdata:/var/lib/postgresql/data
@@ -175,7 +175,7 @@ services:
 
   app:
     image: islamawad/idenplane:latest
-    env_file: idenplane.env
+    env_file: .env
     environment:
       DATABASE_URL: postgresql://idenplane:${POSTGRES_PASSWORD}@db:5432/idenplane
       NODE_ENV: production
@@ -201,15 +201,15 @@ volumes:
 ```
 
 ```bash
-docker compose --env-file idenplane.env up -d --wait --wait-timeout 300
+docker compose up -d --wait --wait-timeout 300
 ```
 
-`--env-file` lets Compose substitute `POSTGRES_PASSWORD` into the file. `env_file:` passes every value, `ACME_WEB_CLIENT_SECRET` included, into the container. `--wait` returns once the app is healthy, and fails if bootstrap failed. Put a TLS-terminating proxy in front of port 3000 (see [Docker Compose Deployment](docker.mdx)). Pin the image to a version (`islamawad/idenplane:X.Y.Z`) for repeatable installs.
+Compose reads `.env` to substitute `POSTGRES_PASSWORD` into the file, and `env_file: .env` passes every value, `ACME_WEB_CLIENT_SECRET` included, into the container. `--wait` returns once the app is healthy, and fails if bootstrap failed. Put a TLS-terminating proxy in front of port 3000 (see [Docker Compose Deployment](docker.mdx)). Pin the image to a version (`islamawad/idenplane:X.Y.Z`) for repeatable installs.
 
 Without a mount, pass the document itself:
 
 ```bash
-docker run -d --env-file idenplane.env \
+docker run -d --env-file .env \
   -e DATABASE_URL=postgresql://idenplane:...@db:5432/idenplane \
   -e BOOTSTRAP_JSON="$(cat bootstrap.json)" \
   islamawad/idenplane:latest
