@@ -29,6 +29,10 @@ import {
 import { startCertificateListener } from './realtime/certificate-listener.js';
 import { APP_VERSION } from './versioning/app-version.js';
 import {
+  exitOnStartupFailure,
+  startupLogger,
+} from './common/logging/startup-logger.js';
+import {
   registerBodyParsers,
   registerFormBodyParser,
 } from './common/http/body-parsers.js';
@@ -54,10 +58,11 @@ function validateAdminApiKey(): void {
   // Absent key — guard falls back to JWT-only mode; warn in production.
   if (!key) {
     if (isProduction) {
-      console.warn(
+      startupLogger().warn(
         '[SECURITY] ADMIN_API_KEY is not set. ' +
           'The static API-key authentication path is disabled. ' +
           'Ensure admin JWT authentication is properly configured.',
+        'Startup',
       );
     }
     return;
@@ -67,28 +72,28 @@ function validateAdminApiKey(): void {
   const isTooShort = key.length < MIN_ADMIN_API_KEY_LENGTH;
 
   if (isProduction) {
+    // Thrown, so the reason is logged like every other startup failure.
     if (isInsecureValue) {
-      console.error(
+      throw new Error(
         '[SECURITY] FATAL: ADMIN_API_KEY is set to a known placeholder or insecure value. ' +
           'Set a strong, randomly generated secret (e.g. `openssl rand -hex 32`) ' +
           'before running in production.',
       );
-      process.exit(1);
     }
 
     if (isTooShort) {
-      console.error(
+      throw new Error(
         `[SECURITY] FATAL: ADMIN_API_KEY must be at least ${MIN_ADMIN_API_KEY_LENGTH} characters long in production. ` +
           'Generate one with: openssl rand -hex 32',
       );
-      process.exit(1);
     }
   } else {
     // Development / test: warn but do not block startup.
     if (isInsecureValue || isTooShort) {
-      console.warn(
+      startupLogger().warn(
         '[SECURITY] WARNING: ADMIN_API_KEY is weak or a placeholder. ' +
           'This is acceptable in development but MUST be replaced before deploying to production.',
+        'Startup',
       );
     }
   }
@@ -103,8 +108,7 @@ function checkMtlsConfig(): MtlsConfig {
     return validateMtlsConfig(process.env);
   } catch (err) {
     if (err instanceof MtlsConfigError) {
-      console.error(`[SECURITY] FATAL: ${err.message}`);
-      process.exit(1);
+      throw new Error(`[SECURITY] FATAL: ${err.message}`, { cause: err });
     }
     throw err;
   }
@@ -131,9 +135,19 @@ async function bootstrap() {
   const mtlsConfig = checkMtlsConfig();
   checkUsageRetentionConfig();
 
-  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
-    bufferLogs: true,
-  });
+  // The application's own logger from the first line on (startup-logger.ts),
+  // so a start that fails still reports why, in the usual format. A module
+  // that cannot be created is logged by Nest and rethrown (abortOnError:
+  // false) instead of aborting the process.
+  let app: NestExpressApplication;
+  try {
+    app = await NestFactory.create<NestExpressApplication>(AppModule, {
+      logger: startupLogger(),
+      abortOnError: false,
+    });
+  } catch (err) {
+    return exitOnStartupFailure(err, { alreadyLogged: true });
+  }
 
   app.useLogger(app.get(Logger));
 
@@ -156,8 +170,9 @@ async function bootstrap() {
     try {
       sameOrigins.add(new URL(process.env['BASE_URL']).origin);
     } catch {
-      console.warn(
+      startupLogger().warn(
         `Invalid BASE_URL: ${process.env['BASE_URL']} — skipping origin allowlist`,
+        'Startup',
       );
     }
   }
@@ -383,4 +398,18 @@ async function bootstrap() {
   // the rest of the application.
   await startCertificateListener(app);
 }
-void bootstrap();
+
+/**
+ * Any failure to start (a configuration check, a module's init or bootstrap
+ * hook, such as instance bootstrap or the admin seed, binding the port) is
+ * logged once, at error level, in the application's log format, and the
+ * process exits with 1 once every log line is written. Left to Node, the
+ * rejection would be printed as a bare stack on stderr after an exit handler
+ * had flushed the log, with nothing tying its position to the log's order.
+ * Nest has already logged a port it could not bind.
+ */
+bootstrap().catch((err: unknown) =>
+  exitOnStartupFailure(err, {
+    alreadyLogged: (err as { syscall?: string } | null)?.syscall === 'listen',
+  }),
+);
