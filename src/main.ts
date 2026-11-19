@@ -22,6 +22,10 @@ import {
   type MtlsConfig,
 } from './mtls/mtls-config.js';
 import { createTrustedProxyCertHeaderMiddleware } from './mtls/trusted-proxy-cert-header.middleware.js';
+import {
+  loadUsageRetention,
+  UsageRetentionConfigError,
+} from './usage/usage-retention.config.js';
 import { startCertificateListener } from './realtime/certificate-listener.js';
 import { APP_VERSION } from './versioning/app-version.js';
 import {
@@ -110,9 +114,26 @@ function checkMtlsConfig(): MtlsConfig {
   }
 }
 
+/**
+ * USAGE_ACTIVITY_RETENTION_MONTHS: refuse to start on a value that is not a
+ * number of months or `off`, rather than prune billing data by mistake.
+ */
+function checkUsageRetentionConfig(): void {
+  try {
+    loadUsageRetention(process.env);
+  } catch (err) {
+    if (err instanceof UsageRetentionConfigError) {
+      // Thrown, so the reason is logged like every other startup failure.
+      throw new Error(`FATAL: ${err.message}`, { cause: err });
+    }
+    throw err;
+  }
+}
+
 async function bootstrap() {
   validateAdminApiKey();
   const mtlsConfig = checkMtlsConfig();
+  checkUsageRetentionConfig();
 
   // The application's own logger from the first line on (startup-logger.ts),
   // so a start that fails still reports why, in the usual format. A module

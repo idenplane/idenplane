@@ -267,6 +267,13 @@ env:
   # Switch to "redis" when redis.enabled is true for horizontal scalability.
   SESSION_STORE: "database"
 
+  # ── Instance usage ────────────────────────────────────────────────────────
+  # Whole months of monthly-active-user records (month, realm id, user id)
+  # kept before the current month, for GET /admin/system/usage. Older months
+  # are deleted; "off" keeps every month. 1 to 1200: the current and the
+  # previous month are never deleted. An invalid value stops the server.
+  USAGE_ACTIVITY_RETENTION_MONTHS: "13"
+
 # ── Sensitive / Secret Environment Variables ─────────────────────────────────
 # Values in this section are stored in a Kubernetes Secret.
 secrets:

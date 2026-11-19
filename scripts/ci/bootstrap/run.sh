@@ -146,6 +146,9 @@ ci_log "4. other startup failures are reported the same way"
 # A configuration check that runs before the application exists.
 start app-short-key "$DB2" -e ADMIN_API_KEY=dummy-too-short-key
 ci_expect_startup_failure app-short-key "ADMIN_API_KEY must be at least 32 characters"
+# Another one: a retention setting that would prune the months being billed.
+start app-bad-retention "$DB2" -e USAGE_ACTIVITY_RETENTION_MONTHS=0
+ci_expect_startup_failure app-bad-retention "USAGE_ACTIVITY_RETENTION_MONTHS must be between 1 and 1200 months"
 # A module init hook (CryptoService.onModuleInit) in production.
 start app-no-salt "$DB2" -e WEBHOOK_ENCRYPTION_SALT=
 ci_expect_startup_failure app-no-salt "WEBHOOK_ENCRYPTION_SALT is not set"

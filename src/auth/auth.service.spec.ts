@@ -166,6 +166,7 @@ describe('AuthService', () => {
   };
   let userFederationService: { authenticateViaFederation: jest.Mock };
   let backchannel: { notifySessionsEnded: jest.Mock };
+  let usage: { record: jest.Mock };
   /** The id lists of every `DELETE FROM "sessions"` the service ran. */
   const deletedSessions = () =>
     prisma.$queryRaw.mock.calls
@@ -223,6 +224,7 @@ describe('AuthService', () => {
     };
 
     backchannel = { notifySessionsEnded: jest.fn() };
+    usage = { record: jest.fn().mockResolvedValue(undefined) };
     const lookups = lookupsBackedBy(prisma as any) as any;
     service = new AuthService(
       lookups,
@@ -262,6 +264,7 @@ describe('AuthService', () => {
         ) => crypto.verifyPassword(user.passwordHash, password),
         equalizeTiming: async () => {},
       } as any,
+      usage as any,
       undefined,
       undefined,
       undefined,
@@ -751,6 +754,9 @@ describe('AuthService', () => {
         }),
       );
       expect(prisma.refreshToken.create).not.toHaveBeenCalled();
+
+      // The user is counted as active this month (instance usage).
+      expect(usage.record).toHaveBeenCalledWith(realm.id, dbUser.id);
     });
 
     it('should throw invalid_request when username is missing', async () => {
@@ -856,6 +862,8 @@ describe('AuthService', () => {
         'invalid_grant',
         400,
       );
+      // A failed sign-in does not count as activity.
+      expect(usage.record).not.toHaveBeenCalled();
     });
   });
 
@@ -1090,6 +1098,11 @@ describe('AuthService', () => {
         >;
         expect(payload).not.toHaveProperty('sid');
       });
+
+      it('does not count the service account as an active user', async () => {
+        await request();
+        expect(usage.record).not.toHaveBeenCalled();
+      });
     });
   });
 
@@ -1143,6 +1156,9 @@ describe('AuthService', () => {
 
       // New refresh token should be created
       expect(prisma.refreshToken.create).toHaveBeenCalled();
+
+      // A refresh counts the user as active this month.
+      expect(usage.record).toHaveBeenCalledWith(realm.id, dbUser.id);
     });
 
     it('treats a token revoked meanwhile by a concurrent refresh as reuse', async () => {

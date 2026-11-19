@@ -4,6 +4,7 @@ import type { ProxyApplication, Realm, User } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { CryptoService } from '../crypto/crypto.service.js';
 import { matchesReturnUrl } from '../common/redirect-uri.utils.js';
+import { UsageActivityRecorder } from '../usage/usage-activity.recorder.js';
 
 /**
  * Cookie carrying the proxy session. Deliberately NOT `IDENPLANE_SESSION`:
@@ -71,6 +72,7 @@ export class ProxyAuthService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly crypto: CryptoService,
+    private readonly usage: UsageActivityRecorder,
   ) {}
 
   async findBySlug(
@@ -310,6 +312,11 @@ export class ProxyAuthService {
     if (session.proxyApplicationId !== app.id) return null;
     if (session.expiresAt < new Date()) return null;
     if (!session.user.enabled) return null;
+
+    // A proxy session can outlive the month it was created in: using the
+    // application counts the user as active this month, like a refresh.
+    // Answered from memory after the first write of the month.
+    await this.usage.record(session.user.realmId, session.user.id);
 
     return session.user;
   }

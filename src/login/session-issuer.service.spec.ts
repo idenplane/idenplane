@@ -11,6 +11,7 @@ describe('SessionIssuer', () => {
   let login: { createLoginSession: jest.Mock };
   let resolver: { resolve: jest.Mock };
   let issuer: SessionIssuer;
+  let usage: { record: jest.Mock };
   const req = { headers: {}, cookies: {}, socket: {} } as never;
   let res: { cookie: jest.Mock };
 
@@ -28,7 +29,12 @@ describe('SessionIssuer', () => {
     previousEnv = process.env[ENV];
     login = { createLoginSession: jest.fn().mockResolvedValue('session') };
     resolver = { resolve: jest.fn() };
-    issuer = new SessionIssuer(login as never, resolver as never);
+    usage = { record: jest.fn().mockResolvedValue(undefined) };
+    issuer = new SessionIssuer(
+      login as never,
+      resolver as never,
+      usage as never,
+    );
     res = { cookie: jest.fn() };
   });
 
@@ -42,6 +48,12 @@ describe('SessionIssuer', () => {
     await issuer.issue(realm, user, {}, req, res as never);
     expect(resolver.resolve).not.toHaveBeenCalled();
     expect(login.createLoginSession).toHaveBeenCalled();
+  });
+
+  it('counts the signed-in user as active this month', async () => {
+    delete process.env[ENV];
+    await issuer.issue(realm, user, {}, req, res as never);
+    expect(usage.record).toHaveBeenCalledWith('realm-1', 'user-1');
   });
 
   it('issues built-in sessions where the resolver says legacy', async () => {
@@ -64,6 +76,7 @@ describe('SessionIssuer', () => {
       ).rejects.toBeInstanceOf(ForbiddenException);
       expect(login.createLoginSession).not.toHaveBeenCalled();
       expect(res.cookie).not.toHaveBeenCalled();
+      expect(usage.record).not.toHaveBeenCalled();
     },
   );
 

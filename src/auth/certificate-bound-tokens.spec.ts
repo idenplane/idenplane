@@ -211,6 +211,7 @@ describe('certificate-bound access tokens (RFC 8705 §3)', () => {
           crypto.verifyPassword(user.passwordHash, pw),
         equalizeTiming: async () => {},
       } as any,
+      { record: jest.fn().mockResolvedValue(undefined) } as any,
       undefined,
       { enrichToken } as any,
       smsOtp as any,
