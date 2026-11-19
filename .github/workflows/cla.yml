@@ -1,0 +1,322 @@
+name: CLA
+
+## Contributor License Agreement check (CLA.md, CONTRIBUTING.md).
+##
+## Sets the commit status `license/cla` on every pull request to dev or main:
+##  - success when everyone who has to sign the CLA has signed it, when the
+##    pull request only changes the MIT-licensed trees (packages/,
+##    terraform-provider-idenplane/), which do not need it, or when it is
+##    the dev -> main promotion, whose commits were checked on their way
+##    into dev;
+##  - failure otherwise, with a comment on the pull request that says who has
+##    not signed and how to sign.
+## A contributor signs by commenting the sentence in SIGN_PHRASE on the pull
+## request. The signature is appended to SIG_PATH on the SIG_BRANCH branch of
+## this repository, which this workflow creates the first time. That branch is
+## deliberately not covered by the dev/main rulesets, which only accept
+## changes through pull requests.
+##
+## Who has to sign: the pull request's author and the GitHub account of every
+## commit author in it, except the accounts in ALLOWLIST_IDS and bots.
+## A commit whose author email is not linked to a GitHub account cannot be
+## matched to a signature, so it fails the check until it is.
+##
+## Security: pull_request_target and issue_comment run this file as it is on
+## the default branch, with a write token, also for pull requests from forks.
+## So this workflow never checks out or runs code from the pull request. It
+## uses only the GitHub API, through the preinstalled gh and jq, and reads
+## every value that a pull request or comment controls from the event file or
+## the API inside the script, never through ${{ }} expressions in `run:`.
+## No third-party action runs with this token.
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+    branches: [dev, main]
+  issue_comment:
+    types: [created]
+
+permissions: {}
+
+jobs:
+  cla:
+    name: CLA signatures
+    # Comments: only on pull requests, not from bots, and only the two
+    # commands below (checked exactly in the script).
+    if: >-
+      github.event_name == 'pull_request_target' ||
+      (github.event.issue.pull_request &&
+       github.event.comment.user.type != 'Bot' &&
+       (contains(github.event.comment.body, 'I have read the Idenplane CLA') ||
+        contains(github.event.comment.body, '/cla recheck')))
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write        # create SIG_BRANCH and append signatures to it
+      pull-requests: write   # comment on the pull request
+      statuses: write        # set the license/cla commit status
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+      CLA_VERSION: '1.0'
+      SIGN_PHRASE: 'I have read the Idenplane CLA (version 1.0) and I agree to its terms.'
+      RECHECK_PHRASE: '/cla recheck'
+      SIG_BRANCH: cla-signatures
+      SIG_PATH: signatures/v1.0.json
+      STATUS_CONTEXT: license/cla
+      # GitHub account ids (not names, which can change hands) that never
+      # have to sign: the maintainer's own accounts and idenplane-bot, his
+      # automation account.
+      ALLOWLIST_IDS: '153444130 273324721 357740716 253568643'
+      # Changes only under these paths are MIT-licensed and need no CLA.
+      MIT_PATHS_RE: '^(packages/|terraform-provider-idenplane/)'
+    steps:
+      - name: Check and record CLA signatures
+        run: |
+          set -euo pipefail
+          API="repos/$REPO"
+          EV="$GITHUB_EVENT_PATH"
+          MARKER='<!-- idenplane-cla -->'
+          DEFAULT_BRANCH=$(jq -r '.repository.default_branch' "$EV")
+          CLA_URL="https://github.com/$REPO/blob/$DEFAULT_BRANCH/CLA.md"
+          GUIDE_URL="https://github.com/$REPO/blob/$DEFAULT_BRANCH/CONTRIBUTING.md#contributor-license-agreement"
+
+          # ---- Which pull request, and what to do ---------------------------
+          ACTION=check
+          if [ "$GITHUB_EVENT_NAME" = "pull_request_target" ]; then
+            PR=$(jq -r '.pull_request.number' "$EV")
+          else
+            PR=$(jq -r '.issue.number' "$EV")
+            BODY=$(jq -r '.comment.body | gsub("\r"; "") | gsub("\\A\\s+|\\s+\\z"; "")' "$EV")
+            if [ "$BODY" = "$SIGN_PHRASE" ]; then
+              ACTION=sign
+            elif [ "$BODY" != "$RECHECK_PHRASE" ]; then
+              echo "Comment is not a CLA command"
+              exit 0
+            fi
+          fi
+
+          PR_JSON=$(gh api "$API/pulls/$PR")
+          STATE=$(jq -r '.state' <<<"$PR_JSON")
+          BASE=$(jq -r '.base.ref' <<<"$PR_JSON")
+          HEAD_SHA=$(jq -r '.head.sha' <<<"$PR_JSON")
+          if [ "$STATE" != "open" ]; then echo "PR #$PR is $STATE"; exit 0; fi
+          case "$BASE" in dev|main) ;; *) echo "PR #$PR targets $BASE; no CLA check"; exit 0 ;; esac
+
+          set_status() {
+            gh api -X POST "$API/statuses/$HEAD_SHA" \
+              -f state="$1" -f context="$STATUS_CONTEXT" \
+              -f description="$2" -f target_url="$CLA_URL" >/dev/null
+            echo "Status $STATUS_CONTEXT: $1 ($2)"
+          }
+
+          # Our own comment on the pull request, if there is one.
+          COMMENT_ID=$(gh api --paginate "$API/issues/$PR/comments?per_page=100" \
+            --jq ".[] | select(.user.login == \"github-actions[bot]\" and (.body | startswith(\"$MARKER\"))) | .id" | sed -n '1p')
+          upsert_comment() {
+            local payload
+            payload=$(jq -n --arg body "$1" '{body: $body}')
+            if [ -n "$COMMENT_ID" ]; then
+              gh api -X PATCH "$API/issues/comments/$COMMENT_ID" --input - <<<"$payload" >/dev/null
+            else
+              gh api -X POST "$API/issues/$PR/comments" --input - <<<"$payload" >/dev/null
+            fi
+          }
+
+          # ---- Does this pull request need the CLA? -------------------------
+          # The dev -> main promotion only carries commits that were merged
+          # into dev through pull requests, and were checked there. Checking
+          # them again would name contributors whose only pull request
+          # changed the MIT packages, and long promotions exceed the 250
+          # commits the API lists.
+          HEAD_REPO=$(jq -r '.head.repo.full_name // ""' <<<"$PR_JSON")
+          HEAD_REF=$(jq -r '.head.ref' <<<"$PR_JSON")
+          if [ "$HEAD_REPO" = "$REPO" ] && [ "$HEAD_REF" = "dev" ] && [ "$BASE" = "main" ]; then
+            set_status success "Not required: promotion of dev, checked when merged into dev"
+            exit 0
+          fi
+
+          # Renames count with their old path too: moving a server file into
+          # packages/ still changes the server.
+          FILES=$(gh api --paginate "$API/pulls/$PR/files?per_page=100" \
+            --jq '.[] | .filename, (.previous_filename // empty)')
+          LISTED=$(gh api --paginate "$API/pulls/$PR/files?per_page=100" --jq '.[].filename' | grep -c . || true)
+          CHANGED=$(jq -r '.changed_files' <<<"$PR_JSON")
+          # The files API lists at most 3000 files; if it listed fewer than
+          # the pull request changes, the CLA is required.
+          if [ "$LISTED" -gt 0 ] && [ "$LISTED" -eq "$CHANGED" ] \
+             && ! grep -qvE "$MIT_PATHS_RE" <<<"$FILES"; then
+            set_status success "Not required: only MIT-licensed packages change"
+            if [ -n "$COMMENT_ID" ]; then
+              upsert_comment "$MARKER
+          This pull request now only changes MIT-licensed code under \`packages/\` or \`terraform-provider-idenplane/\`, so the [Contributor License Agreement]($CLA_URL) is not required for it."
+            fi
+            exit 0
+          fi
+
+          # ---- Who has to sign ----------------------------------------------
+          # One line per account: id, login. Bots and allowlisted ids drop out.
+          COMMITS=$(gh api --paginate "$API/pulls/$PR/commits?per_page=100" --jq '.[]' | jq -s '.')
+          COMMIT_TOTAL=$(jq -r '.commits' <<<"$PR_JSON")
+          LISTED_COMMITS=$(jq 'length' <<<"$COMMITS")
+          ACCOUNTS=$( { jq -r '.user | select(.type != "Bot") | "\(.id)\t\(.login)"' <<<"$PR_JSON"
+                        jq -r '.[] | .author | select(. != null and .type != "Bot") | "\(.id)\t\(.login)"' <<<"$COMMITS"; } \
+                      | sort -u -t "$(printf '\t')" -k1,1)
+          REQUIRED=""
+          while IFS=$'\t' read -r id login; do
+            [ -z "$id" ] && continue
+            case " $ALLOWLIST_IDS " in *" $id "*) continue ;; esac
+            REQUIRED+="$id"$'\t'"$login"$'\n'
+          done <<<"$ACCOUNTS"
+          # Commits whose author email is not linked to any GitHub account.
+          # The author name is free text: keep only harmless characters.
+          UNLINKED=$(jq -r '.[] | select(.author == null)
+                            | "- `\(.sha[0:7])` by `\(.commit.author.name | gsub("[^A-Za-z0-9 ._-]"; "") | .[0:60])`"' <<<"$COMMITS")
+
+          # ---- The signatures file ------------------------------------------
+          SIG_SHA=""
+          SIG_DB='{"cla_version":"'"$CLA_VERSION"'","document":"CLA.md","signatures":[],"entities":[]}'
+          load_signatures() {
+            local out err
+            err=$(mktemp)
+            if out=$(gh api "$API/contents/$SIG_PATH?ref=$SIG_BRANCH" 2>"$err"); then
+              SIG_SHA=$(jq -r '.sha' <<<"$out")
+              SIG_DB=$(jq -r '.content' <<<"$out" | base64 -d)
+            elif grep -q 'HTTP 404' "$err"; then
+              SIG_SHA=""
+            else
+              cat "$err" >&2
+              return 1
+            fi
+          }
+          is_signed() {
+            jq -e --argjson id "$1" \
+              '([.signatures[].id] + [.entities[].accounts[].id]) | index($id) != null' \
+              <<<"$SIG_DB" >/dev/null
+          }
+          ensure_branch() {
+            if gh api "$API/git/ref/heads/$SIG_BRANCH" >/dev/null 2>&1; then return 0; fi
+            echo "Creating branch $SIG_BRANCH"
+            local readme tree commit
+            readme="# CLA signatures
+
+          Records of signatures of the [Idenplane Contributor License Agreement]($CLA_URL), one JSON file per CLA version, written by \`.github/workflows/cla.yml\`. This branch holds no code and is never merged."
+            tree=$(jq -n --arg c "$readme" '{tree: [{path: "README.md", mode: "100644", type: "blob", content: $c}]}' \
+              | gh api -X POST "$API/git/trees" --input - --jq '.sha')
+            commit=$(jq -n --arg t "$tree" '{message: "Start the CLA signatures branch", tree: $t, parents: []}' \
+              | gh api -X POST "$API/git/commits" --input - --jq '.sha')
+            # A concurrent run may have created it first; that is fine.
+            gh api -X POST "$API/git/refs" -f ref="refs/heads/$SIG_BRANCH" -f sha="$commit" >/dev/null 2>&1 \
+              || gh api "$API/git/ref/heads/$SIG_BRANCH" >/dev/null
+          }
+
+          load_signatures
+
+          # ---- Record a signature -------------------------------------------
+          if [ "$ACTION" = "sign" ]; then
+            SIGNER_ID=$(jq -r '.comment.user.id' "$EV")
+            SIGNER_LOGIN=$(jq -r '.comment.user.login' "$EV")
+            if ! grep -q "^$SIGNER_ID"$'\t' <<<"$REQUIRED"; then
+              echo "@$SIGNER_LOGIN does not have to sign for PR #$PR; nothing recorded"
+            elif is_signed "$SIGNER_ID"; then
+              echo "@$SIGNER_LOGIN has already signed"
+            else
+              CLA_SHA256=$(gh api "$API/contents/CLA.md?ref=$DEFAULT_BRANCH" --jq '.content' | base64 -d | sha256sum | cut -d' ' -f1)
+              RECORD=$(jq -n \
+                --arg login "$SIGNER_LOGIN" --argjson id "$SIGNER_ID" \
+                --arg at "$(jq -r '.comment.created_at' "$EV")" \
+                --argjson pr "$PR" \
+                --argjson comment_id "$(jq -r '.comment.id' "$EV")" \
+                --arg comment_url "$(jq -r '.comment.html_url' "$EV")" \
+                --arg version "$CLA_VERSION" --arg sha256 "$CLA_SHA256" \
+                '{login: $login, id: $id, type: "individual", signed_at: $at, pull_request: $pr,
+                  comment_id: $comment_id, comment_url: $comment_url,
+                  cla_version: $version, cla_sha256: $sha256}')
+              ensure_branch
+              # Append with optimistic concurrency: the write names the blob it
+              # replaces, so a concurrent signature makes it fail and retry.
+              for attempt in 1 2 3 4 5; do
+                load_signatures
+                if is_signed "$SIGNER_ID"; then break; fi
+                NEW_DB=$(jq --argjson rec "$RECORD" '.signatures += [$rec]' <<<"$SIG_DB")
+                PAYLOAD=$(jq -n \
+                  --arg message "Record CLA $CLA_VERSION signature of $SIGNER_LOGIN ($SIGNER_ID), PR $PR" \
+                  --arg content "$(printf '%s\n' "$NEW_DB" | base64 -w0)" \
+                  --arg branch "$SIG_BRANCH" --arg sha "$SIG_SHA" \
+                  '{message: $message, content: $content, branch: $branch} + (if $sha == "" then {} else {sha: $sha} end)')
+                ERR=$(mktemp)
+                if gh api -X PUT "$API/contents/$SIG_PATH" --input - <<<"$PAYLOAD" >/dev/null 2>"$ERR"; then
+                  echo "Recorded the signature of @$SIGNER_LOGIN"
+                  SIG_DB="$NEW_DB"
+                  break
+                fi
+                if ! grep -qE 'HTTP (409|422)' "$ERR" || [ "$attempt" = 5 ]; then
+                  cat "$ERR" >&2
+                  exit 1
+                fi
+                sleep "$attempt"
+              done
+            fi
+          fi
+
+          # ---- Evaluate -----------------------------------------------------
+          MISSING=""
+          while IFS=$'\t' read -r id login; do
+            [ -z "$id" ] && continue
+            is_signed "$id" || MISSING+="- @$login"$'\n'
+          done <<<"$REQUIRED"
+
+          TOO_MANY=""
+          if [ "$LISTED_COMMITS" -lt "$COMMIT_TOTAL" ]; then
+            TOO_MANY="This pull request has $COMMIT_TOTAL commits, more than the $LISTED_COMMITS the GitHub API lists, so the maintainer has to check the rest by hand."
+          fi
+
+          if [ -z "$MISSING" ] && [ -z "$UNLINKED" ] && [ -z "$TOO_MANY" ]; then
+            set_status success "All contributors have signed the CLA"
+            if [ -n "$COMMENT_ID" ]; then
+              upsert_comment "$MARKER
+          All contributors to this pull request have signed the [Contributor License Agreement]($CLA_URL). Thank you."
+            fi
+            exit 0
+          fi
+
+          MSG="$MARKER
+          ### Contributor License Agreement
+
+          Thank you for your pull request. Before it can be merged, everyone who wrote commits in it has to sign the [Idenplane Contributor License Agreement]($CLA_URL) (version $CLA_VERSION). You sign once, and it covers all your contributions.
+
+          **Why:** the Idenplane server is AGPL-3.0, and the maintainer also offers it under a commercial license and as a hosted service. The CLA allows your contribution to be included in those too. You keep the copyright, and your contribution stays available under the open-source license. [CONTRIBUTING.md]($GUIDE_URL) has the details, including what to do if your employer owns your work.
+
+          **To sign,** read the agreement, then post a comment on this pull request that consists of exactly this sentence:
+
+          \`\`\`
+          $SIGN_PHRASE
+          \`\`\`
+          "
+          if [ -n "$MISSING" ]; then
+            MSG+="
+          **Not signed yet:**
+          $MISSING"
+          fi
+          if [ -n "$UNLINKED" ]; then
+            MSG+="
+          **Commits whose author email is not linked to a GitHub account.** These cannot be matched to a signature. Add the email to your GitHub account (Settings, Emails), or rewrite the commits with an email that is on it, then comment \`$RECHECK_PHRASE\`:
+          $UNLINKED
+          "
+          fi
+          if [ -n "$TOO_MANY" ]; then
+            MSG+="
+          $TOO_MANY
+          "
+          fi
+          MSG+="
+          The check updates when you sign. If it does not, comment \`$RECHECK_PHRASE\`."
+
+          upsert_comment "$MSG"
+          if [ -n "$MISSING" ]; then
+            set_status failure "Not all contributors have signed the CLA"
+          elif [ -n "$UNLINKED" ]; then
+            set_status failure "Commits with an author email not linked to GitHub"
+          else
+            set_status failure "Too many commits to check; the maintainer checks by hand"
+          fi

@@ -14,7 +14,9 @@ The maintainer:
 - owns the repository settings, the published packages (Docker Hub, npm, Maven Central) and the project domains;
 - enforces the [Code of Conduct](CODE_OF_CONDUCT.md).
 
-The server is licensed AGPL-3.0, and the SDKs and client packages MIT (see [ADR-001](docs/docs/contributing/adrs.mdx)). A commercial license for the server is offered by the maintainer, as described in the [README](README.md#license).
+The server is licensed AGPL-3.0, and the SDKs and client packages MIT (see [ADR-001](docs/docs/contributing/adrs.mdx)). A commercial license for the server is offered by the maintainer, as described in the [README](README.md#license), and the maintainer runs it as a hosted service.
+
+So that contributions can be included in the commercially licensed and hosted server as well, contributors sign the [Contributor License Agreement](CLA.md) before their first pull request that changes the server is merged (see [ADR-011](docs/docs/contributing/adrs.mdx) and [CONTRIBUTING.md](CONTRIBUTING.md#contributor-license-agreement)). Contributors keep their copyright, and the CLA commits the maintainer to keep every contribution he distributes available under the open-source license too. Pull requests that only change the MIT-licensed packages do not need it.
 
 ## How decisions are made
 
@@ -36,6 +38,7 @@ These are the rules as they work today:
 
 - **Branches.** Work happens on short-lived branches (`feat/…`, `fix/…`, `chore/…`, `docs/…`). Pull requests target **`dev`**.
 - **Review.** The maintainer reviews every pull request from a contributor. The maintainer's own pull requests are not reviewed by a second person, because there is none. Automated checks (code scanning, CI, and the PR hygiene checks on pull requests to `dev` and `main`: a secret scan, and a block on workflow changes from forks) are the second pair of eyes.
+- **CLA.** A pull request that changes anything outside `packages/` and `terraform-provider-idenplane/` is merged only when everyone who has to sign the [CLA](CLA.md) has signed it: the `license/cla` status from `.github/workflows/cla.yml` is green. The maintainer's accounts, `idenplane-bot` and bots are exempt, and so is the `dev` → `main` promotion, whose commits were checked on their way into `dev`. Signatures are kept in the `cla-signatures` branch. A corporate CLA received by email is recorded there by the maintainer, by adding the company and its designated GitHub accounts to the `entities` list of the signatures file.
 - **CI must pass.** A pull request is merged only when every CI job is green: lint, import cycles, unit tests, end-to-end tests against PostgreSQL 16, the admin console tests, the SDK suites, the docs build, the Docker build and the Helm install on kind. A red check means the pull request is not ready, never that it needs an override. Branch protection does not enforce this yet; the maintainer does.
 - **Merge.** Pull requests are merged with a merge commit.
 - **Workflow changes.** Changes to `.github/workflows/` from a contributor are merged only deliberately, after the maintainer has read them.
