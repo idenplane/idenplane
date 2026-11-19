@@ -16,7 +16,7 @@ You accept and agree to the following terms and conditions for Your Contribution
 
 ### 1. Definitions
 
-"Maintainer" shall mean Islam Awad (GitHub account [@Islamawad132](https://github.com/Islamawad132)), the maintainer of the Idenplane project, and his successors and assigns under section 9.
+"Maintainer" shall mean Islam Ahmed Mohamed Awad (GitHub account [@Islamawad132](https://github.com/Islamawad132)), the maintainer of the Idenplane project, and his successors and assigns under section 9.
 
 "You" (or "Your") shall mean the copyright owner or legal entity authorized by the copyright owner that is making this Agreement with the Maintainer. For legal entities, the entity making a Contribution and all other entities that control, are controlled by, or are under common control with that entity are considered to be a single Contributor. For the purposes of this definition, "control" means (i) the power, direct or indirect, to cause the direction or management of such entity, whether by contract or otherwise, or (ii) ownership of fifty percent (50%) or more of the outstanding shares, or (iii) beneficial ownership of such entity.
 
