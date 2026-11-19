@@ -54,6 +54,7 @@ import {
 } from '../sessions/session-lifetime.js';
 import { deleteSessionsReturning } from '../sessions/delete-sessions.js';
 import { BackchannelLogoutService } from '../tokens/backchannel-logout.service.js';
+import { UsageActivityRecorder } from '../usage/usage-activity.recorder.js';
 
 export interface TokenResponse {
   access_token: string;
@@ -260,6 +261,7 @@ export class AuthService {
     private readonly userFederationService: UserFederationService,
     private readonly clientAuthenticator: ClientAuthenticator,
     private readonly passwords: PasswordVerificationService,
+    private readonly usage: UsageActivityRecorder,
     @Optional() private readonly stepUpService?: StepUpService,
     @Optional() private readonly pluginManager?: PluginManagerService,
     @Optional() private readonly smsOtp?: SmsOtpService,
@@ -1770,6 +1772,11 @@ export class AuthService {
       });
       await this.enforceSessionLimit(realm, session, isOffline);
     }
+
+    // A user's tokens were issued (a new session or a refresh of one): the
+    // user is active this month. Service accounts never get here (no
+    // session). At most one write per user per month; never throws.
+    await this.usage.record(realm.id, user.id);
 
     // Build ID token if openid scope is present
     let idToken: string | undefined;

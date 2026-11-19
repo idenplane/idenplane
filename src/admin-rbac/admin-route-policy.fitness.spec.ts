@@ -133,6 +133,7 @@ describe('admin route authorization (fitness)', () => {
       ['GET', '/admin/plugins/:name'],
       ['POST', '/admin/upgrade'],
       ['GET', '/admin/system/version'],
+      ['GET', '/admin/system/usage'],
       ['GET', '/admin/metrics'],
       ['POST', '/admin/migration/keycloak'],
       ['GET', '/setup-wizard/state'],

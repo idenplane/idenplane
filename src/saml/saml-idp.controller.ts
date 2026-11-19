@@ -28,6 +28,7 @@ import { PrismaService } from '../prisma/prisma.service.js';
 import { CryptoService } from '../crypto/crypto.service.js';
 import { FlowRuntimeService } from '../auth-flow/flow-runtime.service.js';
 import { StepUpService } from '../step-up/step-up.service.js';
+import { UsageActivityRecorder } from '../usage/usage-activity.recorder.js';
 
 /** `PendingAction.type` of an AuthnRequest waiting for a sign-in. */
 export const SAML_REQUEST_TYPE = 'saml_request';
@@ -58,6 +59,7 @@ export class SamlIdpController {
     private readonly crypto: CryptoService,
     private readonly flowRuntime: FlowRuntimeService,
     private readonly stepUpService: StepUpService,
+    private readonly usage: UsageActivityRecorder,
   ) {}
 
   // ─── SSO ENDPOINT (HTTP-Redirect binding) ──────────────
@@ -375,6 +377,11 @@ export class SamlIdpController {
       inResponseTo,
       acsUrl,
     );
+
+    // A SAML assertion for the user, also when it is served from an SSO
+    // session established in an earlier month: the user is active this
+    // month. At most one write per user per month; never throws.
+    await this.usage.record(realm.id, user.id);
 
     // Clear the SAML request cookie
     this.clearSamlCookie(realm, res);

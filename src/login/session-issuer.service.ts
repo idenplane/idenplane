@@ -15,6 +15,7 @@ import {
   FlowBindingResolver,
   type ResolverClient,
 } from '../auth-flow/flow-binding.resolver.js';
+import { UsageActivityRecorder } from '../usage/usage-activity.recorder.js';
 
 /** How long a "remember me" SSO cookie lasts. */
 const REMEMBER_ME_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
@@ -38,6 +39,7 @@ export class SessionIssuer {
   constructor(
     private readonly loginService: LoginService,
     private readonly flowBinding: FlowBindingResolver,
+    private readonly usage: UsageActivityRecorder,
   ) {}
 
   /**
@@ -78,6 +80,10 @@ export class SessionIssuer {
       // (and an MFA-required realm accepts the session).
       authContext,
     );
+
+    // Every interactive sign-in ends here: the user is active this month.
+    // At most one write per user per month; never throws.
+    await this.usage.record(realm.id, user.id);
 
     res.cookie(SESSION_COOKIE, sessionToken, {
       httpOnly: true,

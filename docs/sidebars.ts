@@ -73,6 +73,11 @@ const sidebars: SidebarsConfig = {
           id: 'api/realms',
           label: 'Realms',
         },
+        {
+          type: 'doc',
+          id: 'api/usage',
+          label: 'Instance Usage',
+        },
       ],
     },
     {

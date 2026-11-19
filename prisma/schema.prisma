@@ -2711,3 +2711,36 @@ model ProxySession {
   @@index([expiresAt])
   @@map("proxy_sessions")
 }
+
+// ─── INSTANCE USAGE (monthly active users) ───────────────
+
+/// One row per user who authenticated in a calendar month (UTC): the basis
+/// of GET /admin/system/usage. Written once per user per month by
+/// UsageActivityRecorder (`INSERT ... ON CONFLICT DO NOTHING`), at the points
+/// where a user gets an SSO session, OAuth tokens or a SAML assertion.
+///
+/// Deliberately no foreign keys and no retention: deleting a user or a realm
+/// does not erase activity that already happened in a month, and the login
+/// event retention setting does not apply. A deleted user leaves only its
+/// opaque id here. The primary key serves both the conflict check and the
+/// per-realm count of a month (an index-only scan).
+model UserMonthlyActivity {
+  /// First day of the month, UTC.
+  month       DateTime @db.Date
+  realmId     String   @map("realm_id")
+  userId      String   @map("user_id")
+  firstSeenAt DateTime @default(now()) @map("first_seen_at")
+
+  @@id([month, realmId, userId])
+  @@map("user_monthly_activity")
+}
+
+/// When this instance started recording UserMonthlyActivity: one row (id 1),
+/// written by the migration that created the table. A month that starts
+/// before it is reported as incomplete.
+model UsageTracking {
+  id            Int      @id @default(1)
+  trackingSince DateTime @map("tracking_since")
+
+  @@map("usage_tracking")
+}

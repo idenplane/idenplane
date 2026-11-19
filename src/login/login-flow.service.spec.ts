@@ -62,7 +62,11 @@ describe('LoginFlowService', () => {
       oauthService as any,
       eventsService as any,
       mfaService as any,
-      new SessionIssuer(loginService as any, { resolve: jest.fn() } as any),
+      new SessionIssuer(
+        loginService as any,
+        { resolve: jest.fn() } as any,
+        { record: jest.fn().mockResolvedValue(undefined) } as any,
+      ),
       new PostAuthService(oauthService as any, consentService as any),
     );
     res = { cookie: jest.fn(), redirect: jest.fn() };
@@ -188,6 +192,7 @@ describe('LoginFlowService', () => {
               flow: { id: 'f', version: 1 },
             }),
           } as any,
+          { record: jest.fn().mockResolvedValue(undefined) } as any,
         ),
         new PostAuthService(oauthService as any, consentService as any),
       );

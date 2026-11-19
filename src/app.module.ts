@@ -49,6 +49,7 @@ import { WebhooksModule } from './webhooks/webhooks.module.js';
 import { RateLimitModule } from './rate-limit/rate-limit.module.js';
 import { ImpersonationModule } from './impersonation/impersonation.module.js';
 import { StatsModule } from './stats/stats.module.js';
+import { UsageModule } from './usage/usage.module.js';
 import { RedisModule } from './redis/redis.module.js';
 import { CacheModule } from './cache/cache.module.js';
 import { WebAuthnModule } from './webauthn/webauthn.module.js';
@@ -156,6 +157,7 @@ import { MetricsInterceptor } from './metrics/metrics.interceptor.js';
     RateLimitModule,
     ImpersonationModule,
     StatsModule,
+    UsageModule,
     AuthorizationModule,
     CustomAttributesModule,
     PluginsModule,
