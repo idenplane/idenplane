@@ -106,7 +106,7 @@ The whole document is checked before anything is written. The start fails if:
 
 Bootstrap runs before the server listens. While it runs, `/health` and `/health/ready` do not answer, so no orchestrator sends traffic to a half-configured instance. When it cannot complete:
 
-- the process logs `Instance bootstrap (BOOTSTRAP_FILE) failed; nothing was applied and the server will not start: <reason>` and exits with a non-zero code;
+- the process logs `Instance bootstrap (BOOTSTRAP_FILE) failed; nothing was applied and the server will not start: <reason>` once, as its last log line, at error level (`"level":50`, `"context":"Startup"`), and exits with code 1;
 - the transaction is rolled back, so the database holds nothing from the bootstrap and the setup wizard is still open but unreachable, because the server is not running;
 - the next start tries again from scratch. Fix the document or the missing variable and restart.
 

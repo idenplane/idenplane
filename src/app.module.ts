@@ -8,7 +8,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { LoggerModule } from 'nestjs-pino';
 import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { join } from 'path';
-import { createLoggerConfig } from './common/logging/logger.config.js';
+import { loggerParams } from './common/logging/startup-logger.js';
 import { PrismaModule } from './prisma/prisma.module.js';
 import { CryptoModule } from './crypto/crypto.module.js';
 import { SecretsAtRestModule } from './secrets-at-rest/secrets-at-rest.module.js';
@@ -94,7 +94,7 @@ import { MetricsInterceptor } from './metrics/metrics.interceptor.js';
     LoginModule,
     WebAuthnModule,
     ConfigModule.forRoot({ isGlobal: true }),
-    LoggerModule.forRoot(createLoggerConfig()),
+    LoggerModule.forRoot(loggerParams()),
     ThrottlerModule.forRoot({
       throttlers: [
         {
