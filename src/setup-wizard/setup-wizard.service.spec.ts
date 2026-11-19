@@ -361,4 +361,70 @@ describe('SetupWizardService', () => {
       expect(stateWrite.data).not.toHaveProperty('clientSecret');
     });
   });
+
+  describe('completeUnattended (instance bootstrap)', () => {
+    it('runs apply under the row lock and closes the wizard in the same transaction', async () => {
+      const { service, prisma, db } = build(
+        row({ currentStep: 2, adminUsername: 'half', adminPasswordHash: 'h' }),
+      );
+      const apply = jest.fn(async () => 'done');
+
+      const out = await service.completeUnattended(apply, {
+        realmName: 'acme',
+        realmDisplayName: 'Acme',
+      });
+
+      expect(out).toEqual({ status: 'applied', result: 'done' });
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+      expect(prisma.$queryRaw).toHaveBeenCalled();
+      expect(apply).toHaveBeenCalledWith(prisma);
+      expect(db.locked).toMatchObject({
+        completed: true,
+        currentStep: 6,
+        realmName: 'acme',
+        realmDisplayName: 'Acme',
+        // Unapplied answers of a wizard in progress are not kept.
+        adminUsername: null,
+        adminPasswordHash: null,
+      });
+    });
+
+    it.each([
+      ['completed', { completed: true }],
+      ['skipped', { skipped: true }],
+    ])('runs nothing once setup is %s', async (_label, closed) => {
+      const { service, prisma } = build(row(closed));
+      const apply = jest.fn();
+
+      const out = await service.completeUnattended(apply, {});
+
+      expect(out).toEqual({ status: 'already-complete' });
+      expect(apply).not.toHaveBeenCalled();
+      expect(prisma.wizardState.update).not.toHaveBeenCalled();
+    });
+
+    it('checks under the lock: a wizard closed in between wins', async () => {
+      const { service, db } = build(row());
+      db.locked = row({ completed: true });
+      const apply = jest.fn();
+
+      await expect(service.completeUnattended(apply, {})).resolves.toEqual({
+        status: 'already-complete',
+      });
+      expect(apply).not.toHaveBeenCalled();
+    });
+
+    it('leaves the wizard open when apply fails', async () => {
+      const { service, prisma, db } = build(row());
+      const apply = jest.fn(async () => {
+        throw new Error('import failed');
+      });
+
+      await expect(service.completeUnattended(apply, {})).rejects.toThrow(
+        'import failed',
+      );
+      expect(prisma.wizardState.update).not.toHaveBeenCalled();
+      expect(db.locked.completed).toBe(false);
+    });
+  });
 });
