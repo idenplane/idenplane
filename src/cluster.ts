@@ -17,6 +17,11 @@
 import cluster, { type Worker } from 'node:cluster';
 import { join } from 'node:path';
 import { effectiveCpuCount } from './common/utils/cpu-count.util.js';
+import {
+  exitOnStartupFailure,
+  flushLogs,
+  startupLogger,
+} from './common/logging/startup-logger.js';
 
 /** A worker that dies sooner than this after starting counts as a failed start. */
 const FAST_EXIT_MS = 10_000;
@@ -30,10 +35,11 @@ function requestedWorkers(): number {
   if (raw === 'auto') return effectiveCpuCount();
   const n = Number(raw);
   if (!Number.isInteger(n) || n < 1) {
-    console.error(
-      `WEB_CONCURRENCY must be "auto" or a positive integer, not "${raw}"`,
+    exitOnStartupFailure(
+      new Error(
+        `WEB_CONCURRENCY must be "auto" or a positive integer, not "${raw}"`,
+      ),
     );
-    process.exit(1);
   }
   return n;
 }
@@ -78,13 +84,15 @@ function runPrimary(workers: number): void {
     if (lived < FAST_EXIT_MS) {
       fastExits++;
       if (fastExits >= MAX_FAST_EXITS) {
-        console.error(
-          `[cluster] workers failed to start ${fastExits} times in a row; ` +
+        startupLogger().error(
+          `workers failed to start ${fastExits} times in a row; ` +
             'stopping. Their output above says why.',
+          'Cluster',
         );
         stopping = true;
         for (const w of Object.values(cluster.workers ?? {}))
           w?.kill('SIGKILL');
+        flushLogs();
         process.exit(1);
       }
     }

@@ -7,8 +7,10 @@
 #     the declared client gets tokens, and no secret reaches the logs;
 #  2. a restart changes nothing;
 #  3. on another empty database, an invalid BOOTSTRAP_JSON stops the
-#     container before it is ever ready and writes nothing; fixed, the next
-#     start applies it.
+#     container before it is ever ready, says why once as a structured error
+#     log line, and writes nothing; fixed, the next start applies it;
+#  4. other startup checks that fail (a configuration check before the
+#     application exists, a module's init hook) report the same way.
 #
 # Needs only Docker; nothing is published on the host. Set IDENPLANE_IMAGE to
 # test a built image, or the image is built from this checkout.
@@ -84,14 +86,19 @@ check() {
     -e CLIENT_ID="$CLIENT_ID" -e CLIENT_SECRET="$CLIENT_SECRET"
 }
 
+# The logs are read into a file first: `docker logs | grep -q` under
+# pipefail can report "not found" when grep exits on an early match.
 no_secrets_in_logs() {
+  local logs="$WORK/logs.txt"
   for app in "$@"; do
+    docker logs "$app" >"$logs" 2>&1
     for value in "$CLIENT_SECRET" "$OWNER_PASSWORD"; do
-      if docker logs "$app" 2>&1 | grep -qF "$value"; then
+      if grep -qF -- "$value" "$logs"; then
         echo "::error::a bootstrap secret appears in the logs of $app"; exit 1
       fi
     done
   done
+  rm -f "$logs"
 }
 
 ci_log "1. two instances start together on an empty database"
@@ -124,19 +131,7 @@ ci_log "3. an invalid BOOTSTRAP_JSON stops the container and writes nothing"
 ci_pg_start "$DB2" "$NET"
 bad="$(sed 's/"clientSecret": "${env:ACME_CLIENT_SECRET}",//' "$WORK/bootstrap.json")"
 start app-bad "$DB2" -e BOOTSTRAP_JSON="$bad"
-for _ in $(seq 1 180); do
-  [ "$(docker inspect -f '{{.State.Running}}' app-bad)" = "true" ] || break
-  if docker exec app-bad wget -q -O /dev/null http://localhost:3000/health/ready 2>/dev/null; then
-    echo "::error::the instance became ready with an invalid bootstrap"; exit 1
-  fi
-  sleep 1
-done
-code="$(docker inspect -f '{{.State.ExitCode}}' app-bad)"
-[ "$(docker inspect -f '{{.State.Running}}' app-bad)" = "false" ] && [ "$code" != 0 ] \
-  || { echo "::error::the container did not stop (exit code $code)"; exit 1; }
-docker logs app-bad 2>&1 | grep -q "Instance bootstrap (BOOTSTRAP_JSON) failed; nothing was applied" \
-  || { echo "::error::no bootstrap failure in the log"; docker logs app-bad 2>&1 | tail -40; exit 1; }
-echo "stopped with exit code $code"
+ci_expect_startup_failure app-bad "Instance bootstrap (BOOTSTRAP_JSON) failed; nothing was applied"
 realms="$(docker exec "$DB2" psql -U idenplane -d idenplane -tAc "SELECT count(*) FROM realms WHERE name = '$REALM'")"
 [ "$realms" = 0 ] || { echo "::error::the failed bootstrap left a realm behind"; exit 1; }
 no_secrets_in_logs app-bad
@@ -146,5 +141,13 @@ start app-fixed "$DB2" -e BOOTSTRAP_JSON="$(cat "$WORK/bootstrap.json")"
 ci_app_wait app-fixed
 check app-fixed
 no_secrets_in_logs app-fixed
+
+ci_log "4. other startup failures are reported the same way"
+# A configuration check that runs before the application exists.
+start app-short-key "$DB2" -e ADMIN_API_KEY=dummy-too-short-key
+ci_expect_startup_failure app-short-key "ADMIN_API_KEY must be at least 32 characters"
+# A module init hook (CryptoService.onModuleInit) in production.
+start app-no-salt "$DB2" -e WEBHOOK_ENCRYPTION_SALT=
+ci_expect_startup_failure app-no-salt "WEBHOOK_ENCRYPTION_SALT is not set"
 
 ci_log "unattended bootstrap: all checks passed"

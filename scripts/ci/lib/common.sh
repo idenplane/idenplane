@@ -71,6 +71,49 @@ ci_app_wait() {
   echo "::error::$name not ready after ${limit}s"; docker logs "$name" 2>&1 | tail -80; return 1
 }
 
+# ci_expect_startup_failure NAME TEXT — the container NAME must stop with a
+# non-zero exit code without ever being ready, and say why exactly once: as
+# its last stdout line, a JSON log line at error level (50) in context
+# "Startup" whose msg contains TEXT, and nowhere on stderr (no bare Node
+# stack). The logs are read into files first: `docker logs | grep -q` under
+# pipefail fails at random, as grep exits on the first match and docker logs
+# then dies writing the rest into a closed pipe.
+ci_expect_startup_failure() {
+  local name="$1" text="$2" dir out err code count last
+  for _ in $(seq 1 180); do
+    [ "$(docker inspect -f '{{.State.Running}}' "$name")" = "true" ] || break
+    if docker exec "$name" wget -q -O /dev/null http://localhost:3000/health/ready 2>/dev/null; then
+      echo "::error::$name became ready; it was expected to refuse to start"; return 1
+    fi
+    sleep 1
+  done
+  code="$(docker inspect -f '{{.State.ExitCode}}' "$name")"
+  if [ "$(docker inspect -f '{{.State.Running}}' "$name")" != "false" ] || [ "$code" = 0 ]; then
+    echo "::error::$name did not stop with an error (running: $(docker inspect -f '{{.State.Running}}' "$name"), exit code $code)"; return 1
+  fi
+  dir="$(mktemp -d)"; out="$dir/stdout"; err="$dir/stderr"
+  docker logs "$name" >"$out" 2>"$err"
+  count="$(grep -cF -- "$text" "$out" || true)"
+  last="$(grep -v '^[[:space:]]*$' "$out" | tail -n 1)"
+  if [ "$count" != 1 ]; then
+    echo "::error::$name: expected the reason exactly once on stdout, found it $count time(s): $text"
+    tail -n 20 "$out"; echo "--- stderr"; tail -n 40 "$err"; return 1
+  fi
+  case "$last" in
+    *'"level":50'*'"context":"Startup"'*) ;;
+    *) echo "::error::$name: the last log line is not the startup failure at error level"; echo "$last"; return 1 ;;
+  esac
+  case "$last" in
+    *"$text"*) ;;
+    *) echo "::error::$name: the last log line is not this failure"; echo "$last"; return 1 ;;
+  esac
+  if grep -qF -- "$text" "$err"; then
+    echo "::error::$name: the reason was also written to stderr"; tail -n 40 "$err"; return 1
+  fi
+  echo "$name stopped with exit code $code; reason logged once, last, at error level"
+  rm -rf "$dir"
+}
+
 # ci_node NETWORK OUT_DIR SCRIPT [env args...] — runs a scripts/ci Node script
 # in a throwaway container; OUT_DIR is mounted at /out.
 ci_node() {

@@ -138,13 +138,11 @@ export class CryptoService implements OnModuleInit {
         'Webhook secrets in the database are encrypted with an insecure key. ' +
         'Set WEBHOOK_SECRET_KEY to a strong random secret (e.g. `openssl rand -hex 32`).';
       if (isProduction) {
-        this.logger.error(`SECURITY: ${msg}`);
-        console.error(
-          '\n\nFATAL: WEBHOOK_SECRET_KEY is not configured.\n' +
-            'Set WEBHOOK_SECRET_KEY=<random> in your environment before starting the server.\n' +
-            'Generate one with:  openssl rand -hex 32\n\n',
+        // Thrown from onModuleInit: main.ts logs it as the startup failure
+        // and exits, so the reason is written once, in the log's format.
+        throw new Error(
+          `FATAL: ${msg} The server will not start in production without it.`,
         );
-        process.exit(1);
       } else {
         this.logger.warn(`SECURITY WARNING: ${msg}`);
       }
@@ -155,13 +153,9 @@ export class CryptoService implements OnModuleInit {
         'WEBHOOK_ENCRYPTION_SALT is not set or is still the default placeholder value. ' +
         'Set WEBHOOK_ENCRYPTION_SALT to a unique random value (e.g. `openssl rand -hex 16`).';
       if (isProduction) {
-        this.logger.error(`SECURITY: ${saltMsg}`);
-        console.error(
-          '\n\nFATAL: WEBHOOK_ENCRYPTION_SALT is not configured.\n' +
-            'Set WEBHOOK_ENCRYPTION_SALT=<random> in your environment before starting the server.\n' +
-            'Generate one with:  openssl rand -hex 16\n\n',
+        throw new Error(
+          `FATAL: ${saltMsg} The server will not start in production without it.`,
         );
-        process.exit(1);
       } else {
         this.logger.warn(`SECURITY WARNING: ${saltMsg}`);
       }
