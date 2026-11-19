@@ -1,3 +1,4 @@
+import { createRequire } from 'node:module';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { getConfig, IdenplaneClient, toToolError } from './client.js';
@@ -9,13 +10,16 @@ import { registerGroupTools } from './tools/groups.js';
 import { registerSessionTools } from './tools/sessions.js';
 import { registerAuditTools } from './tools/audit.js';
 
+// Report the published version; package.json is always in the tarball.
+const { version } = createRequire(import.meta.url)('../package.json') as { version: string };
+
 async function main(): Promise<void> {
   const config = getConfig();
   const apiClient = new IdenplaneClient(config);
 
   const server = new McpServer({
     name: 'idenplane-mcp',
-    version: '0.1.0',
+    version,
   });
 
   registerRealmTools(server, apiClient);

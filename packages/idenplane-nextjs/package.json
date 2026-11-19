@@ -1,6 +1,6 @@
 {
   "name": "idenplane-nextjs",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "Next.js SDK for Idenplane Identity and Access Management Server",
   "type": "module",
   "main": "./dist/index.cjs",

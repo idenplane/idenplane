@@ -52,6 +52,9 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      - name: Test the alert gate
+        run: node --test scripts/ci/zap/gate.test.mjs scripts/ci/zap/stored-ssti-collision.test.mjs
+
       - name: Build the image from this commit
         run: docker build -t idenplane:dast .
 

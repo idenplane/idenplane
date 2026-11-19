@@ -9,6 +9,24 @@ For full per-commit detail, see the [GitHub Releases](https://github.com/idenpla
 
 ## [Unreleased]
 
+## [0.13.1] - 2026-11-18
+
+Security and SMTP fixes following 0.13.0. Upgrade to close the documented DNS-rebinding gap in back-channel logout.
+
+### Before you upgrade
+- No new database migrations or configuration changes are required when upgrading from 0.13.0. Private and loopback back-channel logout URLs continue to work.
+- `BACKCHANNEL_LOGOUT_ALLOW_LINK_LOCAL=true` still deliberately permits link-local and metadata destinations; leave it unset unless your deployment requires them.
+- The setup wizard now actually sends its SMTP test message. An unreachable or refusing mail server returns `502` instead of a false success.
+
+### Security
+- **Back-channel logout pins its connection to the validated IP address.** DNS rebinding can no longer switch a checked hostname to a link-local or cloud-metadata address when the connection opens. Private and loopback relying parties remain supported, redirects are never followed, response bodies are discarded, and the 10-second deadline includes DNS resolution. `BACKCHANNEL_LOGOUT_ALLOW_LINK_LOCAL=true` remains an explicit override; it does not disable pinning.
+
+### Fixed
+- **The setup wizard's SMTP test sends a test email.** **Send Test** in the wizard's email step said "Test email sent successfully!", but `POST /setup-wizard/smtp/test` only checked that a host and port were saved and sent nothing, ignoring the `to` address. It now saves the form, then sends a test message to `to` through the saved SMTP settings. It answers like the realm SMTP test: `400` when nothing is saved, and `502` with a short reason when the server refuses the message or cannot be reached. The server's own reply is logged, not returned.
+
+### Changed
+- **The npm packages are published with npm trusted publishing only.** The publish workflows no longer pass the `NPM_TOKEN` fallback, so every release is published through the workflow's GitHub OIDC identity, with provenance. They also use the npm that Node 24 bundles instead of installing an unpinned one. Patch releases `idenplane-sdk` 2.0.1, `idenplane-angular` 2.0.1, `idenplane-nextjs` 2.0.1, `idenplane-vue` 1.1.1, `idenplane-mcp` 0.1.1 and `idenplane-cli` 1.1.1 are the first published this way; `idenplane-mcp` 0.1.1 also carries its dependency updates since 0.1.0 (zod 4 among them) and reports its real version to MCP clients instead of a hard-coded `0.1.0`.
+
 ## [0.13.0] - 2026-11-18
 
 Sign in through SAML, and finishing what 0.12.0 started. Users can now sign in through a SAML 2.0 identity provider (Entra ID, Okta, ADFS, Google Workspace, Keycloak). Ending a session now tells the apps through OpenID Connect Back-Channel Logout, wherever the session ends. SCIM covers what Entra ID and Okta send, passwords included, and an admin's MFA reset now removes passkeys too. Authentik has a migration guide and a CLI command.
@@ -870,7 +888,8 @@ The foundation release: core IAM server with OAuth, OIDC, SAML, MFA, and the ini
 - `removeUserRealmRoles` returning 200 instead of 204
 - Login error messages never displayed on failed login
 
-[Unreleased]: https://github.com/idenplane/idenplane/compare/v0.13.0...HEAD
+[Unreleased]: https://github.com/idenplane/idenplane/compare/v0.13.1...HEAD
+[0.13.1]: https://github.com/idenplane/idenplane/releases/tag/v0.13.1
 [0.13.0]: https://github.com/idenplane/idenplane/releases/tag/v0.13.0
 [0.12.0]: https://github.com/idenplane/idenplane/releases/tag/v0.12.0
 [0.11.1]: https://github.com/idenplane/idenplane/releases/tag/v0.11.1

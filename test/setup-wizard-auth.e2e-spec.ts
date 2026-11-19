@@ -26,9 +26,11 @@ describe('Setup wizard access control (e2e)', () => {
     email: 'owner@example.com',
     password: 'Owner-Passw0rd',
   };
+  // Nothing listens on 127.0.0.1:1, so the wizard's test email fails fast
+  // with a 502 instead of waiting on a mail server that is not there.
   const SMTP = {
-    host: 'smtp.example.com',
-    port: 587,
+    host: '127.0.0.1',
+    port: 1,
     user: 'mailer',
     password: 'dummy-smtp-password-sentinel',
     from: 'noreply@example.com',
@@ -263,11 +265,14 @@ describe('Setup wizard access control (e2e)', () => {
     it('runs the wizard to completion and creates the realm and its admin', async () => {
       const realmName = `${REALM_PREFIX}${label.includes('JWT') ? 'jwt' : 'key'}`;
       await answerSteps(auth(), realmName);
-      await http()
+      // The test email really is sent now; with no mail server it is a 502
+      // that says why, without the server's own reply.
+      const smtpTest = await http()
         .post('/setup-wizard/smtp/test')
         .set(auth())
         .send({ to: 'test@example.com' })
-        .expect(200);
+        .expect(502);
+      expect(smtpTest.body.message).toMatch(/could not connect to the mail server/);
       // The client step needs the realm, which only `complete` creates:
       // a known ordering limitation, but it is authorized (not 401/403).
       const client = await http()
