@@ -11,10 +11,11 @@ describe('parseSingleCertificatePem', () => {
   let a: TestIdentity;
   let b: TestIdentity;
 
+  // WebCrypto fixture generation can exceed Jest's 5s default on hosted macOS.
   beforeAll(async () => {
     a = await issue({ name: [{ O: ['Acme'] }, { CN: ['a'] }] });
     b = await issue({ cn: 'b' });
-  });
+  }, 30_000);
 
   it('reads one certificate and summarises it', () => {
     const summary = summarizeCertificate(parseSingleCertificatePem(a.pem));
