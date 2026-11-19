@@ -135,3 +135,14 @@ the chart generates one.
 {{- fail "postgresql.enabled is false: set secrets.DATABASE_URL to your database." }}
 {{- end }}
 {{- end }}
+
+{{/*
+The Secret holding the bootstrap file, and the file's key in it.
+*/}}
+{{- define "idenplane.bootstrapSecretName" -}}
+{{- .Values.bootstrap.existingSecret | default (printf "%s-bootstrap" (include "idenplane.fullname" .)) }}
+{{- end }}
+
+{{- define "idenplane.bootstrapFileKey" -}}
+{{- if .Values.bootstrap.existingSecret }}{{ .Values.bootstrap.existingSecretKey | default "bootstrap.json" }}{{ else }}bootstrap.json{{ end }}
+{{- end }}

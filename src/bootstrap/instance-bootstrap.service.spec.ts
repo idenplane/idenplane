@@ -175,7 +175,7 @@ describe('InstanceBootstrapService', () => {
     });
 
     await expect(build().onApplicationBootstrap()).rejects.toThrow(
-      /Instance bootstrap from BOOTSTRAP_FILE failed; nothing was applied.*clients\[0\]\.clientSecret/,
+      /Instance bootstrap \(BOOTSTRAP_FILE\) failed; nothing was applied.*clients\[0\]\.clientSecret/,
     );
     expect(wizard.completeUnattended).not.toHaveBeenCalled();
   });
@@ -222,5 +222,32 @@ describe('InstanceBootstrapService', () => {
       "nothing was applied and the server will not start: realm 'acme': duplicate value",
     );
     expect(realmImport.refreshAfterImport).not.toHaveBeenCalled();
+  });
+
+  it('reads the document from BOOTSTRAP_JSON (docker run without a mount)', async () => {
+    env['BOOTSTRAP_JSON'] = JSON.stringify({
+      version: 1,
+      realms: [realm('acme')],
+    });
+    await expect(build().run()).resolves.toEqual({
+      status: 'applied',
+      realms: ['acme'],
+    });
+  });
+
+  it('refuses BOOTSTRAP_FILE and BOOTSTRAP_JSON together', async () => {
+    env['BOOTSTRAP_FILE'] = writeFile({ version: 1 });
+    env['BOOTSTRAP_JSON'] = '{"version":1}';
+    await expect(build().onApplicationBootstrap()).rejects.toThrow(
+      /not both/,
+    );
+    expect(wizard.completeUnattended).not.toHaveBeenCalled();
+  });
+
+  it('names BOOTSTRAP_JSON when its JSON is invalid', async () => {
+    env['BOOTSTRAP_JSON'] = '{not json';
+    await expect(build().run()).rejects.toThrow(
+      /Instance bootstrap \(BOOTSTRAP_JSON\) failed.*not valid JSON/,
+    );
   });
 });

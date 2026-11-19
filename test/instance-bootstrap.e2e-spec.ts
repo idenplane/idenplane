@@ -211,24 +211,32 @@ describe('Instance bootstrap (e2e)', () => {
         isFirstRun: false,
       });
 
-      for (const path of [
-        '/setup-wizard/admin-account',
-        '/setup-wizard/realm-settings',
-        '/setup-wizard/complete',
-        '/setup-wizard/skip',
-        '/setup-wizard/reset',
-      ]) {
-        const res = await http()
-          .post(path)
-          .set('x-admin-api-key', TEST_ADMIN_API_KEY)
-          .send({
+      const writes: Array<[string, object]> = [
+        [
+          '/setup-wizard/admin-account',
+          {
             username: 'intruder',
             email: 'intruder@example.com',
             password: 'Dummy-Passw0rd-example',
-            name: 'bootstrap-e2e-intruder',
-          });
+          },
+        ],
+        ['/setup-wizard/realm-settings', { name: 'bootstrap-e2e-intruder' }],
+        ['/setup-wizard/complete', {}],
+        ['/setup-wizard/skip', {}],
+        ['/setup-wizard/reset', {}],
+      ];
+      for (const [path, body] of writes) {
+        const res = await http()
+          .post(path)
+          .set('x-admin-api-key', TEST_ADMIN_API_KEY)
+          .send(body);
         expect({ path, status: res.status }).toEqual({ path, status: 409 });
       }
+      expect(
+        await ctx.prisma.realm.count({
+          where: { name: 'bootstrap-e2e-intruder' },
+        }),
+      ).toBe(0);
     });
 
     it('changes nothing on a restart, even with a different file', async () => {

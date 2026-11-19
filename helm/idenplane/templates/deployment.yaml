@@ -46,10 +46,15 @@ spec:
               containerPort: {{ .Values.env.PORT | default 3000 | int }}
               protocol: TCP
           # ── Environment: non-sensitive values from ConfigMap ──────────────
-          {{- if or .Values.postgresql.enabled .Values.redis.enabled }}
+          {{- if or .Values.postgresql.enabled .Values.redis.enabled .Values.bootstrap.enabled }}
           # Bundled dependencies: the password comes from their Secret and is
           # expanded into the URL, so it is never copied into another Secret.
           env:
+            {{- if .Values.bootstrap.enabled }}
+            # Unattended bootstrap: read at the first start of a fresh instance.
+            - name: BOOTSTRAP_FILE
+              value: {{ printf "%s/%s" (.Values.bootstrap.mountPath | trimSuffix "/") (include "idenplane.bootstrapFileKey" .) | quote }}
+            {{- end }}
             {{- if .Values.postgresql.enabled }}
             - name: IDENPLANE_DB_PASSWORD
               valueFrom:
@@ -110,9 +115,16 @@ spec:
             failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
-          {{- if or .Values.volumeMounts .Values.persistence.enabled }}
+          {{- if or .Values.volumeMounts .Values.persistence.enabled .Values.backups.enabled .Values.bootstrap.enabled }}
           volumeMounts:
-            {{- toYaml .Values.volumeMounts | nindent 12 }}
+            {{- with .Values.volumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+            {{- if .Values.bootstrap.enabled }}
+            - name: bootstrap
+              mountPath: {{ .Values.bootstrap.mountPath | quote }}
+              readOnly: true
+            {{- end }}
             {{- if .Values.persistence.enabled }}
             - name: themes-storage
               mountPath: /app/themes
@@ -122,9 +134,21 @@ spec:
               mountPath: {{ .Values.backups.mountPath }}
             {{- end }}
           {{- end }}
-      {{- if or .Values.volumes .Values.persistence.enabled .Values.backups.enabled }}
+      {{- if or .Values.volumes .Values.persistence.enabled .Values.backups.enabled .Values.bootstrap.enabled }}
       volumes:
-        {{- toYaml .Values.volumes | nindent 8 }}
+        {{- with .Values.volumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- if .Values.bootstrap.enabled }}
+        - name: bootstrap
+          secret:
+            secretName: {{ include "idenplane.bootstrapSecretName" . }}
+            # Only the file BOOTSTRAP_FILE names; owner-readable only.
+            items:
+              - key: {{ include "idenplane.bootstrapFileKey" . }}
+                path: {{ include "idenplane.bootstrapFileKey" . }}
+            defaultMode: 0400
+        {{- end }}
         {{- if .Values.persistence.enabled }}
         - name: themes-storage
           persistentVolumeClaim:

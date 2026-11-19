@@ -1,5 +1,6 @@
 /**
- * The instance bootstrap file (BOOTSTRAP_FILE): what a fresh instance is set
+ * The instance bootstrap document (the file BOOTSTRAP_FILE names, or
+ * BOOTSTRAP_JSON itself): what a fresh instance is set
  * up with at its first start, instead of a person running the setup wizard.
  *
  *   {
@@ -120,7 +121,7 @@ export function parseBootstrapFile(
     // JSON.parse quotes the text around the error, which may be a secret.
     const position = /position (\d+)/.exec(String(err))?.[1];
     throw new BootstrapFileError(
-      `BOOTSTRAP_FILE is not valid JSON${position ? ` (at character ${position})` : ''}`,
+      `The bootstrap document is not valid JSON${position ? ` (at character ${position})` : ''}`,
     );
   }
 
@@ -129,7 +130,9 @@ export function parseBootstrapFile(
     problems.push({ path, message });
 
   if (!isRecord(raw)) {
-    throw new BootstrapFileError('BOOTSTRAP_FILE must hold a JSON object');
+    throw new BootstrapFileError(
+      'The bootstrap document must be a JSON object',
+    );
   }
   for (const key of Object.keys(raw)) {
     if (key !== 'version' && key !== 'realms') fail(key, 'is not a known key');
@@ -143,7 +146,7 @@ export function parseBootstrapFile(
 
   const substituted = substitute(realmItems, 'realms', options.env, fail);
   if (problems.length) {
-    throw new BootstrapFileError('BOOTSTRAP_FILE is invalid', problems);
+    throw new BootstrapFileError('The bootstrap document is invalid', problems);
   }
 
   const seen = new Set<string>();
@@ -161,7 +164,7 @@ export function parseBootstrapFile(
   });
 
   if (problems.length) {
-    throw new BootstrapFileError('BOOTSTRAP_FILE is invalid', problems);
+    throw new BootstrapFileError('The bootstrap document is invalid', problems);
   }
   return { realms };
 }

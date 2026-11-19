@@ -41,7 +41,8 @@ interface PreparedRealm {
 }
 
 /**
- * Sets up a fresh instance from configuration (BOOTSTRAP_FILE) at its first
+ * Sets up a fresh instance from configuration (BOOTSTRAP_FILE, or
+ * BOOTSTRAP_JSON) at its first
  * start, so nobody has to open the setup wizard: it creates the declared
  * realms and closes the wizard, all in one transaction under the wizard's
  * own lock (SetupWizardService.completeUnattended).
@@ -72,49 +73,69 @@ export class InstanceBootstrapService implements OnApplicationBootstrap {
   }
 
   async run(): Promise<BootstrapOutcome> {
-    const path = this.config.get<string>('BOOTSTRAP_FILE')?.trim();
-    if (!path) return { status: 'not-configured' };
+    const source = this.source();
+    if (!source) return { status: 'not-configured' };
 
     let outcome: BootstrapOutcome;
     try {
-      outcome = await this.apply(path);
+      outcome = await this.apply(source.read());
     } catch (err) {
-      // The message names paths in the file, never values from it.
+      // The message names paths in the document, never values from it.
       const reason = err instanceof Error ? err.message : String(err);
       throw new Error(
-        `Instance bootstrap from BOOTSTRAP_FILE failed; nothing was applied and the server will not start: ${reason}`,
+        `Instance bootstrap (${source.name}) failed; nothing was applied and the server will not start: ${reason}`,
         { cause: err },
       );
     }
+    const name = source.name;
 
     switch (outcome.status) {
       case 'applied':
         this.logger.log(
           outcome.realms.length
-            ? `Instance bootstrapped from BOOTSTRAP_FILE: created realm(s) ${outcome.realms.map((r) => `'${r}'`).join(', ')}; setup wizard closed`
-            : 'Instance bootstrapped from BOOTSTRAP_FILE: no realms declared; setup wizard closed',
+            ? `Instance bootstrapped from ${name}: created realm(s) ${outcome.realms.map((r) => `'${r}'`).join(', ')}; setup wizard closed`
+            : `Instance bootstrapped from ${name}: no realms declared; setup wizard closed`,
         );
         break;
       case 'already-set-up':
         this.logger.log(
-          'Setup is already complete; BOOTSTRAP_FILE applies only to a fresh instance and was not applied again',
+          `Setup is already complete; ${name} applies only to a fresh instance and was not applied again`,
         );
         break;
       case 'not-fresh':
         this.logger.warn(
-          `BOOTSTRAP_FILE was not applied: this instance already has realm(s) ` +
+          `${name} was not applied: this instance already has realm(s) ` +
             `${outcome.existingRealms.map((r) => `'${r}'`).join(', ')}, so it is ` +
             'not a fresh instance. Nothing was changed. Bootstrap only sets up ' +
             'a new instance; manage an existing one with the admin API, realm ' +
-            'import or the Terraform provider, and remove BOOTSTRAP_FILE.',
+            `import or the Terraform provider, and remove ${name}.`,
         );
         break;
     }
     return outcome;
   }
 
-  private async apply(path: string): Promise<BootstrapOutcome> {
-    const plan = parseBootstrapFile(readBootstrapFile(path), {
+  /**
+   * Where the bootstrap document comes from: a mounted file (BOOTSTRAP_FILE)
+   * or the document itself in an environment variable (BOOTSTRAP_JSON), for
+   * a plain `docker run`. Never both.
+   */
+  private source(): { name: string; read: () => string } | null {
+    const file = this.config.get<string>('BOOTSTRAP_FILE')?.trim();
+    const json = this.config.get<string>('BOOTSTRAP_JSON')?.trim();
+    if (file && json) {
+      throw new Error(
+        'Instance bootstrap: set BOOTSTRAP_FILE or BOOTSTRAP_JSON, not both; the server will not start',
+      );
+    }
+    if (file)
+      return { name: 'BOOTSTRAP_FILE', read: () => readBootstrapFile(file) };
+    if (json) return { name: 'BOOTSTRAP_JSON', read: () => json };
+    return null;
+  }
+
+  private async apply(document: string): Promise<BootstrapOutcome> {
+    const plan = parseBootstrapFile(document, {
       env: process.env,
       isSecretHash: (value) => this.crypto.isSecretHash(value),
     });
