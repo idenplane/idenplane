@@ -57,7 +57,7 @@ Most identity solutions are either too complex to self-host (Java, heavy runtime
 | **Multi-Factor Authentication** | TOTP-based 2FA with QR provisioning, recovery codes, and brute-force protection |
 | **Step-Up Authentication** | ACR levels (password, MFA, WebAuthn) requiring re-authentication for sensitive operations |
 | **Adaptive / Risk-Based Auth** | Impossible travel detection, IP reputation scoring, device fingerprinting, and risk-based step-up or block |
-| **Social Login** | Broker external OpenID Connect and OAuth 2.0 identity providers (Google, GitHub, Microsoft Entra ID, etc.). SAML identity providers cannot be brokered |
+| **Social Login** | Sign in through external OIDC, OAuth 2.0 or [SAML identity providers](docs/docs/guides/saml-identity-providers.mdx), including Microsoft Entra ID and Okta |
 | **LDAP User Federation** | Sync users from LDAP/Active Directory with on-demand or scheduled sync |
 | **Custom Auth Flows (experimental)** | Configurable login flows; they run at sign-in only when the server sets `AUTH_FLOW_RUNTIME_ENABLED=true` and the realm binds a flow |
 | **Single Sign-On** | Browser-based SSO across all clients in a realm |
@@ -464,7 +464,7 @@ sequenceDiagram
 | PKCE (RFC 7636) | S256 method |
 | OpenID Connect Core 1.0 | ID tokens, UserInfo, Discovery, Backchannel Logout |
 | Device Authorization (RFC 8628) | Full device code flow with user verification |
-| SAML 2.0 | Identity Provider only: SP-initiated SSO, signed assertions, metadata exchange |
+| SAML 2.0 | Issue signed assertions to applications as an identity provider, or sign in through an external IdP as a service provider |
 | WebAuthn / FIDO2 | Credential registration, platform & roaming authenticators |
 | TOTP (RFC 6238) | MFA with QR provisioning and recovery codes |
 | Argon2id (RFC 9106) | Password hashing |
@@ -575,7 +575,7 @@ Idenplane/
 │   ├── setup-wizard/              # First-time setup wizard
 │   ├── service-accounts/          # Service accounts & API keys
 │   ├── custom-attributes/         # Custom user attributes
-│   ├── broker/                    # External OIDC/OAuth 2.0 IdP brokering
+│   ├── broker/                    # External OIDC, OAuth 2.0 and SAML IdP brokering
 │   ├── user-federation/           # LDAP sync
 │   ├── identity-providers/        # Social login config
 │   ├── impersonation/             # Admin impersonation
