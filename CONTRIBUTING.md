@@ -137,6 +137,8 @@ docs(api): update authentication endpoints documentation
 
 ### 4. Pull Requests
 
+Your first pull request that changes the server needs a signed [Contributor License Agreement](#contributor-license-agreement); a bot comment on the pull request tells you how.
+
 When submitting a PR:
 
 1. **Fill out the PR template** with:
@@ -146,6 +148,7 @@ When submitting a PR:
    - Screenshots (for UI changes)
 
 2. **Ensure all checks pass**
+   - `license/cla` (the CLA is signed, where needed)
    - Build succeeds
    - All tests pass
    - No linting errors
@@ -264,6 +267,49 @@ Report them privately through [GitHub private vulnerability reporting](https://g
 - GitHub Discussions, Q&A: https://github.com/idenplane/idenplane/discussions/new?category=q-a
 - Where to go for what, and what to expect: [SUPPORT.md](SUPPORT.md)
 
+## Contributor License Agreement
+
+Before your first pull request that changes the server can be merged, you sign the [Idenplane Contributor License Agreement](CLA.md) (CLA). You sign once, on GitHub, and it covers all your contributions.
+
+### Why there is one
+
+The Idenplane server is licensed under the AGPL-3.0. The maintainer also licenses it commercially, to organizations that cannot comply with the AGPL, and runs it as a hosted service; that income pays for the project. A contribution received only under the AGPL could not be included in either. The CLA gives the maintainer that right, so he can accept your contribution without keeping two versions of the code apart.
+
+What it does and does not do:
+
+- **You keep the copyright** in your contribution. The CLA is a license, not a transfer: you give the maintainer a broad, permanent license to use, change and relicense it, including commercially, and a patent license for it.
+- **Your contribution stays open source.** Whenever the maintainer distributes your contribution as part of Idenplane, it is also available under the open-source license of the part you changed (section 4 of the CLA). The commercial license is an additional option, not a replacement.
+- The license goes to the maintainer as named in the CLA, and to anyone who takes over the project from him under the same commitment (section 9).
+- It is based on the Apache Software Foundation's contributor agreements, which many projects use.
+
+### When you need it
+
+| Your pull request changes | CLA needed? |
+| --- | --- |
+| anything outside the two directories below: the server, admin console, docs, examples, themes, Helm chart, ... | Yes |
+| only `packages/` (the SDKs and client packages) or `terraform-provider-idenplane/`, which are MIT-licensed | No: the MIT License already allows every use |
+
+### What happens on your first pull request
+
+1. A check named **`license/cla`** runs on every pull request. If you, or another author of its commits, have not signed yet, it fails and a bot comment explains how to sign.
+2. Read [CLA.md](CLA.md). To sign it, post a comment on the pull request that consists of exactly this sentence:
+
+   ```
+   I have read the Idenplane CLA (version 1.0) and I agree to its terms.
+   ```
+3. The check records your signature and turns green. If it does not update, comment `/cla recheck`.
+
+Your signature is recorded publicly in the [`cla-signatures`](https://github.com/idenplane/idenplane/tree/cla-signatures) branch of this repository: your GitHub user name and account id, the time, the pull request and comment, and the CLA version and its checksum. You do not sign again for later pull requests.
+
+Every commit must be authored with an email address that is linked to your GitHub account, so that it can be matched to your signature. A commit whose email is not linked fails the check until you add the email to your account (GitHub **Settings → Emails**) or rewrite the commit.
+
+### If your employer owns your work
+
+Many employment contracts give the employer the rights to code you write, sometimes even in your own time. If yours does, either:
+
+- get your employer's permission to contribute under the CLA, and then sign it yourself (section 5 of the CLA says you have that permission); or
+- have your employer sign the corporate CLA (Part 2 of [CLA.md](CLA.md)) by emailing licensing@idenplane.com, with the GitHub accounts of the employees it covers. The maintainer records those accounts as signed.
+
 ## License
 
-By contributing, you agree that your contributions will be licensed under the license of the part you change: AGPL-3.0 for the server (see [LICENSE](LICENSE)), and MIT for the SDKs and client packages under `packages/` and for `terraform-provider-idenplane/`, as their own LICENSE files say.
+Your contributions are licensed under the license of the part you change: AGPL-3.0 for the server (see [LICENSE](LICENSE)), and MIT for the SDKs and client packages under `packages/` and for `terraform-provider-idenplane/`, as their own LICENSE files say. If you signed the [CLA](CLA.md), you have also granted the maintainer the license it describes.

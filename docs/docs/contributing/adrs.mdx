@@ -21,6 +21,7 @@ Each entry below is sourced from an actual commit, PR description, or the projec
 **Consequences**:
 - Self-hosting and modifying the server for internal use is unrestricted; offering a modified server as a hosted service requires open-sourcing the modifications, or a commercial license for organizations that can't comply.
 - SDK consumers (a Spring Boot app, an Android app, a Terraform config) can adopt any Idenplane client library without their own codebase inheriting AGPL obligations — this was a deliberate split, not an oversight.
+- Offering the server under a commercial license as well requires the right to relicense outside contributions to it; that is what the contributor license agreement in ADR-011 is for.
 
 **References**: README.md § License; PR #874 ("AGPL-3.0 keeps the project genuinely open while leaving room for a dual-licensing offer"); PR #1377 ("the server/core is the IAM engine and stays AGPL-3.0, but every SDK/client package should be MIT"); issue #1326 maintainer discussion.
 
@@ -151,6 +152,30 @@ Each entry below is sourced from an actual commit, PR description, or the projec
 **Consequences**: Five provider integrations add zero new runtime dependencies between them, keeping the dependency-security surface (and Dependabot's workload) smaller than one SDK per provider would.
 
 **References**: PR #1067 ("5 concrete implementations using native fetch (no extra SDK deps)").
+
+---
+
+## ADR-011: A contributor license agreement for contributions to the server
+
+**Status**: Accepted
+
+**Context**: The server is AGPL-3.0 (ADR-001), and the maintainer also licenses it commercially and runs it as a hosted service. A contribution received only under the AGPL can be used under the AGPL, but not in a commercially licensed copy: the maintainer would have to keep it out of that offering, or rewrite it. Until 2026-11 there was no CLA, while outside contributors were still few.
+
+**Decision**: Contributors sign the [Idenplane CLA](https://github.com/idenplane/idenplane/blob/dev/CLA.md) once, before their first pull request that changes the server is merged.
+- It is a license, not a copyright assignment. The text is adapted from the Apache Software Foundation's individual and corporate CLAs, the best-known license-grant CLA. Element took the same route when it moved Synapse to AGPL with a commercial license.
+- To the Apache grant it adds an explicit right to relicense, commercially included. It also adds a commitment that a contribution the maintainer distributes stays available under the open-source license of the part it was made to.
+- Pull requests that only change the MIT-licensed `packages/` and `terraform-provider-idenplane/` do not need it, since MIT already permits every use.
+- Signing is a pull request comment. `.github/workflows/cla.yml` checks every pull request and records signatures in the `cla-signatures` branch of the repository, using only the GitHub API; no third-party service or action is involved. The alternatives were:
+  - the hosted CLA Assistant, which keeps the signatures in a third party's database;
+  - the `contributor-assistant/github-action`, archived in 2026-03;
+  - its StepSecurity fork, whose bundled code calls the vendor's API on every run.
+
+**Consequences**:
+- A first-time contributor to the server has one extra step, and the `license/cla` status says what it is.
+- Contributions merged before the CLA are not covered by it; they stay under the license they were made under unless their authors sign.
+- Contributors trust the maintainer with a relicensing right. Section 4 of the CLA limits that: their contribution is always available under the open-source license too.
+
+**References**: [`DECISIONS.md`](https://github.com/idenplane/idenplane/blob/dev/DECISIONS.md) entry of 2026-11-19; [CONTRIBUTING.md § Contributor License Agreement](https://github.com/idenplane/idenplane/blob/dev/CONTRIBUTING.md#contributor-license-agreement).
 
 ---
 

@@ -2,7 +2,10 @@
   Thanks for contributing to Idenplane! Please fill out the sections below so reviewers
   can understand the change and verify it.
 
-  Pull requests target `dev`. For security fixes, report privately first
+  Pull requests target `dev`. If you have not contributed to the server before, a bot
+  comment will ask you to sign the Contributor License Agreement (CLA.md, see
+  CONTRIBUTING.md); pull requests that only change `packages/` or
+  `terraform-provider-idenplane/` do not need it. For security fixes, report privately first
   (https://github.com/idenplane/idenplane/security/advisories/new, see SECURITY.md)
   and coordinate before opening a public PR.
 -->
@@ -49,6 +52,7 @@
 
 ## Checklist
 
+- [ ] I have signed the [CLA](https://github.com/idenplane/idenplane/blob/dev/CLA.md), or this PR only changes `packages/` / `terraform-provider-idenplane/` (the `license/cla` check shows it)
 - [ ] `npm run lint` passes
 - [ ] `npm test` passes
 - [ ] `npm run build:all` succeeds
