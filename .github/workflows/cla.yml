@@ -65,10 +65,8 @@ jobs:
       SIG_PATH: signatures/v1.0.json
       STATUS_CONTEXT: license/cla
       # GitHub account ids (not names, which can change hands) that never
-      # have to sign: Islamawad132 (the maintainer), Islam-Dreamy-sa (the
-      # account of the maintainer's commits from his work machine),
-      # idenplane-bot (the maintainer's automation account) and
-      # islamahmedas12-ux (the maintainer's earlier account).
+      # have to sign: the maintainer's own accounts and idenplane-bot, his
+      # automation account.
       ALLOWLIST_IDS: '153444130 273324721 357740716 253568643'
       # Changes only under these paths are MIT-licensed and need no CLA.
       MIT_PATHS_RE: '^(packages/|terraform-provider-idenplane/)'
