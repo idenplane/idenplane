@@ -78,7 +78,7 @@ export class InstanceBootstrapService implements OnApplicationBootstrap {
 
     let outcome: BootstrapOutcome;
     try {
-      outcome = await this.apply(source.read());
+      outcome = await this.apply(source.read);
     } catch (err) {
       // The message names paths in the document, never values from it.
       const reason = err instanceof Error ? err.message : String(err);
@@ -134,8 +134,14 @@ export class InstanceBootstrapService implements OnApplicationBootstrap {
     return null;
   }
 
-  private async apply(document: string): Promise<BootstrapOutcome> {
-    const plan = parseBootstrapFile(document, {
+  private async apply(read: () => string): Promise<BootstrapOutcome> {
+    // A set-up instance never reads the document again, so the secrets it
+    // references may be gone from the environment by now. Checked again
+    // under the lock below.
+    const state = await this.wizard.getWizardState();
+    if (state.completed || state.skipped) return { status: 'already-set-up' };
+
+    const plan = parseBootstrapFile(read(), {
       env: process.env,
       isSecretHash: (value) => this.crypto.isSecretHash(value),
     });

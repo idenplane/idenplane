@@ -28,7 +28,7 @@ describe('InstanceBootstrapService', () => {
     realm: { findMany: jest.Mock; findUniqueOrThrow: jest.Mock };
     user: { update: jest.Mock };
   };
-  let wizard: { completeUnattended: jest.Mock };
+  let wizard: { completeUnattended: jest.Mock; getWizardState: jest.Mock };
   let realmImport: {
     prepareV2Import: jest.Mock;
     refreshAfterImport: jest.Mock;
@@ -55,6 +55,7 @@ describe('InstanceBootstrapService', () => {
       user: { update: jest.fn(async () => ({})) },
     };
     wizard = {
+      getWizardState: jest.fn(async () => ({ completed: false, skipped: false })),
       completeUnattended: jest.fn(
         async (apply: (t: typeof tx) => Promise<unknown>) => ({
           status: 'applied',
@@ -249,5 +250,17 @@ describe('InstanceBootstrapService', () => {
     await expect(build().run()).rejects.toThrow(
       /Instance bootstrap \(BOOTSTRAP_JSON\) failed.*not valid JSON/,
     );
+  });
+
+  it('does not read the document once setup is complete (its secrets may be gone)', async () => {
+    env['BOOTSTRAP_FILE'] = writeFile({
+      version: 1,
+      realms: [realm('acme', { realm: { name: 'acme', smtpPassword: '${env:GONE}' } })],
+    });
+    wizard.getWizardState.mockResolvedValue({ completed: true, skipped: false });
+
+    await expect(build().run()).resolves.toEqual({ status: 'already-set-up' });
+    expect(realmImport.prepareV2Import).not.toHaveBeenCalled();
+    expect(wizard.completeUnattended).not.toHaveBeenCalled();
   });
 });

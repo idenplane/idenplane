@@ -270,6 +270,11 @@ const sidebars: SidebarsConfig = {
         },
         {
           type: 'doc',
+          id: 'deployment/unattended-bootstrap',
+          label: 'Unattended Bootstrap',
+        },
+        {
+          type: 'doc',
           id: 'deployment/production',
           label: 'Production Checklist',
         },

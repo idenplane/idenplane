@@ -9,6 +9,20 @@ helm upgrade --install idenplane ./helm/idenplane \
   --set env.BASE_URL="https://auth.example.com"
 ```
 
+## Unattended bootstrap
+
+`bootstrap.enabled: true` sets up a fresh release from values alone: at the first start, the realms in `bootstrap.realms` (realm export documents, version 2) are created and the setup wizard is closed, in one transaction. Nothing is applied on later starts or upgrades. A bootstrap that fails stops the pod before it is ready and writes nothing.
+
+| Value | Default | Meaning |
+|-------|---------|---------|
+| `bootstrap.enabled` | `false` | Mount the document and set `BOOTSTRAP_FILE`. |
+| `bootstrap.realms` | `[]` | Realms to create; rendered into the Secret `<fullname>-bootstrap`. Strings may hold `${env:NAME}`, resolved from the pod's environment (for example a key of `secrets.existingSecret`). |
+| `bootstrap.existingSecret` | `""` | Your own Secret holding the whole document (`{"version": 1, "realms": [...]}`); `realms` is then ignored. |
+| `bootstrap.existingSecretKey` | `bootstrap.json` | The document's key in `existingSecret`. |
+| `bootstrap.mountPath` | `/etc/idenplane/bootstrap` | Where it is mounted, read-only. |
+
+`helm test` checks that the setup wizard reports completed. See [Unattended Bootstrap](https://github.com/idenplane/idenplane/blob/dev/docs/docs/deployment/unattended-bootstrap.md) for the document format.
+
 ## Network policy
 
 `networkPolicy.enabled: true` renders a `NetworkPolicy` for the Idenplane pods (off by default). It needs a CNI plugin that enforces NetworkPolicy.
