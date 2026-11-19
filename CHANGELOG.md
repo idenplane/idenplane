@@ -9,6 +9,9 @@ For full per-commit detail, see the [GitHub Releases](https://github.com/idenpla
 
 ## [Unreleased]
 
+### Changed
+- **Contributions to the server need a signed Contributor License Agreement.** Idenplane is AGPL-3.0, and the maintainer also offers the server under a commercial license and as a hosted service. Contributors now sign the [CLA](CLA.md), adapted from the Apache Software Foundation's, once, by a comment on their pull request. They keep their copyright and grant the maintainer a license that includes relicensing. The CLA commits the maintainer to keep every contribution he distributes available under the open-source license too. Pull requests that only change the MIT-licensed `packages/` or `terraform-provider-idenplane/` do not need it. A new `license/cla` status (`.github/workflows/cla.yml`) checks every pull request to `dev` and `main` and records signatures in the `cla-signatures` branch. See [CONTRIBUTING.md](CONTRIBUTING.md#contributor-license-agreement). Nothing changes for people who run Idenplane.
+
 ## [0.13.1] - 2026-11-18
 
 Security and SMTP fixes following 0.13.0. Upgrade to close the documented DNS-rebinding gap in back-channel logout.
