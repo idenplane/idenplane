@@ -19,8 +19,8 @@ export const USAGE_PRUNE_BATCH = 5000;
  * - Hourly, on the leader only (one process across all replicas). A month
  *   turns over once, so most ticks find nothing: a single primary-key range
  *   lookup that returns no row.
- * - In batches of USAGE_PRUNE_BATCH rows by primary key range, each its own
- *   statement, so no lock is held for long and replicas keep writing.
+ * - In batches of USAGE_PRUNE_BATCH rows, each its own statement (a short
+ *   transaction locking only those rows), so replicas keep writing.
  * - It first moves `usage_tracking.pruned_before` forward (never back), so
  *   the usage report can tell a pruned month from one with no activity,
  *   even half-way through a prune or after the setting is raised.
@@ -66,13 +66,16 @@ export class UsageRetentionService {
 
     let total = 0;
     for (;;) {
+      // A batch is picked through the primary key (month first) and
+      // deleted by row address (a TID scan): each statement touches at most
+      // USAGE_PRUNE_BATCH rows, however large the table.
       const deleted = await this.prisma.$executeRaw`
         DELETE FROM "user_monthly_activity"
-         WHERE ("month", "realm_id", "user_id") IN (
-           SELECT "month", "realm_id", "user_id"
+         WHERE ctid = ANY(ARRAY(
+           SELECT ctid
              FROM "user_monthly_activity"
             WHERE "month" < ${cutoff}::date
-            LIMIT ${USAGE_PRUNE_BATCH})`;
+            LIMIT ${USAGE_PRUNE_BATCH}))`;
       total += deleted;
       if (deleted < USAGE_PRUNE_BATCH) break;
     }
