@@ -9,6 +9,10 @@ For full per-commit detail, see the [GitHub Releases](https://github.com/idenpla
 
 ## [Unreleased]
 
+## [0.14.1] - 2026-11-20
+
+One fix: a busy server no longer fails its own readiness check. Nothing to do before upgrading; there is no migration and no new setting.
+
 ### Fixed
 - **A busy server no longer reports itself not ready because its heap passed 300 MB.** `/health/ready` answered 503 whenever the used heap was above a fixed 300 MB, whatever the heap limit of the process. V8 lets the heap grow past that under load when the limit allows it, so a healthy instance under heavy traffic was taken out of rotation by its readiness probe, and its load moved to the other replicas. The check is now relative to the limit the process really has (`--max-old-space-size`, or the default V8 derives from the container's memory): `memory_heap` is `down` only above 90% of it. The response keeps the same shape and still carries no sizes. Found by the DAST scan, where the fuzzed admin writes pushed the heap over 300 MB while the database stayed up.
 
@@ -911,7 +915,8 @@ The foundation release: core IAM server with OAuth, OIDC, SAML, MFA, and the ini
 - `removeUserRealmRoles` returning 200 instead of 204
 - Login error messages never displayed on failed login
 
-[Unreleased]: https://github.com/idenplane/idenplane/compare/v0.14.0...HEAD
+[Unreleased]: https://github.com/idenplane/idenplane/compare/v0.14.1...HEAD
+[0.14.1]: https://github.com/idenplane/idenplane/releases/tag/v0.14.1
 [0.14.0]: https://github.com/idenplane/idenplane/releases/tag/v0.14.0
 [0.13.1]: https://github.com/idenplane/idenplane/releases/tag/v0.13.1
 [0.13.0]: https://github.com/idenplane/idenplane/releases/tag/v0.13.0
