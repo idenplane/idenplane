@@ -755,7 +755,9 @@ You are free to use, modify, and distribute Idenplane. However, if you run a mod
 
 For organizations that cannot comply with the AGPL — for example, because they want to embed Idenplane in a proprietary product — a **commercial license** is available. Contact [licensing@idenplane.com](mailto:licensing@idenplane.com) for details.
 
-See the [LICENSE](LICENSE) file for the full AGPL-3.0 text.
+See the [LICENSE](LICENSE) file for the full AGPL-3.0 text. The SDKs and client packages under `packages/` and the Terraform provider are MIT-licensed.
+
+Contributors to the server sign a [Contributor License Agreement](CLA.md), so that their contributions can be included in the commercially licensed and hosted server as well. They keep their copyright, and their contributions stay available under the AGPL. See [CONTRIBUTING.md](CONTRIBUTING.md#contributor-license-agreement).
 
 ---
 

@@ -18,7 +18,7 @@ info:
     ## Rate Limiting
 
     Some endpoints are rate-limited. See specific endpoint documentation for details.
-  version: 0.13.1
+  version: 0.14.0
   contact:
     name: Idenplane Project
     url: https://github.com/idenplane/idenplane/blob/main/SUPPORT.md
@@ -49,6 +49,8 @@ tags:
     description: OAuth 2.0 / OpenID Connect endpoints
   - name: Tokens
     description: Token operations (introspection, revocation)
+  - name: System
+    description: Server-wide information, such as instance usage
   - name: Health
     description: Health check endpoints
 
@@ -2223,6 +2225,53 @@ paths:
         '401':
           description: invalid_token - missing or invalid Bearer token
 
+  # ── System ────────────────────────────────────────────────────────────────────
+  /admin/system/usage:
+    get:
+      tags:
+        - System
+      summary: Get instance usage
+      description: >-
+        Monthly active users (distinct users who authenticated in the calendar
+        month, UTC), user accounts and realms, for the whole instance and per
+        realm. A user is active when they sign in, get OAuth tokens (refreshes
+        included), get a SAML assertion or use a forward-auth protected
+        application in the month; service accounts,
+        impersonation and admin console sign-ins do not count. Counted from a
+        dedicated activity table, not from login events, so event settings and
+        retention do not affect it, and users and realms deleted later still
+        count. Activity older than USAGE_ACTIVITY_RETENTION_MONTHS (default 13)
+        is deleted; such a month is reported with period.pruned true, not as
+        an error. Server-wide: the admin API key or a super-admin.
+      operationId: getInstanceUsage
+      security:
+        - admin-api-key: []
+        - bearerAuth: []
+      parameters:
+        - name: month
+          in: query
+          required: false
+          description: >-
+            The calendar month to report, YYYY-MM, in UTC. Defaults to the
+            current month. A future month is refused.
+          schema:
+            type: string
+            pattern: '^\d{4}-(0[1-9]|1[0-2])$'
+            example: '2026-10'
+      responses:
+        '200':
+          description: Instance usage for the month
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InstanceUsage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
   # ── Health ────────────────────────────────────────────────────────────────────
   /health:
     get:
@@ -3032,6 +3081,118 @@ components:
           type: string
         userAgent:
           type: string
+
+    # ── Instance usage ──────────────────────────────────────────────────────────
+    InstanceUsage:
+      type: object
+      required: [version, generatedAt, period, tracking, retention, totals, realms]
+      properties:
+        version:
+          type: string
+          description: The server version
+          example: 0.13.1
+        generatedAt:
+          type: string
+          format: date-time
+        period:
+          type: object
+          required: [month, start, end, closed, complete, pruned]
+          properties:
+            month:
+              type: string
+              example: '2026-10'
+            start:
+              type: string
+              format: date-time
+              description: First instant of the month, UTC (inclusive)
+              example: '2026-10-01T00:00:00.000Z'
+            end:
+              type: string
+              format: date-time
+              description: First instant of the next month, UTC (exclusive)
+              example: '2026-11-01T00:00:00.000Z'
+            closed:
+              type: boolean
+              description: The month is over, so its count can no longer change
+            complete:
+              type: boolean
+              description: >-
+                Activity was recorded for the whole month. False when the
+                month starts before tracking.since (the count is then a lower
+                bound) or when the month is pruned.
+            pruned:
+              type: boolean
+              description: >-
+                The month is older than the activity retention and its
+                activity has been deleted: its counts are not available, which
+                is not the same as no activity.
+        tracking:
+          type: object
+          required: [since]
+          properties:
+            since:
+              type: string
+              format: date-time
+              nullable: true
+              description: When this instance started recording activity
+        retention:
+          type: object
+          required: [months, oldestMonth]
+          properties:
+            months:
+              type: integer
+              nullable: true
+              example: 13
+              description: >-
+                Whole months kept before the current one
+                (USAGE_ACTIVITY_RETENTION_MONTHS); null when pruning is off
+            oldestMonth:
+              type: string
+              nullable: true
+              example: '2025-10'
+              description: >-
+                YYYY-MM: the oldest month whose activity is kept; null when
+                nothing has been or will be pruned
+        totals:
+          type: object
+          required: [realms, users, monthlyActiveUsers]
+          properties:
+            realms:
+              type: integer
+              description: Realms that exist now
+            users:
+              type: integer
+              description: User accounts now, all realms, service accounts excluded
+            monthlyActiveUsers:
+              type: integer
+              description: Distinct users who were active in the month, all realms
+        realms:
+          type: array
+          description: >-
+            Existing realms by name, then deleted realms that had activity in
+            the month
+          items:
+            $ref: '#/components/schemas/RealmUsage'
+
+    RealmUsage:
+      type: object
+      required: [id, name, deleted, users, monthlyActiveUsers]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+          nullable: true
+          description: Null for a deleted realm
+        deleted:
+          type: boolean
+          description: The realm no longer exists; its activity in the month still counts
+        users:
+          type: integer
+          description: User accounts now, service accounts excluded
+        monthlyActiveUsers:
+          type: integer
+          description: Distinct users who were active in the month
 
     # ── User Info ───────────────────────────────────────────────────────────────
     UserInfo:

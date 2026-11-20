@@ -267,6 +267,13 @@ env:
   # Switch to "redis" when redis.enabled is true for horizontal scalability.
   SESSION_STORE: "database"
 
+  # ── Instance usage ────────────────────────────────────────────────────────
+  # Whole months of monthly-active-user records (month, realm id, user id)
+  # kept before the current month, for GET /admin/system/usage. Older months
+  # are deleted; "off" keeps every month. 1 to 1200: the current and the
+  # previous month are never deleted. An invalid value stops the server.
+  USAGE_ACTIVITY_RETENTION_MONTHS: "13"
+
 # ── Sensitive / Secret Environment Variables ─────────────────────────────────
 # Values in this section are stored in a Kubernetes Secret.
 secrets:
@@ -309,6 +316,47 @@ secrets:
 
   # Redis Sentinel master name.
   REDIS_SENTINEL_NAME: ""
+
+# ── Unattended bootstrap ──────────────────────────────────────────────────────
+# Sets up a fresh instance from configuration at its first start, so nobody
+# has to open the setup wizard: the realms below are created and the wizard is
+# closed for good, in one transaction. Applied only while the instance is
+# fresh (setup never completed or skipped, no realm but master); every later
+# start changes nothing, even if these values change. A bootstrap that fails
+# stops the pod before it becomes ready, and nothing is half-applied.
+# The master realm and its admin still come from ADMIN_USER / ADMIN_PASSWORD.
+# See docs/docs/deployment/kubernetes.mdx, "Unattended bootstrap".
+bootstrap:
+  enabled: false
+  # Realms to create, each a realm export document (version 2), as
+  # `GET /admin/realms/{realm}/export` returns it. Any string may hold
+  # ${env:NAME}, replaced at startup by that environment variable: keep
+  # secrets in secrets.existingSecret (every key there is an environment
+  # variable) and reference them. A user may carry `initialPassword`.
+  # Empty: the instance only gets its wizard closed. Rendered into a Secret.
+  # Ignored with existingSecret.
+  realms: []
+  #  - version: 2
+  #    realm:
+  #      name: acme
+  #      displayName: Acme
+  #      smtpHost: smtp.example.com
+  #      smtpPort: 587
+  #      smtpFrom: noreply@example.com
+  #      smtpUser: mailer
+  #      smtpPassword: ${env:ACME_SMTP_PASSWORD}
+  #    clients:
+  #      - clientId: acme-web
+  #        clientSecret: ${env:ACME_WEB_CLIENT_SECRET}
+  #        redirectUris: [https://app.example.com/callback]
+  #        grantTypes: [authorization_code, refresh_token]
+  # An existing Secret holding the whole bootstrap file under `existingSecretKey`
+  # ({"version": 1, "realms": [...]}), for GitOps tools that render it
+  # themselves. When set, `realms` is ignored and the chart creates no Secret.
+  existingSecret: ""
+  existingSecretKey: bootstrap.json
+  # Where the file is mounted (read-only); BOOTSTRAP_FILE points at it.
+  mountPath: /etc/idenplane/bootstrap
 
 # ── Bundled PostgreSQL ────────────────────────────────────────────────────────
 # A single PostgreSQL pod on the official image, for evaluation and small

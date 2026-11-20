@@ -5,6 +5,7 @@ import type { ProxyApplication, User } from '@prisma/client';
 import { ProxyAuthService } from './proxy-auth.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { CryptoService } from '../crypto/crypto.service.js';
+import { UsageActivityRecorder } from '../usage/usage-activity.recorder.js';
 
 /**
  * A minimal in-memory stand-in for the two crypto primitives this service uses.
@@ -77,7 +78,10 @@ describe('ProxyAuthService', () => {
     proxyApplication: { findUnique: jest.Mock };
   };
 
+  let usage: { record: jest.Mock };
+
   beforeEach(async () => {
+    usage = { record: jest.fn().mockResolvedValue(undefined) };
     prisma = {
       proxySession: {
         create: jest.fn().mockResolvedValue({}),
@@ -94,6 +98,7 @@ describe('ProxyAuthService', () => {
         ProxyAuthService,
         { provide: PrismaService, useValue: prisma },
         { provide: CryptoService, useValue: new FakeCrypto() },
+        { provide: UsageActivityRecorder, useValue: usage },
       ],
     }).compile();
 
@@ -210,9 +215,7 @@ describe('ProxyAuthService', () => {
 
     it('rejects an expired state', () => {
       const state = service.encodeState(app(), returnUrl);
-      jest
-        .spyOn(Date, 'now')
-        .mockReturnValue(new Date('2099-01-01').getTime());
+      jest.spyOn(Date, 'now').mockReturnValue(new Date('2099-01-01').getTime());
       expect(service.decodeState(app(), state)).toBeNull();
       jest.restoreAllMocks();
     });
@@ -229,7 +232,7 @@ describe('ProxyAuthService', () => {
   // ─── sessions ─────────────────────────────────────────────
 
   describe('validateSession', () => {
-    const user = { id: 'user-1', enabled: true } as User;
+    const user = { id: 'user-1', realmId: 'realm-1', enabled: true } as User;
 
     it('returns the user for a live session', async () => {
       prisma.proxySession.findUnique.mockResolvedValue({
@@ -239,6 +242,19 @@ describe('ProxyAuthService', () => {
       });
 
       await expect(service.validateSession(app(), 'tok')).resolves.toBe(user);
+      // Using the application counts the user as active this month.
+      expect(usage.record).toHaveBeenCalledWith('realm-1', 'user-1');
+    });
+
+    it('counts no activity for a refused session', async () => {
+      prisma.proxySession.findUnique.mockResolvedValue({
+        proxyApplicationId: 'app-1',
+        expiresAt: new Date(Date.now() - 1),
+        user,
+      });
+
+      await service.validateSession(app(), 'tok');
+      expect(usage.record).not.toHaveBeenCalled();
     });
 
     it('refuses a session minted for a different proxy application', async () => {
@@ -248,9 +264,7 @@ describe('ProxyAuthService', () => {
         user,
       });
 
-      await expect(
-        service.validateSession(app(), 'tok'),
-      ).resolves.toBeNull();
+      await expect(service.validateSession(app(), 'tok')).resolves.toBeNull();
     });
 
     it('refuses an expired session', async () => {
@@ -260,9 +274,7 @@ describe('ProxyAuthService', () => {
         user,
       });
 
-      await expect(
-        service.validateSession(app(), 'tok'),
-      ).resolves.toBeNull();
+      await expect(service.validateSession(app(), 'tok')).resolves.toBeNull();
     });
 
     it('refuses a session whose user has since been disabled', async () => {
@@ -272,9 +284,7 @@ describe('ProxyAuthService', () => {
         user: { ...user, enabled: false },
       });
 
-      await expect(
-        service.validateSession(app(), 'tok'),
-      ).resolves.toBeNull();
+      await expect(service.validateSession(app(), 'tok')).resolves.toBeNull();
     });
 
     it('refuses an absent cookie without touching the database', async () => {

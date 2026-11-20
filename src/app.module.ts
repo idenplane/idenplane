@@ -8,12 +8,13 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { LoggerModule } from 'nestjs-pino';
 import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { join } from 'path';
-import { createLoggerConfig } from './common/logging/logger.config.js';
+import { loggerParams } from './common/logging/startup-logger.js';
 import { PrismaModule } from './prisma/prisma.module.js';
 import { CryptoModule } from './crypto/crypto.module.js';
 import { SecretsAtRestModule } from './secrets-at-rest/secrets-at-rest.module.js';
 import { RealmsModule } from './realms/realms.module.js';
 import { SetupWizardModule } from './setup-wizard/setup-wizard.module.js';
+import { InstanceBootstrapModule } from './bootstrap/instance-bootstrap.module.js';
 import { UsersModule } from './users/users.module.js';
 import { ClientsModule } from './clients/clients.module.js';
 import { MtlsAdminModule } from './mtls-admin/mtls-admin.module.js';
@@ -49,6 +50,7 @@ import { WebhooksModule } from './webhooks/webhooks.module.js';
 import { RateLimitModule } from './rate-limit/rate-limit.module.js';
 import { ImpersonationModule } from './impersonation/impersonation.module.js';
 import { StatsModule } from './stats/stats.module.js';
+import { UsageModule } from './usage/usage.module.js';
 import { RedisModule } from './redis/redis.module.js';
 import { CacheModule } from './cache/cache.module.js';
 import { WebAuthnModule } from './webauthn/webauthn.module.js';
@@ -93,7 +95,7 @@ import { MetricsInterceptor } from './metrics/metrics.interceptor.js';
     LoginModule,
     WebAuthnModule,
     ConfigModule.forRoot({ isGlobal: true }),
-    LoggerModule.forRoot(createLoggerConfig()),
+    LoggerModule.forRoot(loggerParams()),
     ThrottlerModule.forRoot({
       throttlers: [
         {
@@ -133,6 +135,7 @@ import { MetricsInterceptor } from './metrics/metrics.interceptor.js';
     AdminRbacModule,
     RealmsModule,
     SetupWizardModule,
+    InstanceBootstrapModule,
     UsersModule,
     ClientsModule,
     MtlsAdminModule,
@@ -156,6 +159,7 @@ import { MetricsInterceptor } from './metrics/metrics.interceptor.js';
     RateLimitModule,
     ImpersonationModule,
     StatsModule,
+    UsageModule,
     AuthorizationModule,
     CustomAttributesModule,
     PluginsModule,

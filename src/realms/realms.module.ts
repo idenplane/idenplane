@@ -12,6 +12,7 @@ import { CorsModule } from '../cors/cors.module.js';
   imports: [ThemeModule, CacheModule, CryptoModule, CorsModule],
   controllers: [RealmsController],
   providers: [RealmsService, RealmExportService, RealmImportService],
-  exports: [RealmsService],
+  // RealmImportService: instance bootstrap (BOOTSTRAP_FILE) imports realms.
+  exports: [RealmsService, RealmImportService],
 })
 export class RealmsModule {}

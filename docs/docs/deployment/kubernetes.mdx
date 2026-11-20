@@ -232,6 +232,52 @@ resources:
 
 ---
 
+## Unattended bootstrap
+
+`bootstrap.enabled: true` sets up a fresh release from values alone. At the first start, the realms under `bootstrap.realms` are created and the setup wizard is closed, so no one has to open it. This is how a GitOps install (Argo CD, Flux) comes up ready. [Unattended Bootstrap](unattended-bootstrap.md) describes the mechanism, the document format and what happens when it fails. The chart only renders the document and points `BOOTSTRAP_FILE` at it.
+
+| Value | Default | Meaning |
+|---|---|---|
+| `bootstrap.enabled` | `false` | Mount the bootstrap document and set `BOOTSTRAP_FILE`. |
+| `bootstrap.realms` | `[]` | Realm export documents (version 2) to create. Rendered with `version: 1` into the Secret `<fullname>-bootstrap`. Empty: only the wizard is closed. |
+| `bootstrap.existingSecret` | `""` | A Secret you manage that holds the whole document. `realms` is then ignored and the chart creates no Secret. |
+| `bootstrap.existingSecretKey` | `bootstrap.json` | The document's key in `existingSecret`. |
+| `bootstrap.mountPath` | `/etc/idenplane/bootstrap` | Where the document is mounted, read-only. |
+
+Keep secrets out of the values. Reference them as `${env:NAME}` and add `NAME` to `secrets.existingSecret`; every key in that Secret reaches the pods as an environment variable. With Flux post-build substitution on the Kustomization that holds the HelmRelease, write `$${env:NAME}`.
+
+```yaml
+secrets:
+  existingSecret: idenplane-app-keys   # ADMIN_API_KEY, ADMIN_PASSWORD, WEBHOOK_*, ACME_WEB_CLIENT_SECRET
+bootstrap:
+  enabled: true
+  realms:
+    - version: 2
+      realm:
+        name: acme
+        displayName: Acme
+      clients:
+        - clientId: acme-web
+          clientSecret: ${env:ACME_WEB_CLIENT_SECRET}
+          redirectUris: [https://app.example.com/callback]
+          grantTypes: [authorization_code, refresh_token]
+```
+
+```bash
+kubectl create secret generic idenplane-app-keys --namespace idenplane \
+  --from-literal=ADMIN_API_KEY="$(openssl rand -hex 32)" \
+  --from-literal=ADMIN_PASSWORD="$(openssl rand -hex 16)" \
+  --from-literal=WEBHOOK_SECRET_KEY="$(openssl rand -hex 32)" \
+  --from-literal=WEBHOOK_ENCRYPTION_SALT="$(openssl rand -hex 16)" \
+  --from-literal=ACME_WEB_CLIENT_SECRET="$(openssl rand -hex 32)"
+```
+
+- **Several replicas.** They may all start at once. They serialize on the setup wizard's lock, and exactly one applies the document.
+- **Probes.** While bootstrap runs, a pod does not answer its probes.
+- **Failure.** The container exits before it is ready and nothing is written. The pod restarts (`CrashLoopBackOff`) until the values or the Secret are fixed, and `helm install --wait` fails.
+- **Upgrades.** The document is applied once. Changing `bootstrap.realms` after the first install has no effect: manage the realms with the admin API or the Terraform provider.
+- **`helm test`** checks that the setup wizard reports completed.
+
 ## Database Configuration
 
 ### Bundled PostgreSQL (Default)

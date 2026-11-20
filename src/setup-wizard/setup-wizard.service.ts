@@ -107,6 +107,9 @@ const WIZARD_STATE_ID = 'wizard';
  */
 const TX_OPTIONS = { maxWait: 10_000, timeout: 60_000 };
 
+/** completeUnattended's budget: realm imports, and waiting on another's. */
+const UNATTENDED_TX_TIMEOUT_MS = 10 * 60_000;
+
 /**
  * The first-run setup wizard.
  *
@@ -538,6 +541,58 @@ export class SetupWizardService {
       success: true,
       message: `Setup completed successfully. Realm '${created.realmName}' created with admin user '${created.adminUsername}'`,
     };
+  }
+
+  /**
+   * Completes setup without the wizard, for instance bootstrap
+   * (BOOTSTRAP_FILE): one transaction that holds the state row's lock, checks
+   * that setup is still open, runs `apply` and marks the wizard completed.
+   * Anything `apply` writes and the closed wizard commit together, or not at
+   * all. Instances (and the wizard's own writes) that race it serialize on
+   * the lock; whichever comes second finds setup complete. Answers a wizard
+   * in progress had saved are cleared, as they were never applied.
+   *
+   * Returns `already-complete`, running nothing, once setup was completed or
+   * skipped: bootstrap never touches an instance that is set up.
+   */
+  async completeUnattended<T>(
+    apply: (tx: Prisma.TransactionClient) => Promise<T>,
+    summary: { realmName?: string; realmDisplayName?: string },
+  ): Promise<
+    { status: 'applied'; result: T } | { status: 'already-complete' }
+  > {
+    const { id } = await this.getWizardState();
+    return this.prisma.$transaction(
+      async (tx) => {
+        await tx.$queryRaw`
+          SELECT "id" FROM "wizard_states" WHERE "id" = ${id} FOR UPDATE`;
+        const state = await tx.wizardState.findUniqueOrThrow({ where: { id } });
+        if (state.completed || state.skipped) {
+          return { status: 'already-complete' as const };
+        }
+        const result = await apply(tx);
+        await tx.wizardState.update({
+          where: { id },
+          data: {
+            completed: true,
+            currentStep: WIZARD_STEPS.length,
+            adminUsername: null,
+            adminEmail: null,
+            adminPasswordHash: null,
+            realmName: summary.realmName ?? null,
+            realmDisplayName: summary.realmDisplayName ?? null,
+            smtpConfig: Prisma.DbNull,
+            clientId: null,
+            clientSecret: null,
+            redirectUris: [],
+          },
+        });
+        return { status: 'applied' as const, result };
+      },
+      // A second instance waits on the lock while the first imports, so the
+      // budget covers a whole import (see RealmImportService).
+      { maxWait: 30_000, timeout: UNATTENDED_TX_TIMEOUT_MS },
+    );
   }
 
   /** The answers completing needs, or 400 naming the missing step. */

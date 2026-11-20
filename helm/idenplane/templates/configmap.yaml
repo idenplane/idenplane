@@ -17,3 +17,4 @@ data:
   BACKUP_DIR: {{ .Values.backups.mountPath | quote }}
   {{- end }}
   SESSION_STORE: {{ .Values.env.SESSION_STORE | quote }}
+  USAGE_ACTIVITY_RETENTION_MONTHS: {{ .Values.env.USAGE_ACTIVITY_RETENTION_MONTHS | default "13" | quote }}

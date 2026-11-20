@@ -73,6 +73,11 @@ const sidebars: SidebarsConfig = {
           id: 'api/realms',
           label: 'Realms',
         },
+        {
+          type: 'doc',
+          id: 'api/usage',
+          label: 'Instance Usage',
+        },
       ],
     },
     {
@@ -267,6 +272,11 @@ const sidebars: SidebarsConfig = {
           type: 'doc',
           id: 'deployment/bare-metal',
           label: 'Bare Metal',
+        },
+        {
+          type: 'doc',
+          id: 'deployment/unattended-bootstrap',
+          label: 'Unattended Bootstrap',
         },
         {
           type: 'doc',

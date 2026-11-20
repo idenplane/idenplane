@@ -17,9 +17,9 @@ const MIN_PRODUCTION_ADMIN_PASSWORD_LENGTH = 12;
 /**
  * Documented defaults and placeholders that must never seed an admin: refused
  * in production, and outside it unless ALLOW_INSECURE_ADMIN_PASSWORD=true.
- * Compared case-insensitively.
+ * Compared case-insensitively. Instance bootstrap refuses them too.
  */
-const INSECURE_ADMIN_PASSWORDS = new Set([
+export const INSECURE_ADMIN_PASSWORDS: ReadonlySet<string> = new Set([
   'admin',
   'password',
   'changeme',

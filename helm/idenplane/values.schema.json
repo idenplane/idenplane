@@ -644,6 +644,59 @@
           "enum": ["database", "redis"],
           "default": "database",
           "description": "Session store backend."
+        },
+        "USAGE_ACTIVITY_RETENTION_MONTHS": {
+          "type": "string",
+          "pattern": "^([Oo][Ff][Ff]|[1-9][0-9]{0,2}|1[01][0-9]{2}|1200)$",
+          "default": "13",
+          "description": "Whole months of monthly-active-user records kept before the current month (1 to 1200), or off to keep every month."
+        }
+      }
+    },
+    "bootstrap": {
+      "type": "object",
+      "description": "Unattended bootstrap: set up a fresh instance from configuration at its first start (realms created, setup wizard closed). Sets BOOTSTRAP_FILE.",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Mount a bootstrap file and set BOOTSTRAP_FILE."
+        },
+        "realms": {
+          "type": "array",
+          "default": [],
+          "description": "Realm export documents (version 2) to create. Strings may hold ${env:NAME}; users may carry initialPassword. Rendered into a Secret; ignored with existingSecret.",
+          "items": {
+            "type": "object",
+            "required": ["version", "realm"],
+            "properties": {
+              "version": { "type": ["integer", "string"] },
+              "realm": {
+                "type": "object",
+                "required": ["name"],
+                "properties": { "name": { "type": "string", "minLength": 1 } }
+              }
+            }
+          }
+        },
+        "existingSecret": {
+          "type": "string",
+          "default": "",
+          "description": "Existing Secret holding the whole bootstrap file ({\"version\": 1, \"realms\": [...]}). When set, realms is ignored and the chart creates no Secret."
+        },
+        "existingSecretKey": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[-._a-zA-Z0-9]+$",
+          "default": "bootstrap.json",
+          "description": "The key of the file in existingSecret."
+        },
+        "mountPath": {
+          "type": "string",
+          "pattern": "^/",
+          "default": "/etc/idenplane/bootstrap",
+          "description": "Directory the file is mounted in (read-only)."
         }
       }
     },

@@ -52,7 +52,7 @@ The `PUT` replaces the whole set, and either every name is valid or nothing chan
 | Reads in a realm (`GET`, `HEAD`, `OPTIONS` under `/admin/realms/<realm>/…`) | yes | its realms | every realm |
 | Changes in a realm (`POST`, `PUT`, `PATCH`, `DELETE`) | yes | its realms | no |
 | Reads that reveal a secret | yes | its realms | no |
-| Server-wide: creating, importing, exporting or deleting realms; plugins; upgrade; system version; metrics; migration imports; the setup wizard; admin accounts | yes | no | no |
+| Server-wide: creating, importing, exporting or deleting realms; plugins; upgrade; system version; instance usage; metrics; migration imports; the setup wizard; admin accounts | yes | no | no |
 | Your own account: `GET /admin/auth/me`, the realm list (filtered to what you can read), sign-out | yes | yes | yes |
 
 The default has a few stricter exceptions:
