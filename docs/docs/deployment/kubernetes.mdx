@@ -525,6 +525,8 @@ kubectl delete secret -n idenplane -l app.kubernetes.io/instance=idenplane
 | `/health` | Liveness check |
 | `/health/ready` | Readiness check |
 
+`/health/ready` answers 503 when the database is unreachable, when Redis is configured and does not answer, or when the used heap is above 90% of the heap limit of the process. The limit is the one Node.js derives from the container's memory limit, or the one set with `NODE_OPTIONS=--max-old-space-size`.
+
 ### Viewing Logs
 
 ```bash

@@ -6,7 +6,7 @@ describe('HealthController', () => {
   let controller: HealthController;
   let healthCheckService: { check: jest.Mock };
   let prismaHealth: { isHealthy: jest.Mock };
-  let memoryHealth: { checkHeap: jest.Mock };
+  let heapHealth: { isHealthy: jest.Mock };
   let redisHealth: { isHealthy: jest.Mock };
 
   beforeEach(() => {
@@ -14,12 +14,12 @@ describe('HealthController', () => {
       check: jest.fn(),
     };
     prismaHealth = { isHealthy: jest.fn() };
-    memoryHealth = { checkHeap: jest.fn() };
+    heapHealth = { isHealthy: jest.fn() };
     redisHealth = { isHealthy: jest.fn() };
 
     controller = new HealthController(
       healthCheckService as any,
-      memoryHealth as any,
+      heapHealth as any,
       prismaHealth as any,
       redisHealth as any,
     );
@@ -71,7 +71,7 @@ describe('HealthController', () => {
       };
 
       prismaHealth.isHealthy.mockResolvedValue(dbResult);
-      memoryHealth.checkHeap.mockResolvedValue(memoryResult);
+      heapHealth.isHealthy.mockReturnValue(memoryResult);
 
       // Make health.check invoke each indicator function it receives
       healthCheckService.check.mockImplementation(
@@ -87,10 +87,7 @@ describe('HealthController', () => {
 
       expect(healthCheckService.check).toHaveBeenCalledTimes(1);
       expect(prismaHealth.isHealthy).toHaveBeenCalledWith('database');
-      expect(memoryHealth.checkHeap).toHaveBeenCalledWith(
-        'memory_heap',
-        300 * 1024 * 1024,
-      );
+      expect(heapHealth.isHealthy).toHaveBeenCalledWith('memory_heap');
       expect(result).toEqual(expected);
     });
   });
