@@ -108,7 +108,7 @@ export class RealmUsageDto implements RealmUsage {
 }
 
 export class InstanceUsageDto implements InstanceUsage {
-  @ApiProperty({ example: '0.13.1' })
+  @ApiProperty({ example: '0.14.0' })
   version!: string;
 
   @ApiProperty({ example: '2026-11-02T08:00:00.000Z' })

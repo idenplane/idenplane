@@ -9,6 +9,10 @@ For full per-commit detail, see the [GitHub Releases](https://github.com/idenpla
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-11-20
+
+Running Idenplane without a person at the keyboard. A new instance can come up fully set up from configuration, with no setup wizard to click through. One call reports the monthly active users of the whole server. A server that cannot start always says why, as its last log line. Contributions to the server now need a signed Contributor License Agreement.
+
 ### Before you upgrade
 - **A database migration runs at startup.** It adds the tables `user_monthly_activity` and `usage_tracking`, and fills the first from the login events still kept (successful sign-ins, code and device-code exchanges, refreshes). That reads the retained login events once, so on an instance with many events (a long retention, a busy realm) the migration takes longer. No existing data changes.
 - **New setting `USAGE_ACTIVITY_RETENTION_MONTHS`** (default `13`). Monthly activity older than that is deleted every hour. Set `off` to keep every month. A value that is not `1` to `1200` or `off` stops the server at startup, so check it before upgrading if you set it in advance. The Helm chart sets it to `13` (`env.USAGE_ACTIVITY_RETENTION_MONTHS`).
@@ -25,7 +29,7 @@ For full per-commit detail, see the [GitHub Releases](https://github.com/idenpla
 - **Helm: `backups.enabled` now mounts the backup volume on its own.** The volume was only mounted when `persistence.enabled` or `volumeMounts` was also set, so upgrade backups were otherwise written to the container filesystem.
 - **A server that cannot start now always logs why, as its last log line.** Some startup failures did not reach the log as a log line. This covered unattended bootstrap, the admin seed's `ADMIN_PASSWORD` check, a production start without `WEBHOOK_SECRET_KEY` or `WEBHOOK_ENCRYPTION_SALT`, an unsafe `ADMIN_API_KEY` or client-certificate setting, and an invalid `WEB_CONCURRENCY`. Some were printed as a bare Node.js stack trace on stderr, after the buffered log lines had been flushed. Others went to the console as plain text before the process exited. A log collector (or `docker logs ... | grep`) could therefore miss the reason, or find it in the middle of the startup lines. Every such failure is now logged exactly once, at error level (`"level":50`, `"context":"Startup"`), through the server's own logger and in the same format as every other line, with the reason in `msg` and the error with its cause in `err`. Every pending line is then written out and the process exits with code 1. Nest now logs through that logger from its first line instead of buffering until the application exists. A module that cannot be created is logged once and exits with 1 instead of aborting the process. A healthy start logs the same lines as before. The image check for unattended bootstrap also stops piping `docker logs` into `grep -q`, which failed at random under `pipefail`, and now checks that the reason is the last line, at error level and logged once, for a failed bootstrap and two other startup checks.
 
-## [0.13.1] - 2026-11-18
+## [0.13.1] - 2026-11-20
 
 Security and SMTP fixes following 0.13.0. Upgrade to close the documented DNS-rebinding gap in back-channel logout.
 
@@ -904,7 +908,8 @@ The foundation release: core IAM server with OAuth, OIDC, SAML, MFA, and the ini
 - `removeUserRealmRoles` returning 200 instead of 204
 - Login error messages never displayed on failed login
 
-[Unreleased]: https://github.com/idenplane/idenplane/compare/v0.13.1...HEAD
+[Unreleased]: https://github.com/idenplane/idenplane/compare/v0.14.0...HEAD
+[0.14.0]: https://github.com/idenplane/idenplane/releases/tag/v0.14.0
 [0.13.1]: https://github.com/idenplane/idenplane/releases/tag/v0.13.1
 [0.13.0]: https://github.com/idenplane/idenplane/releases/tag/v0.13.0
 [0.12.0]: https://github.com/idenplane/idenplane/releases/tag/v0.12.0
