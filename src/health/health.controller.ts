@@ -1,11 +1,8 @@
 import { Controller, Get } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
-import {
-  HealthCheck,
-  HealthCheckService,
-  MemoryHealthIndicator,
-} from '@nestjs/terminus';
+import { HealthCheck, HealthCheckService } from '@nestjs/terminus';
 import { Public } from '../common/decorators/public.decorator.js';
+import { HeapHealthIndicator } from './heap-health.indicator.js';
 import { PrismaHealthIndicator } from './prisma-health.indicator.js';
 import { RedisHealthIndicator } from '../redis/redis.health.js';
 
@@ -15,7 +12,7 @@ import { RedisHealthIndicator } from '../redis/redis.health.js';
 export class HealthController {
   constructor(
     private readonly health: HealthCheckService,
-    private readonly memory: MemoryHealthIndicator,
+    private readonly heap: HeapHealthIndicator,
     private readonly db: PrismaHealthIndicator,
     private readonly redis: RedisHealthIndicator,
   ) {}
@@ -47,7 +44,7 @@ export class HealthController {
   readiness() {
     return this.health.check([
       () => this.db.isHealthy('database'),
-      () => this.memory.checkHeap('memory_heap', 300 * 1024 * 1024),
+      () => this.heap.isHealthy('memory_heap'),
       () => this.redis.isHealthy('redis'),
     ]);
   }

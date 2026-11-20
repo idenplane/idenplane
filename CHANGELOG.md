@@ -9,6 +9,9 @@ For full per-commit detail, see the [GitHub Releases](https://github.com/idenpla
 
 ## [Unreleased]
 
+### Fixed
+- **A busy server no longer reports itself not ready because its heap passed 300 MB.** `/health/ready` answered 503 whenever the used heap was above a fixed 300 MB, whatever the heap limit of the process. V8 lets the heap grow past that under load when the limit allows it, so a healthy instance under heavy traffic was taken out of rotation by its readiness probe, and its load moved to the other replicas. The check is now relative to the limit the process really has (`--max-old-space-size`, or the default V8 derives from the container's memory): `memory_heap` is `down` only above 90% of it. The response keeps the same shape and still carries no sizes. Found by the DAST scan, where the fuzzed admin writes pushed the heap over 300 MB while the database stayed up.
+
 ## [0.14.0] - 2026-11-20
 
 Running Idenplane without a person at the keyboard. A new instance can come up fully set up from configuration, with no setup wizard to click through. One call reports the monthly active users of the whole server. A server that cannot start always says why, as its last log line. Contributions to the server now need a signed Contributor License Agreement.
