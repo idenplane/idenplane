@@ -9,7 +9,7 @@ For full per-commit detail, see the [GitHub Releases](https://github.com/idenpla
 
 ## [Unreleased]
 
-## [0.14.1] - 2026-11-20
+## [0.14.1] - 2026-11-21
 
 One fix: a busy server no longer fails its own readiness check. Nothing to do before upgrading; there is no migration and no new setting.
 
