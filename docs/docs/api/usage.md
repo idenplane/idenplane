@@ -38,7 +38,7 @@ curl "http://localhost:3000/admin/system/usage?month=2026-10" \
 
 ```json
 {
-  "version": "0.14.0",
+  "version": "0.14.1",
   "generatedAt": "2026-11-01T06:00:00.000Z",
   "period": {
     "month": "2026-10",
