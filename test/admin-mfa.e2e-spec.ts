@@ -43,6 +43,33 @@ describe('Admin console MFA (e2e)', () => {
   const codeAt = (totp: OTPAuth.TOTP, steps: number) =>
     totp.generate({ timestamp: Date.now() + steps * 30_000 });
 
+  /** The codes this file has already sent, per authenticator. */
+  const sentCodes = new Map<OTPAuth.TOTP, Set<string>>();
+
+  /**
+   * A code the server accepts now and has not been sent yet (a code works
+   * once). The server checks the code a moment after it is generated, and
+   * accepts the steps -1, 0 and +1 of its own clock. A code for step 0 or +1
+   * therefore survives the clock moving into the next step in between; a
+   * code for step -1 does not, so it is only used with time left in the
+   * step. With no unused code left, this waits for the next step.
+   */
+  const freshCode = async (totp: OTPAuth.TOTP): Promise<string> => {
+    const sent = sentCodes.get(totp) ?? new Set<string>();
+    sentCodes.set(totp, sent);
+    for (;;) {
+      const leftInStep = 30_000 - (Date.now() % 30_000);
+      for (const step of leftInStep > 5_000 ? [0, 1, -1] : [0, 1]) {
+        const code = codeAt(totp, step);
+        if (!sent.has(code)) {
+          sent.add(code);
+          return code;
+        }
+      }
+      await new Promise((resolve) => setTimeout(resolve, leftInStep + 50));
+    }
+  };
+
   /** A six-digit code that is valid in no step near now. */
   const wrongCode = (totp: OTPAuth.TOTP) => {
     const valid = new Set([-2, -1, 0, 1, 2].map((s) => codeAt(totp, s)));
@@ -103,7 +130,7 @@ describe('Admin console MFA (e2e)', () => {
     const activated = await http()
       .post('/admin/auth/mfa/totp/activate')
       .set(...bearer(token))
-      .send({ code: codeAt(totp, 0) })
+      .send({ code: await freshCode(totp) })
       .expect(200);
     return {
       totp,
@@ -284,7 +311,7 @@ describe('Admin console MFA (e2e)', () => {
     });
 
     it('signs in with the code, with MFA claims, and only once per code', async () => {
-      const code = codeAt(alice.totp, 1);
+      const code = await freshCode(alice.totp);
       const first = await login('alice').expect(200);
       const res = await http()
         .post('/admin/auth/login/mfa')
@@ -384,7 +411,7 @@ describe('Admin console MFA (e2e)', () => {
         const stepped = await http()
           .post('/admin/auth/step-up')
           .set(...bearer(token))
-          .send({ method: 'totp', code: codeAt(alice.totp, -1) })
+          .send({ method: 'totp', code: await freshCode(alice.totp) })
           .expect(200);
         const renewed = await http()
           .post('/admin/auth/mfa/recovery-codes')
@@ -701,7 +728,7 @@ describe('Admin console MFA (e2e)', () => {
       const stepped = await http()
         .post('/admin/auth/step-up')
         .set(...bearer(token))
-        .send({ method: 'totp', code: codeAt(bobTotp, 1) })
+        .send({ method: 'totp', code: await freshCode(bobTotp) })
         .expect(200);
       await http()
         .get('/admin/realms')
@@ -710,7 +737,7 @@ describe('Admin console MFA (e2e)', () => {
     });
 
     it('refuses to remove the last factor while it is required', async () => {
-      const token = await signIn('bob', 'totp', codeAt(bobTotp, -1));
+      const token = await signIn('bob', 'totp', await freshCode(bobTotp));
       await http()
         .delete('/admin/auth/mfa/totp')
         .set(...bearer(token))
