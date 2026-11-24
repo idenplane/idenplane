@@ -72,7 +72,7 @@
     "qrcode": "^1.5.4",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
-    "sanitize-html": "^2.18.0",
+    "sanitize-html": "^2.18.2",
     "twilio": "^6.3.0",
     "ws": "^8.23.0",
     "xml-crypto": "^6.4.0"
