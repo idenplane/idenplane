@@ -373,7 +373,7 @@ Every row below has its own recommendation.
 | V13.4.2 | 2 | Pass | src/common/logger/logger.config.ts; src/common/filters/http-exception.filter.ts | No GraphQL endpoint. |
 | V13.4.3 | 2 | Pass | src/main.ts:310 (index:false) |  |
 | V13.4.4 | 2 | Pass | No TRACE routes |  |
-| V13.4.5 | 2 | Partial | src/health/prisma-health.indicator.ts (generic message); src/main.ts:355 (Swagger at /api) | FIXED in part: /health/ready no longer leaks the DB error. Swagger UI stays public by design (documented API). **Recommendation:** SWAGGER\_ENABLED switch for operators who want it off (S). |
+| V13.4.5 | 2 | Partial | src/health/prisma-health.indicator.ts (generic message); src/main.ts:355 (Swagger at /api) | FIXED in part: /health/ready no longer leaks the DB error. Swagger UI and `/api-json` are off in production unless `SWAGGER_ENABLED=true` (`src/common/swagger-enabled.ts`). |
 
 ### V14 Data Protection
 
