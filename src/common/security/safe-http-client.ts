@@ -209,6 +209,21 @@ interface PinnedRequestResult extends SafePostResult {
 export interface SafePostOptions {
   /** Request timeout in milliseconds. Defaults to 10s, matching the previous AbortController-based fetch timeout. */
   timeoutMs?: number;
+  /**
+   * Follow (re-validated) redirects, up to the hop cap. Default true. When
+   * false, a redirect is refused with `SsrfBlockedError`, for deliveries that
+   * must reach the configured URL only (like `fetch`'s `redirect: 'error'`).
+   */
+  followRedirects?: boolean;
+}
+
+function refuseRedirect(statusCode: number, options: SafePostOptions): void {
+  if (
+    options.followRedirects === false &&
+    REDIRECT_STATUS_CODES.has(statusCode)
+  ) {
+    throw new SsrfBlockedError('Delivery blocked: redirects are not followed');
+  }
 }
 
 /**
@@ -252,6 +267,7 @@ export async function safePost(
 
   for (let hop = 0; ; hop++) {
     const result = await sendPinnedRequest(target, body, headers, timeoutMs);
+    refuseRedirect(result.statusCode, options);
 
     if (!REDIRECT_STATUS_CODES.has(result.statusCode)) {
       return { statusCode: result.statusCode, body: result.body };
@@ -323,6 +339,7 @@ export async function safeGet(
       'GET',
       maxBytes,
     );
+    refuseRedirect(result.statusCode, options);
     if (!REDIRECT_STATUS_CODES.has(result.statusCode)) {
       return { statusCode: result.statusCode, body: result.body };
     }

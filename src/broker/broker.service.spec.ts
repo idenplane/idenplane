@@ -1,5 +1,33 @@
 import { lookupsBackedBy } from '../cache/cached-lookups.mock.js';
 jest.mock('../crypto/jwk.service.js', () => ({ JwkService: jest.fn() }));
+// Provider calls go through the SSRF-safe client. These tests describe the
+// provider's answers as fetch-like mocks on global.fetch, so the client is
+// bridged to it; the SSRF policy itself is tested in safe-http-client.spec.
+jest.mock('../common/security/safe-http-client.js', () => {
+  const actual = jest.requireActual('../common/security/safe-http-client.js');
+  const viaFetch = async (url: string, init: Record<string, unknown>) => {
+    const r = await (global.fetch as unknown as jest.Mock)(url, init);
+    const statusCode =
+      typeof r.status === 'number' ? r.status : r.ok ? 200 : 500;
+    const body =
+      typeof r.json === 'function' ? JSON.stringify(await r.json()) : '';
+    return { statusCode, body };
+  };
+  return {
+    ...actual,
+    safePost: jest.fn((url: string, body: string, headers: unknown) =>
+      viaFetch(url, { method: 'POST', headers, body }),
+    ),
+    safeGet: jest.fn((url: string, headers: unknown) =>
+      viaFetch(url, { headers }),
+    ),
+  };
+});
+import {
+  safeGet,
+  safePost,
+  SsrfBlockedError,
+} from '../common/security/safe-http-client.js';
 
 import { BadRequestException, UnauthorizedException } from '@nestjs/common';
 import {
@@ -707,6 +735,98 @@ describe('BrokerService', () => {
       await expect(
         service.handleCallback(mockRealm, 'google', 'auth-code', 'state-jwt'),
       ).rejects.toThrow(UnauthorizedException);
+    });
+
+    // The token and userinfo URLs are set by a realm admin: both go through
+    // the SSRF-safe client, and a refused target fails the login cleanly.
+    describe('outbound calls to the provider', () => {
+      beforeEach(() => {
+        (safePost as jest.Mock).mockClear();
+        (safeGet as jest.Mock).mockClear();
+        prisma.realmSigningKey.findFirst.mockResolvedValue(mockSigningKey);
+        jwkService.verifyJwt.mockResolvedValue(brokerState);
+      });
+
+      it('sends the token exchange and userinfo through the SSRF-safe client', async () => {
+        idpService.findByAlias.mockResolvedValue(mockIdp);
+        (global.fetch as jest.Mock)
+          .mockResolvedValueOnce({
+            ok: true,
+            json: jest
+              .fn()
+              .mockResolvedValue({ access_token: 'ext-access-token' }),
+          })
+          .mockResolvedValueOnce({ ok: false, status: 401 });
+
+        await expect(
+          service.handleCallback(mockRealm, 'google', 'auth-code', 'state-jwt'),
+        ).rejects.toThrow(UnauthorizedException);
+
+        expect(safePost).toHaveBeenCalledWith(
+          mockIdp.tokenUrl,
+          expect.stringContaining('grant_type=authorization_code'),
+          expect.objectContaining({
+            'Content-Type': 'application/x-www-form-urlencoded',
+          }),
+          expect.anything(),
+        );
+        expect(safeGet).toHaveBeenCalledWith(
+          expect.any(String),
+          expect.objectContaining({ Authorization: 'Bearer ext-access-token' }),
+          expect.objectContaining({ maxBytes: expect.any(Number) }),
+        );
+      });
+
+      it('fails the login when the token URL points at a private or metadata address', async () => {
+        idpService.findByAlias.mockResolvedValue({
+          ...mockIdp,
+          tokenUrl: 'http://169.254.169.254/latest/meta-data/iam',
+        });
+        (safePost as jest.Mock).mockRejectedValueOnce(
+          new SsrfBlockedError(
+            'Delivery blocked: target address is not publicly routable',
+          ),
+        );
+
+        await expect(
+          service.handleCallback(mockRealm, 'google', 'auth-code', 'state-jwt'),
+        ).rejects.toThrow('Failed to exchange code with external provider');
+        expect(safeGet).not.toHaveBeenCalled();
+      });
+
+      it('fails the login when the userinfo URL is refused', async () => {
+        idpService.findByAlias.mockResolvedValue({
+          ...mockIdp,
+          userinfoUrl: 'http://10.0.0.5/admin',
+        });
+        (global.fetch as jest.Mock).mockResolvedValueOnce({
+          ok: true,
+          json: jest
+            .fn()
+            .mockResolvedValue({ access_token: 'ext-access-token' }),
+        });
+        (safeGet as jest.Mock).mockRejectedValueOnce(
+          new SsrfBlockedError(
+            'Delivery blocked: target address is not publicly routable',
+          ),
+        );
+
+        await expect(
+          service.handleCallback(mockRealm, 'google', 'auth-code', 'state-jwt'),
+        ).rejects.toThrow('Failed to fetch user info from external provider');
+      });
+
+      it('fails the login when the provider does not answer JSON', async () => {
+        idpService.findByAlias.mockResolvedValue(mockIdp);
+        (safePost as jest.Mock).mockResolvedValueOnce({
+          statusCode: 200,
+          body: '<html>not json</html>',
+        });
+
+        await expect(
+          service.handleCallback(mockRealm, 'google', 'auth-code', 'state-jwt'),
+        ).rejects.toThrow(UnauthorizedException);
+      });
     });
 
     // Finding #16: GitHub returns email=null for private emails; fall back to

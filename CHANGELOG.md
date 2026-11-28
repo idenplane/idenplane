@@ -9,6 +9,12 @@ For full per-commit detail, see the [GitHub Releases](https://github.com/idenpla
 
 ## [Unreleased]
 
+### Security
+- **Identity-provider and audit-stream calls can no longer be pointed at internal addresses.** A realm admin sets an external provider's token and userinfo URLs, and an HTTP audit stream's URL. All three were fetched with plain `fetch`, so an admin (or anyone holding an admin session) could point one at `169.254.169.254`, `localhost` or another internal service, and the server would call it: with the provider's client secret in the token request, or with every audit record. They now use the same SSRF-safe client as webhooks, SAML metadata and back-channel logout. Private, loopback, link-local and metadata addresses are refused, the validated address is pinned so a DNS change between check and connect can't redirect it, and redirects are re-validated. Audit streams still never follow a redirect. A refused provider call fails the login like any provider failure, and says why in the server log.
+
+### Before you upgrade
+- **An external identity provider or HTTP audit stream on your own network** (a private or loopback address) is now refused. Set `WEBHOOK_ALLOW_PRIVATE_TARGETS=true`, the setting webhooks already use, to allow private targets. That setting allows every address, cloud-metadata ones included, so only set it where the server cannot reach such an address.
+
 ## [0.14.1] - 2026-11-21
 
 One fix: a busy server no longer fails its own readiness check. Nothing to do before upgrading; there is no migration and no new setting.
