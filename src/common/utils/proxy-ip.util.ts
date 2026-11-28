@@ -3,94 +3,103 @@
  *
  * Background
  * ----------
- * The `X-Forwarded-For` header is trivially spoofable by any client unless
- * we know that the immediate TCP peer that set the header is a trusted proxy.
- * Without that check an attacker can send:
+ * `X-Forwarded-For` is a list each proxy *appends* to: a client can put any
+ * value in it, and every proxy adds the address it saw on the right. So only
+ * the entries added by proxies we trust are facts; everything to their left
+ * may have been written by the client. Taking the leftmost entry lets an
+ * attacker send
  *
  *   X-Forwarded-For: 1.2.3.4
  *
- * and bypass per-IP rate limiting entirely.
+ * and be rate-limited, audited and risk-scored as 1.2.3.4.
  *
  * Resolution rules
  * ----------------
- * 1. If `TRUSTED_PROXIES` is not set (the default) we never consult
- *    `X-Forwarded-For` — we use the raw socket address instead.
+ * 1. `TRUSTED_PROXIES` not set (the default): `X-Forwarded-For` is never
+ *    read; the socket address is the client.
  *
- * 2. If `TRUSTED_PROXIES=*` we accept `X-Forwarded-For` unconditionally
- *    (suitable for environments where the network layer already guarantees
- *    the header is clean, e.g. a managed cloud load-balancer with no
- *    direct public access to the app process).
+ * 2. `TRUSTED_PROXIES=*`: one trusted hop. The immediate peer is taken to be
+ *    the (only) proxy, so the client is the rightmost `X-Forwarded-For`
+ *    entry, the one that proxy appended. Suitable when the proxy is the only
+ *    thing that can reach the app (the bundled TLS compose files). For a
+ *    chain of proxies, list them instead.
  *
- * 3. If `TRUSTED_PROXIES` is a comma-separated list of IP addresses / CIDR
- *    blocks (e.g. `10.0.0.1,172.16.0.0/12`) we only honour the header when
- *    the immediate peer (socket address) is in that list.
+ * 3. `TRUSTED_PROXIES` is a comma-separated list of IPv4/IPv6 addresses and
+ *    CIDR blocks (also `loopback`, `linklocal`, `uniquelocal`, as Express
+ *    accepts): starting from the socket address and walking `X-Forwarded-For`
+ *    from right to left, every hop in the list is skipped; the first one that
+ *    is not is the client.
+ *
+ * Both match Express's `trust proxy` (set from the same variable in main.ts),
+ * so `req.ip` (used by the rate limiter) and `resolveClientIp` agree.
  *
  * Usage
  * -----
- * Import `resolveClientIp` wherever a client IP is needed:
- *
  *   const ip = resolveClientIp(request);
  */
 
+import { BlockList, isIP } from 'node:net';
 import type { Request } from 'express';
+import { normalizeIp } from '../../mtls/cidr.js';
 
-// ─── CIDR helper (IPv4 only) ────────────────────────────────────────────────
+/** The named ranges Express's `trust proxy` (proxy-addr) accepts. */
+const NAMED_RANGES: Record<string, string[]> = {
+  loopback: ['127.0.0.1/8', '::1/128'],
+  linklocal: ['169.254.0.0/16', 'fe80::/10'],
+  uniquelocal: ['10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16', 'fc00::/7'],
+};
 
 /**
- * Parse an IPv4 CIDR block into its numeric base address and mask.
- * Returns `null` when the input is not a valid IPv4 CIDR / address.
+ * Adds one address or CIDR block to `list`. Returns false (and adds nothing)
+ * for an entry that is not one.
  */
-function parseCidr(cidr: string): { base: number; mask: number } | null {
-  const [addr, prefix] = cidr.split('/');
-  const parts = addr?.split('.');
-  if (!parts || parts.length !== 4) return null;
-
-  let base = 0;
-  for (const part of parts) {
-    const octet = parseInt(part, 10);
-    if (isNaN(octet) || octet < 0 || octet > 255) return null;
-    base = (base << 8) | octet;
+function addEntry(list: BlockList, raw: string): boolean {
+  const named = NAMED_RANGES[raw.toLowerCase()];
+  if (named) {
+    for (const r of named) addEntry(list, r);
+    return true;
   }
-  // Coerce to unsigned 32-bit integer
-  base = base >>> 0;
-
-  const prefixLen = prefix !== undefined ? parseInt(prefix, 10) : 32;
-  if (isNaN(prefixLen) || prefixLen < 0 || prefixLen > 32) return null;
-
-  const mask = prefixLen === 0 ? 0 : (~0 << (32 - prefixLen)) >>> 0;
-  return { base: base & mask, mask };
+  const slash = raw.indexOf('/');
+  const address = normalizeIp(slash === -1 ? raw : raw.slice(0, slash));
+  const family = isIP(address);
+  if (family === 0) return false;
+  const type = family === 4 ? 'ipv4' : 'ipv6';
+  if (slash === -1) {
+    list.addAddress(address, type);
+    return true;
+  }
+  let prefix = Number(raw.slice(slash + 1));
+  // A mapped prefix (::ffff:10.0.0.0/104) names its IPv4 network.
+  if (family === 4 && raw.slice(0, slash).toLowerCase().startsWith('::ffff:'))
+    prefix -= 96;
+  const max = family === 4 ? 32 : 128;
+  if (!Number.isInteger(prefix) || prefix < 0 || prefix > max) return false;
+  list.addSubnet(address, prefix, type);
+  return true;
 }
-
-/**
- * Return `true` when `ip` falls within the given CIDR block / host address.
- */
-function ipInCidr(ip: string, cidr: string): boolean {
-  const range = parseCidr(cidr);
-  const host = parseCidr(ip);
-  if (!range || !host) return false;
-  return (host.base & range.mask) === range.base;
-}
-
-// ─── Trusted proxy list ─────────────────────────────────────────────────────
 
 /**
  * Parsed representation of the `TRUSTED_PROXIES` environment variable.
  *
- * - `type: 'none'`  — variable unset; never trust X-Forwarded-For
- * - `type: 'all'`   — `TRUSTED_PROXIES=*`; always trust X-Forwarded-For
- * - `type: 'list'`  — comma-separated IPs/CIDRs; trust only when peer matches
+ * - `type: 'none'` — variable unset; never trust X-Forwarded-For
+ * - `type: 'one-hop'` — `TRUSTED_PROXIES=*`; trust the immediate peer only
+ * - `type: 'list'` — trust every hop inside the listed networks
  */
 type TrustedProxyConfig =
-  { type: 'none' } | { type: 'all' } | { type: 'list'; entries: string[] };
+  { type: 'none' } | { type: 'one-hop' } | { type: 'list'; list: BlockList };
 
 function parseTrustedProxies(raw: string | undefined): TrustedProxyConfig {
   if (!raw || raw.trim() === '') return { type: 'none' };
-  if (raw.trim() === '*') return { type: 'all' };
-  const entries = raw
+  if (raw.trim() === '*') return { type: 'one-hop' };
+  const list = new BlockList();
+  // An entry that is not an address or CIDR block trusts nothing (Express
+  // refuses it at startup when main.ts hands it the same list).
+  for (const entry of raw
     .split(',')
     .map((s) => s.trim())
-    .filter(Boolean);
-  return { type: 'list', entries };
+    .filter(Boolean))
+    addEntry(list, entry);
+  return { type: 'list', list };
 }
 
 /** Lazily-initialised so tests can set env vars before the first import. */
@@ -110,6 +119,13 @@ export function resetTrustedProxyConfig(): void {
   _config = null;
 }
 
+function isTrusted(list: BlockList, address: string): boolean {
+  const ip = normalizeIp(address);
+  const family = isIP(ip);
+  if (family === 0) return false;
+  return list.check(ip, family === 4 ? 'ipv4' : 'ipv6');
+}
+
 // ─── Public API ─────────────────────────────────────────────────────────────
 
 /**
@@ -120,7 +136,8 @@ export function resetTrustedProxyConfig(): void {
  * @returns The client IP string, or `'unknown'` if it cannot be determined.
  */
 export function resolveClientIp(request: Request): string {
-  const socketIp = request.socket?.remoteAddress ?? 'unknown';
+  const rawSocketIp = request.socket?.remoteAddress;
+  const socketIp = rawSocketIp ? normalizeIp(rawSocketIp) : 'unknown';
   const config = getTrustedProxyConfig();
 
   if (config.type === 'none') {
@@ -129,21 +146,26 @@ export function resolveClientIp(request: Request): string {
     return socketIp;
   }
 
-  const xff = request.headers['x-forwarded-for'] as string | undefined;
-  if (!xff) {
-    return socketIp;
+  const header = request.headers['x-forwarded-for'];
+  const xff = Array.isArray(header) ? header.join(',') : header;
+  if (!xff) return socketIp;
+  const hops = xff
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (hops.length === 0) return socketIp;
+
+  if (config.type === 'one-hop') {
+    // The peer is the proxy; the entry it appended is the client.
+    return normalizeIp(hops[hops.length - 1]);
   }
 
-  const proxyTrusted =
-    config.type === 'all' ||
-    config.entries.some((cidr) => ipInCidr(socketIp, cidr));
-
-  if (!proxyTrusted) {
-    // The immediate peer is not a trusted proxy — ignore the header.
-    return socketIp;
+  // Walk from the socket leftwards while the hop is a trusted proxy.
+  if (!isTrusted(config.list, socketIp)) return socketIp;
+  for (let i = hops.length - 1; i >= 0; i--) {
+    const hop = normalizeIp(hops[i]);
+    if (!isTrusted(config.list, hop)) return hop;
   }
-
-  // Use the leftmost (original client) IP from the header.
-  const clientIp = xff.split(',')[0]?.trim();
-  return clientIp || socketIp;
+  // Every hop is a trusted proxy: the leftmost is as far as we can see.
+  return normalizeIp(hops[0]);
 }

@@ -9,6 +9,12 @@ For full per-commit detail, see the [GitHub Releases](https://github.com/idenpla
 
 ## [Unreleased]
 
+### Security
+- **A client can no longer choose the IP address it is rate-limited, audited and risk-scored by.** Behind a trusted proxy, the client address was the *leftmost* `X-Forwarded-For` entry. That is the part the client writes itself, since a proxy appends what it saw on the right. With `TRUSTED_PROXIES=*` the same applied to `req.ip`, which keys the rate limiter, because Express was told to trust every hop. So a request with `X-Forwarded-For: <anything>` was throttled, logged, brute-force-counted and geo-checked as that address. The address is now taken from the right: with a list, every hop inside `TRUSTED_PROXIES` is skipped and the first one outside it is the client; `*` now means one trusted hop, the proxy directly in front of the app, for both `resolveClientIp` and Express (`trust proxy` is `1`, not `true`). `TRUSTED_PROXIES` also matches IPv4-mapped socket addresses (`::ffff:10.0.0.1`), IPv6 entries and CIDR blocks, and the names `loopback`, `linklocal` and `uniquelocal`. Before, IPv4-mapped addresses never matched, so every client behind such a proxy shared one rate-limit bucket.
+
+### Before you upgrade
+- **With `TRUSTED_PROXIES=*` behind more than one proxy** (for example a CDN in front of your load balancer), the client address is now the last proxy's view: the hop before it. List your proxies in `TRUSTED_PROXIES` instead. With a single proxy, which is what the bundled compose files run, nothing changes except that the header can no longer be forged.
+
 ## [0.14.1] - 2026-11-21
 
 One fix: a busy server no longer fails its own readiness check. Nothing to do before upgrading; there is no migration and no new setting.
