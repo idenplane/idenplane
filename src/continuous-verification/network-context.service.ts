@@ -5,6 +5,7 @@ import type {
   NetworkContextData,
   ContinuousRiskSignal,
 } from './continuous-risk-signals.js';
+import { ipApiUrl } from '../common/geoip/ip-api.js';
 
 export interface NetworkContextRecord {
   id: string;
@@ -40,7 +41,8 @@ export interface NetworkContextPolicies {
  * Captures and evaluates network context for continuous session verification.
  *
  * Resolves IP addresses to geolocation, ISP, ASN, and network type information
- * using ip-api.com's free JSON endpoint (with LRU cache for repeat lookups).
+ * using the geo-IP provider chosen with GEOIP_PROVIDER, if any (with LRU cache
+ * for repeat lookups).
  * Integrates with the Prisma NetworkContextRecord model to persist context
  * per session and detect geolocation changes.
  *
@@ -315,7 +317,7 @@ export class NetworkContextService {
 
   /**
    * Resolves an IP address to geolocation, ASN, ISP, and network-type data.
-   * Uses ip-api.com's free endpoint with LRU caching.
+   * Uses the GEOIP_PROVIDER lookup (none by default) with LRU caching.
    */
   async lookupIp(ip: string): Promise<IpLookupResult> {
     if (!ip || this.isPrivateIp(ip)) {
@@ -326,11 +328,15 @@ export class NetworkContextService {
       return this.ipCache.get(ip) ?? this.privateIpResult(ip);
     }
 
+    const url = ipApiUrl(
+      ip,
+      'status,message,country,countryCode,city,lat,lon,asn,isp,org,hosting,proxy,vpn,tor',
+    );
+    // No provider chosen (GEOIP_PROVIDER): nothing is sent, nothing is known.
+    if (!url) return this.unknownResult(ip);
+
     try {
-      const response = await fetch(
-        `http://ip-api.com/json/${encodeURIComponent(ip)}?fields=status,message,country,countryCode,city,lat,lon,asn,isp,org,hosting,proxy,vpn,tor`,
-        { signal: AbortSignal.timeout(3_000) },
-      );
+      const response = await fetch(url, { signal: AbortSignal.timeout(3_000) });
 
       if (!response.ok) {
         const result = this.unknownResult(ip);

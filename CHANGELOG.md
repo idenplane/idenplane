@@ -9,6 +9,12 @@ For full per-commit detail, see the [GitHub Releases](https://github.com/idenpla
 
 ## [Unreleased]
 
+### Security
+- **Users' IP addresses are no longer sent to a third party, in clear text, by default.** Impossible-travel checks, continuous verification's network context and sign-in location lookups sent each user's IP to `http://ip-api.com`. That is a plain-HTTP endpoint, so anyone on the path could read the address and alter the answer that feeds risk scores. It was also a transfer of personal data the operator never chose. Geo-IP lookups are now off unless `GEOIP_PROVIDER` is set: `ip-api-pro` (`https://pro.ip-api.com` with `GEOIP_API_KEY`, over TLS) or `ip-api` (the free endpoint, still plain HTTP, only if you choose it).
+
+### Before you upgrade
+- **Geo signals stop until you choose a provider.** With `GEOIP_PROVIDER` unset, impossible-travel and network-context checks have no location data, so they no longer raise their signals, and sign-in locations show as unknown. To keep them, set `GEOIP_PROVIDER=ip-api-pro` with `GEOIP_API_KEY`, or `GEOIP_PROVIDER=ip-api` to keep the previous plain-HTTP behaviour.
+
 ## [0.14.1] - 2026-11-21
 
 One fix: a busy server no longer fails its own readiness check. Nothing to do before upgrading; there is no migration and no new setting.
