@@ -28,6 +28,7 @@ Idenplane's server settings come from environment variables; realm settings are 
 | `THROTTLE_TTL` | `60000` | No | Rate limit window (ms) |
 | `THROTTLE_LIMIT` | `100` | No | Max requests per window |
 | `TRUSTED_PROXIES` | — | No | Trusted proxy IPs or CIDR blocks |
+| `SWAGGER_ENABLED` | on outside production, off in production | No | `true` publishes Swagger UI (`/api`) and the OpenAPI document (`/api-json`) in production too; `false` turns them off everywhere |
 | `MTLS_ENABLED` | `false` | No | Client certificates (RFC 8705); see [Client Certificates](#client-certificates-mtls) |
 | `BOOTSTRAP_FILE` | — | No | Path of a bootstrap document: at the first start of a fresh instance, its realms are created and the setup wizard is closed; see [Unattended Bootstrap](../deployment/unattended-bootstrap.md) |
 | `BOOTSTRAP_JSON` | — | No | The bootstrap document itself, instead of `BOOTSTRAP_FILE` (not both). Treat it as a secret if it holds any |

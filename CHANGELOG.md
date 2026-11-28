@@ -9,6 +9,12 @@ For full per-commit detail, see the [GitHub Releases](https://github.com/idenpla
 
 ## [Unreleased]
 
+### Security
+- **A production server no longer publishes its full API map to anyone.** Swagger UI (`/api`) and the OpenAPI document (`/api-json`) were served without authentication on every server. They list every endpoint, parameter and auth scheme. They are now off in production (`NODE_ENV=production`, which the Docker image sets) unless `SWAGGER_ENABLED=true`, and stay on outside production. `SWAGGER_ENABLED=false` turns them off anywhere.
+
+### Before you upgrade
+- **If something reads `/api` or `/api-json` from a production server** (a client generator, an API diff, a scanner), set `SWAGGER_ENABLED=true`.
+
 ## [0.14.1] - 2026-11-21
 
 One fix: a busy server no longer fails its own readiness check. Nothing to do before upgrading; there is no migration and no new setting.
