@@ -25,6 +25,7 @@ import {
 } from './helpers/auth-flow';
 import { EmailService } from '../src/email/email.service.js';
 import { RiskAssessmentService } from '../src/risk-assessment/risk-assessment.service.js';
+import { routeSafeHttpThroughFetch } from './helpers/safe-http-via-fetch';
 
 /**
  * The email_otp, magic_link and social flow steps: an emailed code after a
@@ -389,6 +390,7 @@ describe('Auth-flow email, link and social steps (e2e)', () => {
   /** The mock provider: its token and userinfo endpoints answer `who`. */
   const mockProvider = (who: Record<string, unknown>) => {
     const realFetch = global.fetch;
+    routeSafeHttpThroughFetch();
     return jest
       .spyOn(global, 'fetch')
       .mockImplementation(async (input, init) => {

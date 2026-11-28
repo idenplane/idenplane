@@ -46,7 +46,8 @@ docker pull -q "$ZAP_IMAGE" >/dev/null
 
 ci_log "start Idenplane ($IDENPLANE_IMAGE), production mode"
 ci_pg_start "$DB" "$NET"
-ci_app_start "$APP" "$NET" "$IDENPLANE_IMAGE" "$DB"
+# The scan is driven by the OpenAPI document, off by default in production.
+ci_app_start "$APP" "$NET" "$IDENPLANE_IMAGE" "$DB" -e SWAGGER_ENABLED=true
 ci_app_wait "$APP"
 ci_node "$NET" "$WORK" zap/seed.mjs -e IDENPLANE_URL=http://zap-app:3000
 # shellcheck disable=SC1091

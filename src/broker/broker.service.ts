@@ -17,6 +17,36 @@ import { matchesRedirectUri } from '../common/redirect-uri.utils.js';
 import { SamlBrokerService } from './saml/saml-broker.service.js';
 import { EventsService } from '../events/events.service.js';
 import { LoginEventType } from '../events/event-types.js';
+import {
+  ResponseTooLargeError,
+  safeGet,
+  safePost,
+  SsrfBlockedError,
+  type SafePostResult,
+} from '../common/security/safe-http-client.js';
+
+/** Largest token or userinfo answer read from an external provider. */
+const MAX_PROVIDER_RESPONSE_BYTES = 1024 * 1024;
+
+function isOk(response: SafePostResult): boolean {
+  return response.statusCode >= 200 && response.statusCode < 300;
+}
+
+/** A provider answer as JSON; one that is not JSON fails the login. */
+function parseProviderJson(
+  response: SafePostResult,
+  what: 'token' | 'userinfo',
+): unknown {
+  try {
+    return JSON.parse(response.body) as unknown;
+  } catch {
+    throw new UnauthorizedException(
+      what === 'token'
+        ? 'Failed to exchange code with external provider'
+        : 'Failed to fetch user info from external provider',
+    );
+  }
+}
 
 /** The `error` of the login event recorded for a {@link FederatedLinkConflictException}. */
 export const FEDERATED_LINK_CONFLICT = 'federated_identity_conflict';
@@ -445,25 +475,64 @@ export class BrokerService {
       client_secret: idpSecrets.clientSecret(this.crypto, idp),
     });
 
-    const response = await fetch(idp.tokenUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        Accept: 'application/json',
-      },
-      body: body.toString(),
-    });
+    // The token URL is set by a realm admin: send it through the SSRF-safe
+    // client (no private or metadata addresses unless allowed, DNS pinned,
+    // redirects re-validated), like every other admin-configured outbound call.
+    const response = await this.callProvider(idp, 'token', () =>
+      safePost(
+        idp.tokenUrl,
+        body.toString(),
+        {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Accept: 'application/json',
+        },
+        { timeoutMs: 10_000 },
+      ),
+    );
 
-    if (!response.ok) {
+    if (!isOk(response)) {
       throw new UnauthorizedException(
         'Failed to exchange code with external provider',
       );
     }
 
-    return (await response.json()) as {
+    return parseProviderJson(response, 'token') as {
       access_token: string;
       id_token?: string;
     };
+  }
+
+  /**
+   * One outbound call to an external provider. A target refused by SSRF
+   * policy fails the login like any other provider failure (the reason is
+   * logged for the admin, not shown to the user).
+   */
+  private async callProvider(
+    idp: IdentityProvider,
+    what: 'token' | 'userinfo',
+    call: () => Promise<SafePostResult>,
+  ): Promise<SafePostResult> {
+    try {
+      return await call();
+    } catch (err) {
+      if (
+        err instanceof SsrfBlockedError ||
+        err instanceof ResponseTooLargeError
+      ) {
+        this.logger.warn(
+          err instanceof SsrfBlockedError
+            ? `Provider ${idp.alias}: the ${what} URL was refused (${err.message}). ` +
+                'Point it at a public address, or set WEBHOOK_ALLOW_PRIVATE_TARGETS=true for a provider on your own network.'
+            : `Provider ${idp.alias}: the ${what} answer was larger than ${MAX_PROVIDER_RESPONSE_BYTES} bytes.`,
+        );
+        throw new UnauthorizedException(
+          what === 'token'
+            ? 'Failed to exchange code with external provider'
+            : 'Failed to fetch user info from external provider',
+        );
+      }
+      throw err;
+    }
   }
 
   private async fetchExternalUserInfo(
@@ -472,22 +541,30 @@ export class BrokerService {
   ): Promise<ExternalUserInfo> {
     const url = idp.userinfoUrl ?? idp.tokenUrl.replace('/token', '/userinfo');
 
-    const response = await fetch(url, {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        // GitHub's REST API rejects requests without a User-Agent; harmless for
-        // every other provider.
-        'User-Agent': USER_AGENT,
-      },
-    });
+    const response = await this.callProvider(idp, 'userinfo', () =>
+      safeGet(
+        url,
+        {
+          Authorization: `Bearer ${accessToken}`,
+          // GitHub's REST API rejects requests without a User-Agent; harmless for
+          // every other provider.
+          'User-Agent': USER_AGENT,
+          Accept: 'application/json',
+        },
+        { timeoutMs: 10_000, maxBytes: MAX_PROVIDER_RESPONSE_BYTES },
+      ),
+    );
 
-    if (!response.ok) {
+    if (!isOk(response)) {
       throw new UnauthorizedException(
         'Failed to fetch user info from external provider',
       );
     }
 
-    const data = (await response.json()) as Record<string, unknown>;
+    const data = parseProviderJson(response, 'userinfo') as Record<
+      string,
+      unknown
+    >;
 
     const subject = toStr(data['sub'] ?? data['id']) ?? '';
     const name = toStr(data['name']);

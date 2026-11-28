@@ -23,7 +23,7 @@ Then set:
 | Setting | Value |
 |---|---|
 | `BASE_URL` | The public `https://` origin, for example `https://auth.example.com`. Issuer URLs, redirects and e-mail links are built from it. |
-| `TRUSTED_PROXIES` | The address or CIDR of your proxy or ingress only. Client IPs for rate limits and audit logs come from `X-Forwarded-For`, and only these hops are trusted. `*` is acceptable only when the proxy is the one thing that can reach the app, as in the bundled TLS compose files. |
+| `TRUSTED_PROXIES` | The address or CIDR of your proxy or ingress only. Client IPs for rate limits and audit logs come from `X-Forwarded-For`, and only these hops are trusted. `*` trusts one hop, the proxy directly in front of the app; it is acceptable only when that proxy is the one thing that can reach the app, as in the bundled TLS compose files. For a chain of proxies, list them. |
 
 **Check:** `curl https://auth.example.com/realms/master/.well-known/openid-configuration` shows `"issuer": "https://auth.example.com/realms/master"`.
 

@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { haversineDistance } from './risk-signals.js';
+import { ipApiUrl } from '../common/geoip/ip-api.js';
 
 export interface GeoCoords {
   lat: number;
@@ -11,10 +12,9 @@ export interface GeoCoords {
  * Resolves geo-coordinates for an IP address and provides impossible-travel
  * feasibility checks.
  *
- * In production you would call a real geo-IP provider (ip-api.com, MaxMind,
- * etc.).  Here we use a lightweight local lookup via ip-api's free JSON
- * endpoint (or fall back to null when offline/unavailable) so the feature works
- * without any paid subscription.
+ * Lookups go to the provider the operator chose with `GEOIP_PROVIDER`
+ * (see `common/geoip/ip-api.ts`); with none chosen, the default, no address
+ * leaves the server and every lookup answers null.
  */
 @Injectable()
 export class ImpossibleTravelService {
@@ -37,14 +37,11 @@ export class ImpossibleTravelService {
       return this.coordsCache.get(ip) ?? null;
     }
 
+    const url = ipApiUrl(ip, 'status,lat,lon');
+    if (!url) return null;
+
     try {
-      // ip-api.com free endpoint — no API key required, rate-limited to 45 req/min
-      const response = await fetch(
-        `http://ip-api.com/json/${encodeURIComponent(ip)}?fields=status,lat,lon`,
-        {
-          signal: AbortSignal.timeout(3_000),
-        },
-      );
+      const response = await fetch(url, { signal: AbortSignal.timeout(3_000) });
 
       if (!response.ok) {
         this.cacheCoords(ip, null);
@@ -80,11 +77,11 @@ export class ImpossibleTravelService {
   async lookupLocation(ip: string): Promise<string | null> {
     if (!ip || this.isPrivateIp(ip)) return null;
 
+    const url = ipApiUrl(ip, 'status,city,country');
+    if (!url) return null;
+
     try {
-      const response = await fetch(
-        `http://ip-api.com/json/${encodeURIComponent(ip)}?fields=status,city,country`,
-        { signal: AbortSignal.timeout(3_000) },
-      );
+      const response = await fetch(url, { signal: AbortSignal.timeout(3_000) });
 
       if (!response.ok) return null;
 
