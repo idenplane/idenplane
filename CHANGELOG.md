@@ -9,6 +9,8 @@ For full per-commit detail, see the [GitHub Releases](https://github.com/idenpla
 
 ## [Unreleased]
 
+## [0.14.2] - 2026-11-28
+
 Four security fixes. Each one changes behaviour that a deployment may rely on: read *Before you upgrade*.
 
 ### Security
@@ -929,7 +931,8 @@ The foundation release: core IAM server with OAuth, OIDC, SAML, MFA, and the ini
 - `removeUserRealmRoles` returning 200 instead of 204
 - Login error messages never displayed on failed login
 
-[Unreleased]: https://github.com/idenplane/idenplane/compare/v0.14.1...HEAD
+[Unreleased]: https://github.com/idenplane/idenplane/compare/v0.14.2...HEAD
+[0.14.2]: https://github.com/idenplane/idenplane/releases/tag/v0.14.2
 [0.14.1]: https://github.com/idenplane/idenplane/releases/tag/v0.14.1
 [0.14.0]: https://github.com/idenplane/idenplane/releases/tag/v0.14.0
 [0.13.1]: https://github.com/idenplane/idenplane/releases/tag/v0.13.1
