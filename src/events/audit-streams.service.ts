@@ -9,6 +9,7 @@ import {
 } from './dto/audit-stream.dto.js';
 import * as dgram from 'node:dgram';
 import * as net from 'node:net';
+import { safePost } from '../common/security/safe-http-client.js';
 
 @Injectable()
 export class AuditStreamsService {
@@ -151,29 +152,25 @@ export class AuditStreamsService {
 
     const extraHeaders = auditStreamSecrets.headers(this.crypto, stream);
 
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 10_000);
-
     try {
-      await fetch(stream.url, {
-        method: 'POST',
-        headers: {
+      // The URL is set by a realm admin: the SSRF-safe client refuses private
+      // and metadata addresses (unless WEBHOOK_ALLOW_PRIVATE_TARGETS=true) and
+      // pins the validated address. Audit records go to the configured URL
+      // only, never to wherever a redirect points (ASVS 5.0 V15.3.2).
+      await safePost(
+        stream.url,
+        body,
+        {
           'Content-Type': 'application/json',
           'User-Agent': 'Idenplane-AuditStream/1.0',
           ...extraHeaders,
         },
-        body,
-        signal: controller.signal,
-        // Audit records go to the configured URL only, never to wherever a
-        // redirect points (ASVS 5.0 V15.3.2).
-        redirect: 'error',
-      });
+        { timeoutMs: 10_000, followRedirects: false },
+      );
     } catch (err) {
       this.logger.warn(
         `HTTP stream ${stream.id} delivery failed: ${(err as Error).message}`,
       );
-    } finally {
-      clearTimeout(timeout);
     }
   }
 
