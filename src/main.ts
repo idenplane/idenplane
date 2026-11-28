@@ -255,7 +255,10 @@ async function bootstrap() {
   const trustedProxiesEnv = process.env['TRUSTED_PROXIES'];
   if (trustedProxiesEnv && trustedProxiesEnv.trim() !== '') {
     if (trustedProxiesEnv.trim() === '*') {
-      app.set('trust proxy', true);
+      // One hop: the immediate peer is the proxy, so req.ip is the address it
+      // appended. `true` would trust every hop, making req.ip (and so the
+      // rate limiter's key) the leftmost entry, which the client writes.
+      app.set('trust proxy', 1);
     } else {
       // Provide the list directly; Express accepts a comma-separated string.
       app.set('trust proxy', trustedProxiesEnv);
