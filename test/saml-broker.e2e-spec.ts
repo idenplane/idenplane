@@ -24,6 +24,7 @@ import {
 } from '../src/broker/saml/__mocks__/fake-saml-idp';
 import { spEndpoints } from '../src/broker/saml/saml-sp-messages';
 import { SAML_BROKER_COOKIE } from '../src/broker/saml/saml-broker.service';
+import { routeSafeHttpThroughFetch } from './helpers/safe-http-via-fetch';
 
 /**
  * Sign-in through a SAML 2.0 identity provider (Idenplane as the SP), end
@@ -439,6 +440,7 @@ describe('SAML identity-provider broker (e2e)', () => {
     );
     const realFetch = global.fetch;
     let sub = 'oidc-first';
+    const restoreSafeHttp = routeSafeHttpThroughFetch();
     const spy = jest
       .spyOn(global, 'fetch')
       .mockImplementation(async (input, init) => {
@@ -487,6 +489,7 @@ describe('SAML identity-provider broker (e2e)', () => {
       expect(links.map((l) => l.externalUserId)).toEqual(['oidc-first']);
     } finally {
       spy.mockRestore();
+      restoreSafeHttp();
     }
   });
 
