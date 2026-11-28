@@ -146,12 +146,14 @@ When Idenplane sits behind a reverse proxy (nginx, Cloudflare, load balancer), c
 | `TRUSTED_PROXIES` | — | No | Comma-separated trusted proxy IPs or CIDR blocks |
 
 ```bash
-# Trust specific proxies
+# Trust specific proxies (IPv4/IPv6 addresses, CIDR blocks, or loopback / linklocal / uniquelocal)
 TRUSTED_PROXIES=10.0.0.1,172.16.0.0/12
 
-# Trust all proxies (only if network prevents direct access)
+# Trust one hop: the proxy directly in front of the app (only if nothing else can reach it)
 TRUSTED_PROXIES=*
 ```
+
+The client address is read from `X-Forwarded-For` **from the right**: each proxy appends the address it saw, and anything to the left of the entries your proxies added was written by the client. With a list, every hop inside it is skipped and the first one outside it is the client. With `*`, the immediate peer is taken to be the only proxy, and the client is the last entry it appended. For a chain of proxies (a CDN in front of a load balancer, for example), list them rather than using `*`. Rate limits, audit logs and risk signals all use this address.
 
 :::warning
 Setting `TRUSTED_PROXIES=*` is only safe when the network layer prevents direct public access to the app process.

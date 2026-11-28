@@ -115,6 +115,13 @@ describe('Service account tokens (e2e)', () => {
     const { id } = await serviceAccount();
     await ctx.prisma.user.update({ where: { id }, data: { enabled: false } });
     try {
+      // The row was changed behind the app's back, so the app learns of it
+      // from the database's announcement, which takes a moment to arrive:
+      // until then the cached profile still says the account is enabled.
+      const deadline = Date.now() + 3000;
+      while ((await introspect(token)) && Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 25));
+      }
       expect(await introspect(token)).toBe(false);
       await request(app.getHttpServer())
         .get(USERINFO_URL)

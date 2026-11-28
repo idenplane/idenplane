@@ -1,5 +1,12 @@
+jest.mock('../common/security/safe-http-client.js', () => ({
+  safePost: jest.fn(),
+}));
+
 import { NotFoundException } from '@nestjs/common';
 import { AuditStreamsService } from './audit-streams.service.js';
+import { safePost } from '../common/security/safe-http-client.js';
+
+const mockSafePost = safePost as unknown as jest.Mock;
 import {
   createMockPrismaService,
   type MockPrismaService,
@@ -192,31 +199,51 @@ describe('AuditStreamsService', () => {
       });
     });
 
-    it('should attempt HTTP delivery for http-type streams', async () => {
+    it('delivers http-type streams through the SSRF-safe client, never following a redirect', async () => {
       prisma.auditLogStream.findMany.mockResolvedValue([
         { ...baseStream, streamType: 'http', url: 'https://logs.example.com' },
       ]);
-
-      const fetchMock = jest.fn().mockResolvedValue({ ok: true });
-      (global as any).fetch = fetchMock;
+      mockSafePost.mockReset().mockResolvedValue({ statusCode: 200, body: '' });
 
       service.dispatchToStreams('realm-1', 'user.login', { userId: 'u1' });
       await new Promise((r) => setImmediate(r));
-      // Give async fetch a chance to complete
+      // Give async delivery a chance to complete
       await new Promise((r) => setTimeout(r, 10));
 
-      expect(fetchMock).toHaveBeenCalledWith(
+      expect(mockSafePost).toHaveBeenCalledWith(
         'https://logs.example.com',
-        expect.objectContaining({
-          method: 'POST',
-          redirect: 'error',
-          headers: expect.objectContaining({
-            'Content-Type': 'application/json',
-          }),
-        }),
+        expect.any(String),
+        expect.objectContaining({ 'Content-Type': 'application/json' }),
+        expect.objectContaining({ followRedirects: false }),
       );
+    });
 
-      delete (global as any).fetch;
+    it('logs and swallows a delivery the SSRF policy refuses', async () => {
+      prisma.auditLogStream.findMany.mockResolvedValue([
+        {
+          ...baseStream,
+          streamType: 'http',
+          url: 'http://169.254.169.254/latest',
+        },
+      ]);
+      mockSafePost
+        .mockReset()
+        .mockRejectedValue(
+          new Error(
+            'Delivery blocked: target address is not publicly routable',
+          ),
+        );
+      const warn = jest
+        .spyOn((service as any).logger, 'warn')
+        .mockImplementation(() => undefined);
+
+      service.dispatchToStreams('realm-1', 'user.login', { userId: 'u1' });
+      await new Promise((r) => setImmediate(r));
+      await new Promise((r) => setTimeout(r, 10));
+
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining('not publicly routable'),
+      );
     });
   });
 });

@@ -7,34 +7,21 @@ This roadmap lists work that is planned or being considered. It is not a schedul
 
 To suggest or discuss an item, use [GitHub Discussions, Ideas](https://github.com/idenplane/idenplane/discussions/categories/ideas).
 
-## Next: 0.10.0
+## Shipped from earlier roadmaps
 
-All planned.
+Everything planned for 0.10.0 shipped in [0.10.0](CHANGELOG.md#0100---2026-11-16):
 
-### Security hardening
+- **Security hardening:** new realms are secure by default (brute-force protection and audit events on), with an OWASP ASVS 5.0 Level 2 self-assessment.
+- **Threat model:** [`docs/docs/security/threat-model.md`](docs/docs/security/threat-model.md).
+- **Supply-chain signing and SBOM:** every published image carries a keyless cosign signature, a signed SPDX SBOM and SLSA provenance; [Verify releases](docs/docs/security/verify-releases.md) shows how to check all three.
+- **Scheduled conformance testing:** the OpenID Foundation conformance suite (basic and config plans) runs in CI on a schedule (`conformance.yml`).
+- **Backup and restore drill:** CI runs the full drill and an upgrade from the previous release on a schedule (`restore-drill.yml`).
 
-Another pass over the server's security, following the advisories fixed in 0.8.1 and 0.9.0. Details will be in the 0.10.0 CHANGELOG. Vulnerabilities themselves are handled privately, as described in [`SECURITY.md`](SECURITY.md).
+Releases since then (0.10.1 to 0.14.1) are in the [CHANGELOG](CHANGELOG.md).
 
-### Threat model
+## Next
 
-A written threat model at [`docs/docs/security/threat-model.md`](docs/docs/security/threat-model.md): what Idenplane protects, against whom, and what it assumes about the deployment.
-
-### Supply-chain signing and SBOM
-
-Today the Docker image is pushed to Docker Hub with no signature and no SBOM. The only attestation it carries is the minimal build provenance that Docker Buildx attaches by default. The plan:
-
-- sign the release images;
-- publish an SBOM for each image;
-- attach full build provenance;
-- document how to verify all three before you deploy.
-
-### Scheduled conformance testing
-
-Run the OpenID Foundation conformance suite (the OIDC basic plan) against the current code on a schedule, not only by hand before a release, so a regression shows up as a failed run. This is testing only. Idenplane is not OpenID Certified.
-
-### Backup and restore drill
-
-The [Production Checklist](docs/docs/deployment/production.md) asks operators to restore their latest backup into a fresh database every quarter, then start Idenplane against it and sign in. CI already runs a backup round-trip test (`test/upgrade-backup-roundtrip.e2e-spec.ts`) on every push, with real `pg_dump` and `pg_restore`. The plan is to also run the full drill in CI on a schedule: back up, restore into an empty database, start the server with the same keys, sign in. That way the whole documented procedure is known to work, not only the dump and restore.
+No feature release is planned right now; releases continue with fixes and dependency updates. The next planned work will be picked from the items below.
 
 ## Later
 
@@ -44,7 +31,7 @@ An external audit of the server by an independent security firm. A good audit co
 
 ### Versioned admin API (under consideration)
 
-Unversioned `/admin/...` responses already carry `Deprecation` and `Sunset` headers that point to `/api/v1/admin/...`, but no route is served there yet. Either the versioned admin API ships, or the headers are changed to match what is served. See [Versioning and Support](docs/docs/project/versioning-and-support.md#deprecation-and-sunset-headers-on-the-admin-api).
+Unversioned `/admin/...` responses carry `Deprecation` and `Sunset` headers, but no versioned route (`/api/v1/admin/...`) is served yet. Either the versioned admin API ships, or the headers are changed to match what is served. See [Versioning and Support](docs/docs/project/versioning-and-support.md#deprecation-and-sunset-headers-on-the-admin-api).
 
 ### Certificate revocation checks for mTLS (under consideration)
 

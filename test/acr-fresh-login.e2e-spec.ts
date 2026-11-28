@@ -16,6 +16,7 @@ import {
   idTokenClaims,
   withRuntimeEnv,
 } from './helpers/auth-flow';
+import { routeSafeHttpThroughFetch } from './helpers/safe-http-via-fetch';
 
 const ENFORCE = 'ENFORCE_ACR_ON_FRESH_LOGIN';
 const essential = (...values: string[]) =>
@@ -256,6 +257,7 @@ describe('ENFORCE_ACR_ON_FRESH_LOGIN (e2e)', () => {
     setFlag('true');
     const user = await newUser();
     const realFetch = global.fetch;
+    routeSafeHttpThroughFetch();
     jest.spyOn(global, 'fetch').mockImplementation(async (input, init) => {
       const url = typeof input === 'string' ? input : input.toString();
       if (url === 'https://idp.example.test/token') {

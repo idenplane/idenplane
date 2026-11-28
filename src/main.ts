@@ -5,6 +5,7 @@ import {
   VersioningType,
 } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+import { swaggerEnabled } from './common/swagger-enabled.js';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { Logger } from 'nestjs-pino';
 import cookieParser from 'cookie-parser';
@@ -255,7 +256,10 @@ async function bootstrap() {
   const trustedProxiesEnv = process.env['TRUSTED_PROXIES'];
   if (trustedProxiesEnv && trustedProxiesEnv.trim() !== '') {
     if (trustedProxiesEnv.trim() === '*') {
-      app.set('trust proxy', true);
+      // One hop: the immediate peer is the proxy, so req.ip is the address it
+      // appended. `true` would trust every hop, making req.ip (and so the
+      // rate limiter's key) the leftmost entry, which the client writes.
+      app.set('trust proxy', 1);
     } else {
       // Provide the list directly; Express accepts a comma-separated string.
       app.set('trust proxy', trustedProxiesEnv);
@@ -363,19 +367,24 @@ async function bootstrap() {
 
   app.useGlobalFilters(new GlobalExceptionFilter());
 
-  const config = new DocumentBuilder()
-    .setTitle('Idenplane')
-    .setDescription('Open-source Identity and Access Management Server')
-    .setVersion(APP_VERSION)
-    .addApiKey(
-      { type: 'apiKey', name: 'x-admin-api-key', in: 'header' },
-      'admin-api-key',
-    )
-    .addBearerAuth()
-    .build();
+  // Swagger UI (/api) and the OpenAPI document (/api-json): off in
+  // production unless SWAGGER_ENABLED=true (see common/swagger-enabled.ts).
+  const publishSwagger = swaggerEnabled();
+  if (publishSwagger) {
+    const config = new DocumentBuilder()
+      .setTitle('Idenplane')
+      .setDescription('Open-source Identity and Access Management Server')
+      .setVersion(APP_VERSION)
+      .addApiKey(
+        { type: 'apiKey', name: 'x-admin-api-key', in: 'header' },
+        'admin-api-key',
+      )
+      .addBearerAuth()
+      .build();
 
-  const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('api', app, document);
+    const document = SwaggerModule.createDocument(app, config);
+    SwaggerModule.setup('api', app, document);
+  }
 
   // Preload CORS origin cache before accepting requests
   await corsOriginService.preloadCache();
@@ -390,7 +399,11 @@ async function bootstrap() {
   const port = process.env['PORT'] ?? 3000;
   await app.listen(port);
   console.log(`Idenplane is running on http://localhost:${port}`);
-  console.log(`Swagger UI: http://localhost:${port}/api`);
+  console.log(
+    publishSwagger
+      ? `Swagger UI: http://localhost:${port}/api`
+      : 'Swagger UI: off (set SWAGGER_ENABLED=true to publish /api and /api-json)',
+  );
 
   // The certificate listener (MTLS_LISTEN_PORT) serves the OAuth endpoint
   // aliases through the same Express application, and the session events

@@ -17,6 +17,7 @@ import {
   SecretsAtRestService,
   StoredSecretsKeyError,
 } from '../src/secrets-at-rest/secrets-at-rest.service';
+import { routeSafeHttpThroughFetch } from './helpers/safe-http-via-fetch';
 
 /** Every bind the (mocked) LDAP server receives: [dn, password]. */
 const mockLdapBinds: Array<[string, string]> = [];
@@ -141,6 +142,7 @@ describe('Secrets at rest (e2e)', () => {
     it('the broker still signs in through the mock IdP, sending the plaintext secret', async () => {
       const realFetch = global.fetch;
       const tokenBodies: string[] = [];
+      routeSafeHttpThroughFetch();
       jest.spyOn(global, 'fetch').mockImplementation(async (input, init) => {
         const url = typeof input === 'string' ? input : input.toString();
         if (url === 'https://idp.example.test/token') {
@@ -308,6 +310,7 @@ describe('Secrets at rest (e2e)', () => {
       );
 
       const sent: Array<Record<string, string>> = [];
+      routeSafeHttpThroughFetch();
       jest.spyOn(global, 'fetch').mockImplementation(async (_input, init) => {
         sent.push(init?.headers as Record<string, string>);
         return new Response('', { status: 204 });
